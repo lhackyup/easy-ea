@@ -1,0 +1,57 @@
+services:
+  easyea:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: easyea-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      - DATABASE_URL=postgresql://easyea_user:easyea_secret@db:5432/easyea_db
+      - PORT=8000
+      - OIDC_ENABLED=true
+      - OIDC_ISSUER_URL=http://host.docker.internal:18000/realms/dev-realm
+      - OIDC_CLIENT_ID=easyea-client
+      - OIDC_CLIENT_SECRET=easyea-dev-secret-key-2026
+      - OIDC_REDIRECT_URI=http://localhost:8000/api/auth/oidc/callback
+      - OIDC_FRONTEND_REDIRECT_URL=http://localhost:8000
+      - EASYEA_RBAC_MODE=hybrid
+    networks:
+      - default
+      - shared-idp-net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:16-alpine
+    container_name: easyea-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: easyea_user
+      POSTGRES_PASSWORD: easyea_secret
+      POSTGRES_DB: easyea_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U easyea_user -d easyea_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+  shared-idp-net:
+    name: shared-idp-net
+    external: true
+
+volumes:
+  postgres_data:
+
