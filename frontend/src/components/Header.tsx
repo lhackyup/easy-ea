@@ -23,7 +23,9 @@ import {
   LogOut,
   Shield,
   User as UserIcon,
-  KeyRound
+  KeyRound,
+  UploadCloud,
+  BookmarkCheck
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -337,6 +339,30 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Workflow className="w-3.5 h-3.5" />
                 <span>{t.subtabs.relationsMatrix}</span>
+              </button>
+
+              <button
+                onClick={() => onSelectArchitectureTab('saved-views')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
+                  architectureTab === 'saved-views'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/60'
+                }`}
+              >
+                <BookmarkCheck className="w-3.5 h-3.5" />
+                <span>{t.subtabs.savedViews}</span>
+              </button>
+
+              <button
+                onClick={() => onSelectArchitectureTab('import')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
+                  architectureTab === 'import'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/60'
+                }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" />
+                <span>{t.subtabs.dataImport}</span>
               </button>
 
               <button

@@ -545,5 +545,355 @@ def test_admin_auth_config_crud_and_anti_lockout():
     assert "Impossibile disabilitare contemporaneamente" in res_lockout.json()["detail"]
 
 
+def test_element_creation_and_editing_with_properties_and_sections():
+    # 1. Create a new ArchiMate Business Process with custom properties
+    create_payload = {
+        "name": "Instant Credit Authorization",
+        "type": "BusinessProcess",
+        "layer": "Business",
+        "documentation": "Real-time AI credit assessment and authorization process.",
+        "properties": {
+            "gdpr_compliance_tier": "Tier 3 - Sensitive / financial data",
+            "sla_target_minutes": 15,
+            "cost_center_code": "CC-FIN-200"
+        }
+    }
+    res_create = client.post("/api/elements?model_id=sample-easybank-ea", json=create_payload)
+    assert res_create.status_code == 200
+    created = res_create.json()
+    elem_id = created["id"]
+    assert created["name"] == "Instant Credit Authorization"
+    assert created["type"] == "BusinessProcess"
+    assert created["layer"] == "Business"
+
+    # 2. Get element details and verify properties are returned
+    res_detail = client.get(f"/api/elements/{elem_id}")
+    assert res_detail.status_code == 200
+    detail = res_detail.json()
+    assert detail["name"] == "Instant Credit Authorization"
+    assert detail["properties"]["gdpr_compliance_tier"] == "Tier 3 - Sensitive / financial data"
+    assert detail["properties"]["sla_target_minutes"] == 15
+
+    # 3. Update element attributes
+    update_payload = {
+        "name": "Instant Credit & Risk Authorization (Updated)",
+        "documentation": "Updated documentation for automated credit flow.",
+        "properties": {
+            "gdpr_compliance_tier": "Tier 4 - High-risk / biometric data",
+            "sla_target_minutes": 10,
+            "cost_center_code": "CC-FIN-200",
+            "risk_score_limit": "A+"
+        }
+    }
+    res_update = client.put(f"/api/elements/{elem_id}", json=update_payload)
+    assert res_update.status_code == 200
+
+    # 4. Verify updated details
+    res_updated_detail = client.get(f"/api/elements/{elem_id}")
+    assert res_updated_detail.status_code == 200
+    updated_detail = res_updated_detail.json()
+    assert updated_detail["name"] == "Instant Credit & Risk Authorization (Updated)"
+    assert updated_detail["documentation"] == "Updated documentation for automated credit flow."
+    assert updated_detail["properties"]["gdpr_compliance_tier"] == "Tier 4 - High-risk / biometric data"
+    assert updated_detail["properties"]["risk_score_limit"] == "A+"
+
+    # 5. Create an ApplicationComponent with APM properties and verify sync
+    app_payload = {
+        "name": "Cloud Ledger Engine",
+        "type": "ApplicationComponent",
+        "layer": "Application",
+        "documentation": "Next-gen distributed ledger system.",
+        "properties": {
+            "eea_annual_cost": 75000.0,
+            "eea_business_fit": 5,
+            "eea_technical_fit": 4,
+            "eea_business_owner": "Mario Rossi",
+            "rto_hours": 2
+        }
+    }
+    res_app = client.post("/api/elements?model_id=sample-easybank-ea", json=app_payload)
+    assert res_app.status_code == 200
+    app_id = res_app.json()["id"]
+
+    res_app_detail = client.get(f"/api/elements/{app_id}")
+    assert res_app_detail.status_code == 200
+    app_data = res_app_detail.json()
+    assert app_data["apm"]["annual_cost"] == 75000.0
+    assert app_data["apm"]["business_fit"] == 5
+    assert app_data["apm"]["business_owner"] == "Mario Rossi"
+    assert app_data["properties"]["rto_hours"] == 2
+
+    # 6. Delete the created element
+    res_del = client.delete(f"/api/elements/{elem_id}")
+    assert res_del.status_code == 200
+    res_check = client.get(f"/api/elements/{elem_id}")
+    assert res_check.status_code == 404
+
+def test_archimate_relationship_management_and_validation():
+    # 1. Query allowed relationship types between ApplicationComponent and BusinessProcess
+    res_allowed = client.get("/api/relationships/allowed-types?source_type=ApplicationComponent&target_type=BusinessProcess")
+    assert res_allowed.status_code == 200
+    allowed_data = res_allowed.json()
+    allowed_type_names = [t["type"] for t in allowed_data]
+    assert "ServingRelationship" in allowed_type_names
+    assert "AssociationRelationship" in allowed_type_names
+    assert "AssignmentRelationship" not in allowed_type_names  # ApplicationComponent cannot assign to BusinessProcess in ArchiMate
+
+    # 2. Get two existing elements in sample model
+    res_elems = client.get("/api/elements?model_id=sample-easybank-ea")
+    assert res_elems.status_code == 200
+    elems = res_elems.json()
+    app_elem = next(e for e in elems if e["type"] == "ApplicationComponent")
+    proc_elem = next(e for e in elems if e["type"] == "BusinessProcess")
+
+    # 3. Create a valid relationship (ApplicationComponent -> BusinessProcess, ServingRelationship)
+    valid_payload = {
+        "source_id": app_elem["id"],
+        "target_id": proc_elem["id"],
+        "type": "ServingRelationship",
+        "name": "Serves Core Banking Operations",
+        "documentation": "Provides automated settlement capabilities to the process."
+    }
+    res_create = client.post("/api/relationships?model_id=sample-easybank-ea", json=valid_payload)
+    assert res_create.status_code == 200
+    created_rel = res_create.json()
+    rel_id = created_rel["id"]
+    assert created_rel["type"] == "ServingRelationship"
+    assert created_rel["source_id"] == app_elem["id"]
+    assert created_rel["target_id"] == proc_elem["id"]
+    assert created_rel["name"] == "Serves Core Banking Operations"
+
+    # 4. Attempt to create an INVALID relationship (ApplicationComponent -> BusinessProcess with AssignmentRelationship)
+    invalid_payload = {
+        "source_id": app_elem["id"],
+        "target_id": proc_elem["id"],
+        "type": "AssignmentRelationship",
+        "name": "Invalid Assignment"
+    }
+    res_invalid = client.post("/api/relationships?model_id=sample-easybank-ea", json=invalid_payload)
+    assert res_invalid.status_code == 400
+    assert "not permitted by ArchiMate 3.x" in res_invalid.json()["detail"]
+
+    # 5. Query relationships for the source element
+    res_query = client.get(f"/api/relationships?element_id={app_elem['id']}")
+    assert res_query.status_code == 200
+    rel_list = res_query.json()
+    assert any(r["id"] == rel_id for r in rel_list)
+
+    # 6. Update the relationship to another valid type (e.g. RealizationRelationship) and new documentation
+    update_payload = {
+        "type": "RealizationRelationship",
+        "name": "Realizes Settlement Operations",
+        "documentation": "Direct realization link."
+    }
+    res_update = client.put(f"/api/relationships/{rel_id}", json=update_payload)
+    assert res_update.status_code == 200
+    updated_rel = res_update.json()
+    assert updated_rel["type"] == "RealizationRelationship"
+    assert updated_rel["name"] == "Realizes Settlement Operations"
+
+    # 7. Attempt to update the relationship to an INVALID type
+    invalid_update_payload = {
+        "type": "AssignmentRelationship"
+    }
+    res_invalid_update = client.put(f"/api/relationships/{rel_id}", json=invalid_update_payload)
+    assert res_invalid_update.status_code == 400
+    assert "not permitted by ArchiMate 3.x" in res_invalid_update.json()["detail"]
+
+    # 8. Delete the relationship
+    res_delete = client.delete(f"/api/relationships/{rel_id}")
+    assert res_delete.status_code == 200
+
+    # Verify deletion
+    res_after_delete = client.get(f"/api/relationships?element_id={app_elem['id']}")
+    assert res_after_delete.status_code == 200
+    assert not any(r["id"] == rel_id for r in res_after_delete.json())
+
+def test_data_import_template_and_xlsx_csv_processing():
+    import io
+    import openpyxl
+
+    # 1. Test template downloads (XLSX, CSV elements, CSV relationships)
+    res_tmpl_xlsx = client.get("/api/import/template?model_id=sample-easybank-ea&format=xlsx")
+    assert res_tmpl_xlsx.status_code == 200
+    assert res_tmpl_xlsx.headers["content-type"] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    
+    # Verify openpyxl can read the generated template and has 3 sheets
+    wb_read = openpyxl.load_workbook(io.BytesIO(res_tmpl_xlsx.content))
+    assert "Elements" in wb_read.sheetnames
+    assert "Relationships" in wb_read.sheetnames
+    assert "Metamodel_Guide" in wb_read.sheetnames
+
+    res_tmpl_csv_e = client.get("/api/import/template?format=csv_elements")
+    assert res_tmpl_csv_e.status_code == 200
+    assert "name" in res_tmpl_csv_e.text
+
+    res_tmpl_csv_r = client.get("/api/import/template?format=csv_relationships")
+    assert res_tmpl_csv_r.status_code == 200
+    assert "source" in res_tmpl_csv_r.text
+
+    # 2. Build a test Excel file with both valid and invalid items
+    wb = openpyxl.Workbook()
+    wb.remove(wb.active)
+    
+    # Sheet 1: Elements
+    ws_e = wb.create_sheet(title="Elements")
+    ws_e.append(["id", "name", "type", "layer", "documentation", "annual_cost", "business_fit", "rto_hours"])
+    ws_e.append(["test-imp-app-1", "Automated Fraud Shield", "ApplicationComponent", "Application", "AI Fraud detection engine.", 85000, 5, 2])
+    ws_e.append(["test-imp-proc-1", "Card Transaction Monitoring", "BusinessProcess", "Business", "Continuous transaction scoring.", 0, 4, 1])
+
+    # Sheet 2: Relationships
+    ws_r = wb.create_sheet(title="Relationships")
+    ws_r.append(["source", "target", "type", "name", "documentation"])
+    # Valid relationship: ApplicationComponent -> BusinessProcess with ServingRelationship
+    ws_r.append(["Automated Fraud Shield", "Card Transaction Monitoring", "ServingRelationship", "Fraud alerts stream", "Real-time Kafka topic."])
+    # Invalid relationship: ApplicationComponent -> BusinessProcess with AssignmentRelationship (forbidden by ArchiMate)
+    ws_r.append(["Automated Fraud Shield", "Card Transaction Monitoring", "AssignmentRelationship", "Invalid Assign", "Should trigger ArchiMate warning/error."])
+
+    excel_buffer = io.BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    file_bytes = excel_buffer.getvalue()
+
+    # 3. Test Dry-Run upload
+    res_dry = client.post(
+        "/api/import/upload",
+        data={"model_id": "sample-easybank-ea", "dry_run": "true", "update_existing": "true"},
+        files={"file": ("test_import.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    )
+    assert res_dry.status_code == 200
+    dry_data = res_dry.json()
+    assert dry_data["dry_run"] is True
+    assert dry_data["elements_created"] == 2
+    assert dry_data["relationships_created"] == 1
+    assert dry_data["errors_count"] == 1  # The invalid ArchiMate assignment was flagged
+    assert dry_data["status"] == "partial_success"
+
+    # 4. Test Live Execute upload
+    res_live = client.post(
+        "/api/import/upload",
+        data={"model_id": "sample-easybank-ea", "dry_run": "false", "update_existing": "true"},
+        files={"file": ("test_import.xlsx", file_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    )
+    assert res_live.status_code == 200
+    live_data = res_live.json()
+    assert live_data["success"] is True
+    assert live_data["elements_created"] == 2
+    assert live_data["relationships_created"] == 1
+    import_id = live_data["import_id"]
+
+    # 5. Verify created elements in repository
+    res_elem_check = client.get(f"/api/elements/test-imp-app-1")
+    assert res_elem_check.status_code == 200
+    elem_detail = res_elem_check.json()
+    assert elem_detail["name"] == "Automated Fraud Shield"
+    assert elem_detail["apm"]["annual_cost"] == 85000.0
+    assert elem_detail["properties"]["rto_hours"] == 2
+
+    # 6. Verify Import History
+    res_history = client.get("/api/import/history?model_id=sample-easybank-ea")
+    assert res_history.status_code == 200
+    history_list = res_history.json()
+    assert any(h["id"] == import_id for h in history_list)
+
+    # 7. Verify History Details
+    res_hist_detail = client.get(f"/api/import/history/{import_id}")
+    assert res_hist_detail.status_code == 200
+    hist_detail = res_hist_detail.json()
+    assert hist_detail["filename"] == "test_import.xlsx"
+    assert hist_detail["file_format"] == "xlsx"
+    assert len(hist_detail["details"]["created_elements"]) == 2
+    assert len(hist_detail["details"]["errors"]) == 1
+
+    # 8. Clean up created elements and relationships
+    client.delete("/api/elements/test-imp-app-1")
+    client.delete("/api/elements/test-imp-proc-1")
+    client.delete(f"/api/import/history/{import_id}")
+
+
+def test_saved_views_crud():
+    # 1. Create a saved filter view
+    payload = {
+        "model_id": "sample-easybank-ea",
+        "name": "High Cost Live Applications",
+        "description": "Critical live applications costing more than €50k",
+        "author": "Chief Architect",
+        "is_shared": True,
+        "tags": ["APM", "Financial", "Governance"],
+        "filter_config": {
+            "selectedLayer": "Application",
+            "selectedType": "ApplicationComponent",
+            "search": "",
+            "searchInProps": True,
+            "relationshipFilter": "connected",
+            "documentationFilter": "with_doc",
+            "matchLogic": "AND",
+            "attributeFilterRules": [
+                {
+                    "id": "rule-1",
+                    "attributeName": "annual_cost",
+                    "operator": "greater_than",
+                    "value": "50000"
+                }
+            ],
+            "sortBy": "cost_desc"
+        }
+    }
+    res_create = client.post("/api/saved-views", json=payload)
+    assert res_create.status_code == 201
+    created_view = res_create.json()
+    assert created_view["name"] == "High Cost Live Applications"
+    assert created_view["author"] == "Chief Architect"
+    assert created_view["is_shared"] is True
+    assert len(created_view["tags"]) == 3
+    assert created_view["filter_config"]["selectedLayer"] == "Application"
+    view_id = created_view["id"]
+
+    # 2. List saved views for model
+    res_list = client.get("/api/saved-views?model_id=sample-easybank-ea")
+    assert res_list.status_code == 200
+    views = res_list.json()
+    assert any(v["id"] == view_id for v in views)
+
+    # 3. Get single saved view
+    res_get = client.get(f"/api/saved-views/{view_id}")
+    assert res_get.status_code == 200
+    view_detail = res_get.json()
+    assert view_detail["name"] == "High Cost Live Applications"
+
+    # 4. Update saved view
+    res_update = client.put(f"/api/saved-views/{view_id}", json={
+        "name": "High Cost Live Apps (Updated)",
+        "is_shared": False,
+        "tags": ["APM", "Financial"]
+    })
+    assert res_update.status_code == 200
+    updated_view = res_update.json()
+    assert updated_view["name"] == "High Cost Live Apps (Updated)"
+    assert updated_view["is_shared"] is False
+    assert len(updated_view["tags"]) == 2
+
+    # 5. Duplicate saved view
+    res_dup = client.post(f"/api/saved-views/{view_id}/duplicate")
+    assert res_dup.status_code == 201
+    dup_view = res_dup.json()
+    assert dup_view["name"] == "High Cost Live Apps (Updated) (Copia)"
+    assert dup_view["id"] != view_id
+    dup_id = dup_view["id"]
+
+    # 6. Delete duplicated and original views
+    res_del_dup = client.delete(f"/api/saved-views/{dup_id}")
+    assert res_del_dup.status_code == 200
+    res_del_orig = client.delete(f"/api/saved-views/{view_id}")
+    assert res_del_orig.status_code == 200
+
+    # Verify 404 after deletion
+    res_verify_del = client.get(f"/api/saved-views/{view_id}")
+    assert res_verify_del.status_code == 404
+
+
+
+
+
 
 

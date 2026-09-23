@@ -1,7 +1,7 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
 export type BusinessSubTab = 'overview' | 'apm' | 'overlap' | 'processes';
-export type ArchitectureSubTab = 'repository' | 'diagrams' | 'relations' | 'import';
+export type ArchitectureSubTab = 'repository' | 'diagrams' | 'relations' | 'saved-views' | 'import';
 export type AdminSubTab = 'models' | 'metamodel' | 'apm_config' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
@@ -250,6 +250,8 @@ export interface ArchimateElementItem {
   layer: string;
   documentation?: string;
   properties?: Record<string, any>;
+  incoming_count?: number;
+  outgoing_count?: number;
   apm?: Partial<ApplicationInfo>;
 }
 
@@ -387,7 +389,6 @@ export interface SystemAuthSettings {
   rbac_mode: 'hybrid' | 'idp_sync' | 'internal';
   role_mappings: RoleMappingRule[];
 }
-
 export interface IdpConnectionTestResult {
   success: boolean;
   message: string;
@@ -396,5 +397,57 @@ export interface IdpConnectionTestResult {
   token_endpoint?: string;
   userinfo_endpoint?: string;
   end_session_endpoint?: string;
+}
+
+export interface SavedViewAttributeRule {
+  id: string;
+  attributeName: string;
+  operator: string;
+  value: string | number | boolean;
+  secondValue?: string | number;
+}
+
+export interface SavedViewFilterConfig {
+  selectedLayer?: string;
+  selectedType?: string;
+  search?: string;
+  searchInProps?: boolean;
+  relationshipFilter?: 'all' | 'orphan' | 'connected';
+  documentationFilter?: 'all' | 'with_doc' | 'no_doc';
+  matchLogic?: 'AND' | 'OR';
+  attributeFilterRules?: SavedViewAttributeRule[];
+  sortBy?: string;
+}
+
+export interface SavedFilterView {
+  id: string;
+  model_id: string;
+  name: string;
+  description?: string | null;
+  author?: string;
+  is_shared: boolean;
+  tags: string[];
+  filter_config: SavedViewFilterConfig;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SavedViewCreatePayload {
+  model_id: string;
+  name: string;
+  description?: string;
+  author?: string;
+  is_shared?: boolean;
+  tags?: string[];
+  filter_config: SavedViewFilterConfig;
+}
+
+export interface SavedViewUpdatePayload {
+  name?: string;
+  description?: string;
+  author?: string;
+  is_shared?: boolean;
+  tags?: string[];
+  filter_config?: SavedViewFilterConfig;
 }
 

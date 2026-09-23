@@ -21,6 +21,7 @@ class ModelWorkspace(Base):
     elements = relationship("ArchimateElement", back_populates="workspace", cascade="all, delete-orphan")
     relationships = relationship("ArchimateRelationship", back_populates="workspace", cascade="all, delete-orphan")
     views = relationship("ArchimateView", back_populates="workspace", cascade="all, delete-orphan")
+    saved_views = relationship("SavedFilterView", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class ArchimateElement(Base):
@@ -165,3 +166,38 @@ class SystemAuthSettings(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
+class ImportHistory(Base):
+    __tablename__ = "import_history"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    filename = Column(String, nullable=False)
+    file_format = Column(String, nullable=False) # xlsx, csv, zip
+    file_size_bytes = Column(Integer, default=0)
+    user_name = Column(String, nullable=True, default="Architect")
+    status = Column(String, nullable=False, default="success") # success, partial_success, failed
+    elements_created = Column(Integer, default=0)
+    elements_updated = Column(Integer, default=0)
+    relationships_created = Column(Integer, default=0)
+    errors_count = Column(Integer, default=0)
+    warnings_count = Column(Integer, default=0)
+    details = Column(JSON, default=dict)
+    imported_at = Column(DateTime, default=utc_now)
+    workspace = relationship("ModelWorkspace", foreign_keys=[model_id])
+
+
+class SavedFilterView(Base):
+    __tablename__ = "saved_filter_views"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=True)
+    author = Column(String, default="Enterprise Architect")
+    is_shared = Column(Boolean, default=True)
+    tags = Column(JSON, default=list)
+    filter_config = Column(JSON, nullable=False, default=dict)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    workspace = relationship("ModelWorkspace", back_populates="saved_views")

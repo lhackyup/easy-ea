@@ -20,6 +20,8 @@ from app.api.processes import router as processes_router
 from app.api.metamodel import router as metamodel_router
 from app.api.rbac import router as rbac_router
 from app.api.auth import router as auth_router
+from app.api.data_import import router as data_import_router
+from app.api.saved_views import router as saved_views_router
 
 from sqlalchemy import text
 
@@ -117,6 +119,8 @@ app.include_router(overlap_router, prefix=settings.API_V1_STR)
 app.include_router(processes_router, prefix=settings.API_V1_STR)
 app.include_router(metamodel_router, prefix=settings.API_V1_STR)
 app.include_router(rbac_router, prefix=settings.API_V1_STR)
+app.include_router(data_import_router, prefix=settings.API_V1_STR)
+app.include_router(saved_views_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 

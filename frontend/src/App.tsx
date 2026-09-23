@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ModelWorkspace, MainHub, BusinessSubTab, ArchitectureSubTab, AdminSubTab } from './types';
+import { ModelWorkspace, MainHub, BusinessSubTab, ArchitectureSubTab, AdminSubTab, SavedFilterView } from './types';
 import { api } from './lib/api';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
@@ -11,6 +11,8 @@ import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { DiagramViewer } from './features/architect/DiagramViewer';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
+import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
+import { DataImportHub } from './features/architect/DataImportHub';
 import { AdminHub } from './features/admin/AdminHub';
 import { LoginScreen } from './features/auth/LoginScreen';
 import { Layers, ShieldCheck, Cpu } from 'lucide-react';
@@ -28,6 +30,7 @@ export function App() {
   const [businessTab, setBusinessTab] = useState<BusinessSubTab>('overview');
   const [architectureTab, setArchitectureTab] = useState<ArchitectureSubTab>('repository');
   const [adminTab, setAdminTab] = useState<AdminSubTab>('models');
+  const [selectedSavedView, setSelectedSavedView] = useState<SavedFilterView | null>(null);
 
   // Sidebar Collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -117,8 +120,10 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
-      {/* 1. Sleek TopBar: Context & User Profile */}
+      {/* 1. Sleek TopBar: Context & User Profile with Hub Switcher */}
       <TopBar
+        activeHub={activeHub}
+        onSelectHub={(hub) => setActiveHub(hub)}
         models={models}
         selectedModelId={selectedModelId}
         onSelectModel={(id) => setSelectedModelId(id)}
@@ -134,10 +139,6 @@ export function App() {
         <div className={`${isMobileSidebarOpen ? 'block fixed inset-y-0 left-0 z-50 pt-14 md:pt-0' : 'hidden'} md:flex md:static`}>
           <Sidebar
             activeHub={activeHub}
-            onSelectHub={(hub) => {
-              setActiveHub(hub);
-              setIsMobileSidebarOpen(false);
-            }}
             businessTab={businessTab}
             onSelectBusinessTab={(tab) => {
               setBusinessTab(tab);
@@ -193,9 +194,29 @@ export function App() {
                 {/* 2. ARCHITECTURE HUB */}
                 {activeHub === 'architecture' && (
                   <>
-                    {architectureTab === 'repository' && <ArchitectRepository modelId={selectedModelId} />}
+                    {architectureTab === 'repository' && (
+                      <ArchitectRepository
+                        modelId={selectedModelId}
+                        initialSavedView={selectedSavedView}
+                        onClearInitialView={() => setSelectedSavedView(null)}
+                      />
+                    )}
                     {architectureTab === 'diagrams' && <DiagramViewer modelId={selectedModelId} />}
                     {architectureTab === 'relations' && <RelationsMatrix modelId={selectedModelId} />}
+                    {architectureTab === 'saved-views' && (
+                      <ArchitectSavedViews
+                        modelId={selectedModelId}
+                        onApplyView={(view) => {
+                          setSelectedSavedView(view);
+                          setArchitectureTab('repository');
+                        }}
+                        onNavigateToRepository={() => {
+                          setSelectedSavedView(null);
+                          setArchitectureTab('repository');
+                        }}
+                      />
+                    )}
+                    {architectureTab === 'import' && <DataImportHub modelId={selectedModelId} />}
                   </>
                 )}
 

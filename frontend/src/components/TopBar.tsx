@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { ModelWorkspace } from '../types';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { ModelWorkspace, MainHub } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -13,10 +13,13 @@ import {
   Building2,
   Globe,
   Sparkles,
+  Settings,
   Menu
 } from 'lucide-react';
 
 interface TopBarProps {
+  activeHub: MainHub;
+  onSelectHub: (hub: MainHub) => void;
   models: ModelWorkspace[];
   selectedModelId: string;
   onSelectModel: (id: string) => void;
@@ -26,6 +29,8 @@ interface TopBarProps {
 }
 
 export const TopBar: React.FC<TopBarProps> = ({
+  activeHub,
+  onSelectHub,
   models,
   selectedModelId,
   onSelectModel,
@@ -52,6 +57,39 @@ export const TopBar: React.FC<TopBarProps> = ({
   }, []);
 
   const isAdmin = user?.assignments?.some((a) => a.role === 'admin');
+
+  // Compute allowed Hubs based on user assignments and current library
+  const allowedHubs: MainHub[] = useMemo(() => {
+    if (!user) return ['business'];
+    const assignments = user.assignments || [];
+
+    // Global admin has access to all Hubs
+    if (isAdmin) {
+      return ['business', 'architecture', 'admin'];
+    }
+
+    // Filter assignments valid for the current library (or global)
+    const activeAssignments = assignments.filter(
+      (a) => !a.model_id || a.model_id === selectedModelId
+    );
+    const roles = new Set(activeAssignments.map((a) => a.role));
+
+    const hubs: MainHub[] = ['business']; // Business Hub is accessible to all assigned roles
+
+    if (roles.has('architect')) {
+      hubs.push('architecture');
+    }
+
+    return hubs;
+  }, [user, isAdmin, selectedModelId]);
+
+  // Ensure activeHub is valid
+  useEffect(() => {
+    if (!allowedHubs.includes(activeHub)) {
+      onSelectHub(allowedHubs[0] || 'business');
+    }
+  }, [allowedHubs, activeHub, onSelectHub]);
+
   const primaryRole = isAdmin
     ? t.rbac.roleAdminName
     : user?.assignments?.[0]?.role
@@ -65,7 +103,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <header className="h-14 bg-white/95 backdrop-blur border-b border-slate-200 sticky top-0 z-40 px-4 flex items-center justify-between shadow-xs">
       
-      {/* LEFT: Logo & Brand */}
+      {/* LEFT: Mobile menu button & Logo */}
       <div className="flex items-center space-x-3">
         {onToggleMobileSidebar && (
           <button
@@ -90,8 +128,55 @@ export const TopBar: React.FC<TopBarProps> = ({
         </div>
       </div>
 
-      {/* CENTER: Workspace & Library Selector */}
-      <div className="flex items-center space-x-2">
+      {/* CENTER: Hub Switcher (Left) + Workspace & Library Selector (Right) */}
+      <div className="flex items-center space-x-3">
+        
+        {/* Hub Switcher (Filtered by permissions) */}
+        <div className="flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200 shadow-2xs">
+          {allowedHubs.includes('business') && (
+            <button
+              onClick={() => onSelectHub('business')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                activeHub === 'business'
+                  ? 'bg-indigo-600 text-white shadow-xs shadow-indigo-600/30 ring-1 ring-indigo-500/20'
+                  : 'text-slate-600 hover:text-indigo-600 hover:bg-white/60'
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{t.common.businessBadge}</span>
+            </button>
+          )}
+
+          {allowedHubs.includes('architecture') && (
+            <button
+              onClick={() => onSelectHub('architecture')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                activeHub === 'architecture'
+                  ? 'bg-emerald-600 text-white shadow-xs shadow-emerald-600/30 ring-1 ring-emerald-500/20'
+                  : 'text-slate-600 hover:text-emerald-600 hover:bg-white/60'
+              }`}
+            >
+              <Building2 className="w-3.5 h-3.5" />
+              <span>{t.common.architectureBadge}</span>
+            </button>
+          )}
+
+          {allowedHubs.includes('admin') && (
+            <button
+              onClick={() => onSelectHub('admin')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                activeHub === 'admin'
+                  ? 'bg-rose-600 text-white shadow-xs shadow-rose-600/30 ring-1 ring-rose-500/20'
+                  : 'text-slate-600 hover:text-rose-600 hover:bg-white/60'
+              }`}
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>{t.common.adminBadge}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Workspace & Library Selector */}
         <div className="flex items-center bg-slate-50 hover:bg-slate-100/80 border border-slate-200/90 rounded-xl px-2.5 py-1 transition shadow-2xs">
           <div className="flex items-center space-x-2">
             <Database className="w-3.5 h-3.5 text-indigo-600 shrink-0" />
@@ -105,7 +190,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <select
               value={selectedModelId}
               onChange={(e) => onSelectModel(e.target.value)}
-              className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer max-w-[180px] sm:max-w-[260px] truncate"
+              className="bg-transparent text-xs text-slate-800 font-bold focus:outline-none cursor-pointer max-w-[160px] sm:max-w-[220px] truncate"
               title={t.common.selectLibrary}
             >
               {models.map((m) => (
@@ -125,6 +210,7 @@ export const TopBar: React.FC<TopBarProps> = ({
             <RefreshCw className={`w-3 h-3 ${isSeeding ? 'animate-spin text-indigo-600' : ''}`} />
           </button>
         </div>
+
       </div>
 
       {/* RIGHT: Language Switcher & User Profile Dropdown */}
