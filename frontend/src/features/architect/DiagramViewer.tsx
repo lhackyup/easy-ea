@@ -6,57 +6,27 @@ import {
   Background,
   useNodesState,
   useEdgesState,
-  MarkerType,
-  Position,
-  Handle
+  Position
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { api } from '../../lib/api';
 import { DiagramViewDetail } from '../../types';
-import { Layers, Box, Info } from 'lucide-react';
+import { Layers, Box, Info, Edit3, PlusCircle, Palette } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { DrawioEditorModal } from './DrawioEditorModal';
+import {
+  ArchimateStandardNode,
+  ArchimateSvgDefs,
+  getArchimateEdgeProps,
+  getLayerTheme
+} from '../../lib/archimateVisuals';
 
 interface DiagramViewerProps {
   modelId: string;
 }
 
-// Custom ArchiMate Node Component for Light Theme
-const ArchimateNode = ({ data }: any) => {
-  const getLayerStyle = (layer: string) => {
-    switch (layer) {
-      case 'Strategy':
-        return 'bg-amber-100 border-amber-400 text-amber-950';
-      case 'Business':
-        return 'bg-yellow-100 border-yellow-400 text-yellow-950';
-      case 'Application':
-        return 'bg-cyan-100 border-cyan-400 text-cyan-950';
-      case 'Technology':
-        return 'bg-emerald-100 border-emerald-400 text-emerald-950';
-      case 'Motivation':
-        return 'bg-purple-100 border-purple-400 text-purple-950';
-      default:
-        return 'bg-slate-100 border-slate-300 text-slate-900';
-    }
-  };
-
-  return (
-    <div
-      className={`px-3 py-2 rounded-xl border-2 shadow-sm min-w-[160px] text-center transition hover:shadow-md ${getLayerStyle(
-        data.layer
-      )}`}
-    >
-      <Handle type="target" position={Position.Top} className="w-2.5 h-2.5 bg-slate-600" />
-      <div className="text-[9px] uppercase font-extrabold tracking-wider opacity-75 mb-0.5">
-        {data.type}
-      </div>
-      <div className="text-xs font-bold leading-snug">{data.label}</div>
-      <Handle type="source" position={Position.Bottom} className="w-2.5 h-2.5 bg-slate-600" />
-    </div>
-  );
-};
-
 const nodeTypes = {
-  archimateNode: ArchimateNode,
+  archimateNode: ArchimateStandardNode,
 };
 
 export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
@@ -69,75 +39,113 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
 
-  useEffect(() => {
-    const fetchViews = async () => {
-      setLoading(true);
-      try {
-        const vList = await api.getViews(modelId);
-        setViews(vList);
-        if (vList.length > 0) {
+  // Draw.io Editor Modal State
+  const [isDrawioOpen, setIsDrawioOpen] = useState(false);
+  const [drawioEditView, setDrawioEditView] = useState<DiagramViewDetail | null>(null);
+
+  const fetchViews = async (selectId?: string) => {
+    setLoading(true);
+    try {
+      const vList = await api.getViews(modelId);
+      setViews(vList);
+      if (vList.length > 0) {
+        if (selectId && vList.some((v) => v.id === selectId)) {
+          setSelectedViewId(selectId);
+        } else if (!selectedViewId || !vList.some((v) => v.id === selectedViewId)) {
           setSelectedViewId(vList[0].id);
-        } else {
-          setCurrentView(null);
-          setNodes([]);
-          setEdges([]);
         }
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
+      } else {
+        setSelectedViewId('');
+        setCurrentView(null);
+        setNodes([]);
+        setEdges([]);
       }
-    };
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     fetchViews();
   }, [modelId]);
 
-  useEffect(() => {
-    if (!selectedViewId) return;
+  const loadViewDetail = async (viewIdToLoad?: string) => {
+    const targetId = viewIdToLoad || selectedViewId;
+    if (!targetId) return;
+    try {
+      const view = await api.getViewDetail(targetId);
+      setCurrentView(view);
 
-    const loadViewDetail = async () => {
-      try {
-        const view = await api.getViewDetail(selectedViewId);
-        setCurrentView(view);
+      const rfNodes = view.nodes.map((n) => ({
+        id: n.id,
+        type: 'archimateNode',
+        position: { x: n.x, y: n.y },
+        data: {
+          label: n.name,
+          type: n.type,
+          layer: n.layer,
+          documentation: n.documentation,
+        },
+      }));
 
-        const rfNodes = view.nodes.map((n) => ({
-          id: n.id,
-          type: 'archimateNode',
-          position: { x: n.x, y: n.y },
-          data: {
-            label: n.name,
-            type: n.type,
-            layer: n.layer,
-            documentation: n.documentation,
-          },
-        }));
-
-        const rfEdges = view.connections.map((c) => ({
-          id: c.id,
+      const rfEdges = view.connections.map((c, idx) => {
+        const edgeProps = getArchimateEdgeProps(c.type || c.name || '', c.name || c.type.replace('Relationship', ''));
+        return {
+          id: c.id || `edge-${idx}`,
           source: c.source_node_id,
           target: c.target_node_id,
-          label: c.name || c.type.replace('Relationship', ''),
           type: 'smoothstep',
-          animated: c.type.includes('Flow') || c.type.includes('Triggering'),
-          markerEnd: {
-            type: MarkerType.ArrowClosed,
-            width: 16,
-            height: 16,
-            color: '#4f46e5',
-          },
-          style: { stroke: '#4f46e5', strokeWidth: 2 },
-          labelStyle: { fill: '#1e293b', fontSize: 10, fontWeight: 700 },
-          labelBgStyle: { fill: '#ffffff', fillOpacity: 0.9, stroke: '#e2e8f0' },
-        }));
+          ...edgeProps,
+          labelStyle: { fill: '#334155', fontSize: 10, fontWeight: 700 },
+          labelBgStyle: { fill: '#ffffff', fillOpacity: 0.95, stroke: '#cbd5e1', strokeWidth: 1, rx: 4, ry: 4 }
+        };
+      });
 
-        setNodes(rfNodes);
-        setEdges(rfEdges);
-      } catch (err) {
-        console.error(err);
-      }
-    };
+      setNodes(rfNodes);
+      setEdges(rfEdges);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
+  useEffect(() => {
     loadViewDetail();
   }, [selectedViewId]);
+
+  const handleOpenDrawioEdit = async () => {
+    if (selectedViewId) {
+      try {
+        const fresh = await api.getViewDetail(selectedViewId);
+        setCurrentView(fresh);
+        setDrawioEditView(fresh);
+      } catch {
+        setDrawioEditView(currentView);
+      }
+    } else {
+      setDrawioEditView(currentView);
+    }
+    setIsDrawioOpen(true);
+  };
+
+  const handleOpenDrawioCreate = () => {
+    setDrawioEditView(null);
+    setIsDrawioOpen(true);
+  };
+
+  const handleDrawioSaved = async (savedViewId: string) => {
+    await fetchViews(savedViewId);
+    setSelectedViewId(savedViewId);
+    await loadViewDetail(savedViewId);
+    try {
+      const fresh = await api.getViewDetail(savedViewId);
+      setDrawioEditView(fresh);
+      setCurrentView(fresh);
+    } catch {
+      // fallback
+    }
+  };
 
   if (loading) {
     return (
@@ -152,12 +160,30 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
 
   if (views.length === 0) {
     return (
-      <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-16 text-center space-y-3">
+      <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-16 text-center space-y-4">
         <Layers className="w-10 h-10 text-slate-400 mx-auto" />
         <h3 className="text-sm font-bold text-slate-900">{t.architect.noDiagramsInLibrary}</h3>
         <p className="text-xs text-slate-500 max-w-md mx-auto">
           {t.architect.noDiagramsDesc}
         </p>
+        <div>
+          <button
+            onClick={handleOpenDrawioCreate}
+            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Crea Nuova Vista con Draw.io</span>
+          </button>
+        </div>
+
+        {/* Draw.io Modal */}
+        <DrawioEditorModal
+          modelId={modelId}
+          viewDetail={drawioEditView}
+          isOpen={isDrawioOpen}
+          onClose={() => setIsDrawioOpen(false)}
+          onSaved={handleDrawioSaved}
+        />
       </div>
     );
   }
@@ -188,19 +214,43 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
           </div>
         </div>
 
-        {currentView && (
-          <div className="flex items-center space-x-3 text-xs text-slate-500 font-medium">
-            <span>{t.architect.viewpoint} <strong className="text-slate-900">{currentView.viewpoint || 'Standard'}</strong></span>
-            <span>•</span>
-            <span>{t.common.nodes}: <strong className="text-slate-900">{nodes.length}</strong></span>
-            <span>•</span>
-            <span>{t.architect.connections} <strong className="text-slate-900">{edges.length}</strong></span>
-          </div>
-        )}
+        <div className="flex items-center space-x-3">
+          {currentView && (
+            <div className="hidden lg:flex items-center space-x-3 text-xs text-slate-500 font-medium mr-2">
+              <span>{t.architect.viewpoint} <strong className="text-slate-900">{currentView.viewpoint || 'Standard'}</strong></span>
+              <span>•</span>
+              <span>{t.common.nodes}: <strong className="text-slate-900">{nodes.length}</strong></span>
+              <span>•</span>
+              <span>{t.architect.connections} <strong className="text-slate-900">{edges.length}</strong></span>
+            </div>
+          )}
+
+          {/* Draw.io Actions */}
+          <button
+            onClick={handleOpenDrawioCreate}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
+            title="Crea una nuova vista con l'editor Draw.io"
+          >
+            <PlusCircle className="w-4 h-4 text-indigo-600" />
+            <span>Nuova Vista Draw.io</span>
+          </button>
+
+          {currentView && (
+            <button
+              onClick={handleOpenDrawioEdit}
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm hover:shadow-indigo-600/30"
+              title="Modifica il diagramma corrente nell'editor Draw.io integrato"
+            >
+              <Palette className="w-4 h-4" />
+              <span>Modifica in Draw.io</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* React Flow Interactive Graph Canvas */}
       <div className="h-[620px] bg-slate-50 border border-slate-200 rounded-2xl shadow-sm relative overflow-hidden">
+        <ArchimateSvgDefs />
         <ReactFlow
           nodes={nodes}
           edges={edges}
@@ -215,27 +265,32 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
           <Controls className="bg-white border-slate-200 text-slate-700 shadow-sm" />
           <MiniMap
             nodeColor={(node: any) => {
-              switch (node.data?.layer) {
-                case 'Strategy': return '#f59e0b';
-                case 'Business': return '#eab308';
-                case 'Application': return '#06b6d4';
-                case 'Technology': return '#10b981';
-                default: return '#94a3b8';
-              }
+              const theme = getLayerTheme(node.data?.layer);
+              return theme.border;
             }}
             className="bg-white border border-slate-200 rounded-lg shadow-sm"
           />
         </ReactFlow>
 
         {/* Legend Overlay */}
-        <div className="absolute bottom-4 left-4 z-10 bg-white/95 backdrop-blur border border-slate-200 rounded-xl p-3 shadow-md flex items-center space-x-3 text-[11px] text-slate-700 font-semibold">
+        <div className="absolute bottom-4 left-4 z-10 bg-white/95 backdrop-blur border border-slate-200 rounded-xl p-3 shadow-md flex items-center space-x-3 text-[11px] text-slate-700 font-semibold select-none">
           <span className="font-bold text-slate-900">{t.architect.legendTitle}</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-yellow-200 border border-yellow-500"></span> {t.architect.layerBusiness}</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-cyan-200 border border-cyan-500"></span> {t.architect.layerApplication}</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-200 border border-emerald-500"></span> {t.architect.layerTechnology}</span>
-          <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-200 border border-amber-500"></span> {t.architect.layerStrategy}</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#FFFFC8] border border-[#C6B726]"></span> Business</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#C2FFFF] border border-[#3DA3C0]"></span> Application</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#D4F0C2] border border-[#6EA84B]"></span> Technology</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#FBF0D9] border border-[#C89234]"></span> Strategy</span>
+          <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-[#DCDCFE] border border-[#7878CC]"></span> Motivation</span>
         </div>
       </div>
+
+      {/* Draw.io Embedded Editor Modal */}
+      <DrawioEditorModal
+        modelId={modelId}
+        viewDetail={drawioEditView}
+        isOpen={isDrawioOpen}
+        onClose={() => setIsDrawioOpen(false)}
+        onSaved={handleDrawioSaved}
+      />
     </div>
   );
 };

@@ -1,0 +1,342 @@
+/**
+ * EasyEA Settings Configuration for Archi (jArchi)
+ * Supports:
+ * 1) Identity Provider SSO (Keycloak / OIDC Browser Loopback Flow)
+ * 2) Local Username & Password Authentication
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Settings ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+    var ServerSocket = Java.type("java.net.ServerSocket");
+    var InputStreamReader = Java.type("java.io.InputStreamReader");
+    var BufferedReader = Java.type("java.io.BufferedReader");
+    var StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
+    var StringClass = Java.type("java.lang.String");
+    var Thread = Java.type("java.lang.Thread");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function saveConfig(config) {
+        if (!CONFIG_DIR.exists()) {
+            CONFIG_DIR.mkdirs();
+        }
+        var writer = new FileWriter(CONFIG_FILE);
+        writer.write(JSON.stringify(config, null, 2));
+        writer.close();
+    }
+
+    function openInBrowser(url) {
+        var opened = false;
+        try {
+            var Desktop = Java.type("java.awt.Desktop");
+            if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+                Desktop.getDesktop().browse(new URI(url));
+                opened = true;
+            }
+        } catch(e) {}
+
+        if (!opened) {
+            try {
+                var Runtime = Java.type("java.lang.Runtime");
+                Runtime.getRuntime().exec(["xdg-open", url]);
+                opened = true;
+            } catch(e2) {}
+        }
+        return opened;
+    }
+
+    try {
+        var config = loadConfig();
+
+        // 1. Prompt Server URL
+        var serverUrl = window.prompt("Enter EasyEA Server URL:", config.server_url || "http://localhost:8000");
+        if (serverUrl === null) {
+            console.log("Operation cancelled by user.");
+            return;
+        }
+        serverUrl = ("" + serverUrl).trim().replace(/\/+$/, "");
+        if (!serverUrl) {
+            window.alert("Server URL cannot be empty.");
+            return;
+        }
+
+        // 2. Select Auth Method: IdP SSO vs Username/Password
+        var options = [
+            "1. Identity Provider SSO (Keycloak / Browser Flow)",
+            "2. Local Username and Password"
+        ];
+
+        var selectedOption = null;
+        if (typeof window.promptSelection === "function") {
+            selectedOption = window.promptSelection("Select EasyEA authentication method:", options);
+        } else {
+            var promptMsg = "Select EasyEA authentication method:\n\n" +
+                "1) Identity Provider SSO (Keycloak / Browser Flow)\n" +
+                "2) Local Username and Password\n\n" +
+                "Enter 1 or 2:";
+            var choice = window.prompt(promptMsg, "1");
+            if (choice === "1" || choice === "1.") selectedOption = options[0];
+            else if (choice === "2" || choice === "2.") selectedOption = options[1];
+        }
+
+        if (!selectedOption) {
+            console.log("Operation cancelled.");
+            return;
+        }
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        // -------------------------------------------------------------
+        // OPTION 1: SSO with Identity Provider (Keycloak Loopback Flow)
+        // -------------------------------------------------------------
+        if (selectedOption.indexOf("1.") === 0) {
+            console.log("Starting Single Sign-On (Keycloak) flow...");
+
+            var serverSocket = null;
+            var port = 8765;
+            for (var p = 8765; p <= 8775; p++) {
+                try {
+                    serverSocket = new ServerSocket(p);
+                    serverSocket.setSoTimeout(120000); // 2 min timeout
+                    port = p;
+                    break;
+                } catch(portErr) {}
+            }
+
+            if (!serverSocket) {
+                window.alert("Unable to open local port for authentication (ports 8765-8775 are busy).");
+                return;
+            }
+
+            var callbackUrl = "http://127.0.0.1:" + port + "/callback";
+            var authUrl = serverUrl + "/api/auth/oidc/login?return_to=" + encodeURIComponent(callbackUrl);
+
+            console.log("Opening Keycloak login page in browser...");
+            console.log("Authentication URL: " + authUrl);
+
+            var browserOk = openInBrowser(authUrl);
+            if (!browserOk) {
+                window.alert("Open this URL in your browser to complete Keycloak login:\n\n" + authUrl);
+            }
+
+            console.log("Waiting for browser login completion (120s timeout)...");
+
+            var receivedToken = null;
+            var receivedError = null;
+            var startTime = System.currentTimeMillis();
+
+            while (!receivedToken && !receivedError && (System.currentTimeMillis() - startTime < 120000)) {
+                var socket = null;
+                try {
+                    socket = serverSocket.accept();
+                    var reader = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
+                    var requestLine = reader.readLine();
+
+                    if (requestLine) {
+                        console.log("HTTP request received from browser: " + requestLine);
+
+                        if (requestLine.indexOf("favicon.ico") !== -1) {
+                            var outStream = socket.getOutputStream();
+                            var resp204 = "HTTP/1.1 204 No Content\r\nConnection: close\r\n\r\n";
+                            outStream.write(new StringClass(resp204).getBytes(StandardCharsets.UTF_8));
+                            outStream.flush();
+                            socket.close();
+                            continue;
+                        }
+
+                        // Parse path & query params from "GET /path?token=... HTTP/1.1"
+                        var lineParts = requestLine.split(" ");
+                        var targetUri = lineParts.length > 1 ? lineParts[1] : "";
+                        var qPos = targetUri.indexOf("?");
+                        var queryStr = qPos !== -1 ? targetUri.substring(qPos + 1) : "";
+
+                        var paramPairs = queryStr.split("&");
+                        for (var pi = 0; pi < paramPairs.length; pi++) {
+                            var eqIdx = paramPairs[pi].indexOf("=");
+                            var paramKey = eqIdx !== -1 ? paramPairs[pi].substring(0, eqIdx) : paramPairs[pi];
+                            var paramVal = eqIdx !== -1 ? paramPairs[pi].substring(eqIdx + 1) : "";
+                            if (paramKey === "token" || paramKey === "auth_token" || paramKey === "access_token" || paramKey === "jwt") {
+                                receivedToken = decodeURIComponent(paramVal);
+                            } else if (paramKey === "error" || paramKey === "auth_error" || paramKey === "error_description") {
+                                receivedError = decodeURIComponent(paramVal);
+                            }
+                        }
+
+                        var htmlBody = "";
+                        if (receivedToken) {
+                            htmlBody = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>EasyEA - Authentication Successful</title>" +
+                                "<style>body{font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#f8fafc;}" +
+                                ".card{background:#1e293b;padding:2.5rem;border-radius:1.25rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);border:1px solid #334155;text-align:center;max-width:420px;}" +
+                                "h1{color:#4ade80;font-size:1.5rem;margin:0 0 0.75rem 0;}p{color:#94a3b8;font-size:0.95rem;line-height:1.5;margin:0;}" +
+                                ".badge{display:inline-block;margin-top:1.25rem;padding:0.4rem 1rem;background:#064e3b;color:#6ee7b7;border-radius:9999px;font-size:0.8rem;font-weight:bold;}</style></head>" +
+                                "<body><div class='card'><h1>Authentication Successful!</h1><p>Your access token for Archi has been registered successfully.<br><br>You can now close this tab and return to <strong>Archi</strong>.</p><div class='badge'>Active Keycloak Session</div></div></body></html>";
+                        } else {
+                            htmlBody = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>EasyEA - Error</title>" +
+                                "<style>body{font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#f8fafc;}" +
+                                ".card{background:#1e293b;padding:2.5rem;border-radius:1.25rem;border:1px solid #ef4444;text-align:center;max-width:420px;}" +
+                                "h1{color:#ef4444;font-size:1.5rem;margin:0 0 0.75rem 0;}p{color:#94a3b8;font-size:0.95rem;}</style></head>" +
+                                "<body><div class='card'><h1>Authentication Error</h1><p>" + (receivedError || "Token parameter not found in the request.") + "</p></div></body></html>";
+                        }
+
+                        var bodyBytes = new StringClass(htmlBody).getBytes(StandardCharsets.UTF_8);
+                        var httpHeaders = "HTTP/1.1 200 OK\r\n" +
+                            "Content-Type: text/html; charset=UTF-8\r\n" +
+                            "Content-Length: " + bodyBytes.length + "\r\n" +
+                            "Connection: close\r\n\r\n";
+
+                        var outStream = socket.getOutputStream();
+                        outStream.write(new StringClass(httpHeaders).getBytes(StandardCharsets.UTF_8));
+                        outStream.write(bodyBytes);
+                        outStream.flush();
+                        socket.close();
+
+                        if (receivedToken || receivedError) {
+                            break;
+                        }
+                    }
+                } catch(sockEx) {
+                    if (socket) try { socket.close(); } catch(se) {}
+                    break;
+                }
+            }
+
+            try {
+                serverSocket.close();
+            } catch(ssCloseErr) {}
+
+            var receivedData = { token: receivedToken, error: receivedError };
+
+            if (receivedData.token) {
+                // Fetch profile with /api/auth/me
+                var userDisplayName = "Keycloak User";
+                try {
+                    var reqMe = HttpRequest.newBuilder()
+                        .uri(URI.create(serverUrl + "/api/auth/me"))
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .header("Authorization", "Bearer " + receivedData.token)
+                        .GET()
+                        .build();
+
+                    var respMe = client.send(reqMe, HttpResponse.BodyHandlers.ofString());
+                    if (respMe.statusCode() === 200) {
+                        var userData = JSON.parse(respMe.body());
+                        if (userData.full_name) userDisplayName = userData.full_name;
+                        else if (userData.username) userDisplayName = userData.username;
+                    }
+                } catch(meErr) {}
+
+                config.server_url = serverUrl;
+                config.username = userDisplayName;
+                config.token = receivedData.token;
+                saveConfig(config);
+
+                console.log("✓ Keycloak (IdP) authentication completed successfully!");
+                console.log("✓ Connected user: " + userDisplayName);
+                console.log("✓ Token saved in " + CONFIG_FILE.getAbsolutePath());
+
+                window.alert(
+                    "Keycloak (IdP) authentication completed successfully!\n\n" +
+                    "User: " + userDisplayName + "\n" +
+                    "Server: " + serverUrl + "\n\n" +
+                    "You can now use EasyEA_Checkout and EasyEA_Checkin directly from Archi."
+                );
+            } else {
+                var errMessage = receivedData.error || "Timeout: no token received from browser within 2 minutes.";
+                console.error("IdP authentication failed: " + errMessage);
+                window.alert("IdP authentication failed:\n" + errMessage);
+            }
+
+        // -------------------------------------------------------------
+        // OPTION 2: Local Authentication with Username and Password
+        // -------------------------------------------------------------
+        } else {
+            var username = window.prompt("Enter your EasyEA Username or Email:", config.username || "admin");
+            if (username === null) {
+                console.log("Operation cancelled by user.");
+                return;
+            }
+            username = ("" + username).trim();
+            if (!username) {
+                window.alert("Username cannot be empty.");
+                return;
+            }
+
+            var password = window.prompt("Enter password for '" + username + "':", "");
+            if (password === null) {
+                console.log("Operation cancelled by user.");
+                return;
+            }
+            password = ("" + password).trim();
+
+            console.log("Attempting connection to " + serverUrl + " as '" + username + "'...");
+
+            var loginPayload = JSON.stringify({
+                username: username,
+                password: password
+            });
+
+            var req = HttpRequest.newBuilder()
+                .uri(URI.create(serverUrl + "/api/auth/login"))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(loginPayload))
+                .build();
+
+            var resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+            if (resp.statusCode() === 200) {
+                var loginData = JSON.parse(resp.body());
+                config.server_url = serverUrl;
+                config.username = username;
+                config.token = loginData.token;
+                saveConfig(config);
+
+                var displayName = (loginData.user && loginData.user.full_name) ? loginData.user.full_name : username;
+                console.log("✓ Connected to EasyEA successfully! User: " + displayName);
+                console.log("✓ Token saved in " + CONFIG_FILE.getAbsolutePath());
+
+                window.alert("Connected to EasyEA successfully!\n\nUser: " + displayName + "\nServer: " + serverUrl + "\n\nYou can now use EasyEA_Checkout and EasyEA_Checkin.");
+            } else {
+                var errText = "Login failed (HTTP " + resp.statusCode() + "):\n" + resp.body();
+                console.error(errText);
+                window.alert(errText);
+            }
+        }
+    } catch (err) {
+        var msg = "Error during script execution:\n" + err;
+        console.error(msg);
+        window.alert(msg);
+    }
+})();

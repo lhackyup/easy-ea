@@ -1,0 +1,403 @@
+/**
+ * EasyEA Check-in Script for Archi (jArchi)
+ * Saves current model, calculates Diff with EasyEA, prompts for commit message and resolves check-in.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Check-in ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function getModelFile(m) {
+        if (!m) return null;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getFile === "function") {
+            try { var f = raw.getFile(); if (f) return f; } catch(e) {}
+        }
+        if (m && typeof m.getFile === "function") {
+            try { var f2 = m.getFile(); if (f2) return f2; } catch(e) {}
+        }
+        if (m && m.file) return m.file;
+        return null;
+    }
+
+    function getModelName(m) {
+        if (!m) return "Schema";
+        if (typeof m.getName === "function") {
+            try { return m.getName(); } catch(e) {}
+        }
+        if (m.name) return m.name;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getName === "function") {
+            try { return raw.getName(); } catch(e) {}
+        }
+        return "Schema";
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        // 1. Scan checked out schemas from ~/.easyea/checked_out/
+        var checkedOutSchemas = [];
+        if (SCHEMAS_DIR.exists()) {
+            var dirFiles = SCHEMAS_DIR.listFiles();
+            if (dirFiles) {
+                for (var i = 0; i < dirFiles.length; i++) {
+                    var f = dirFiles[i];
+                    if (f.getName().endsWith(".meta.json")) {
+                        try {
+                            var scanner = new Scanner(f).useDelimiter("\\A");
+                            var content = scanner.hasNext() ? scanner.next() : "{}";
+                            scanner.close();
+                            var p = JSON.parse(content);
+                            if (p.schema_id) {
+                                var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
+                                var archFile = new File(SCHEMAS_DIR, archFileName);
+                                checkedOutSchemas.push({
+                                    schema_id: p.schema_id,
+                                    schema_name: p.schema_name || "Schema",
+                                    version: p.version || "v1.0",
+                                    meta_file: f,
+                                    archimate_file: archFile
+                                });
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        }
+
+        // 2. Inspect open models in Archi
+        var openModels = IEditorModelManager.INSTANCE.getModels();
+        var selectedEntry = null;
+
+        // Try to match from currently active model
+        var currentActiveModel = (typeof model !== "undefined" && model) ? model : null;
+        if (currentActiveModel) {
+            var rawActive = getRawModel(currentActiveModel);
+            var activeFile = getModelFile(currentActiveModel);
+            var activePropId = null;
+            try {
+                if (typeof $ !== "undefined") activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+            } catch(e) {}
+
+            for (var m = 0; m < checkedOutSchemas.length; m++) {
+                var cs = checkedOutSchemas[m];
+                if ((activePropId && activePropId === cs.schema_id) ||
+                    (activeFile && cs.archimate_file.getAbsolutePath() === activeFile.getAbsolutePath()) ||
+                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : ""))) {
+                    selectedEntry = cs;
+                    break;
+                }
+            }
+        }
+
+        // If not uniquely matched, check number of checked-out schemas
+        if (!selectedEntry) {
+            if (checkedOutSchemas.length === 1) {
+                selectedEntry = checkedOutSchemas[0];
+            } else if (checkedOutSchemas.length > 1) {
+                var choices = [];
+                for (var k = 0; k < checkedOutSchemas.length; k++) {
+                    choices.push((k + 1) + ". " + checkedOutSchemas[k].schema_name + " (" + checkedOutSchemas[k].version + ") - ID: " + checkedOutSchemas[k].schema_id);
+                }
+
+                var userChoice = null;
+                if (typeof window.promptSelection === "function") {
+                    userChoice = window.promptSelection("Select schema to check in:", choices);
+                } else {
+                    var promptTxt = "Select schema to check in:\n\n" + choices.join("\n") + "\n\nEnter number:";
+                    var choiceNum = window.prompt(promptTxt, "1");
+                    if (choiceNum !== null) {
+                        var idx = parseInt(("" + choiceNum).trim(), 10) - 1;
+                        if (!isNaN(idx) && idx >= 0 && idx < choices.length) userChoice = choices[idx];
+                    }
+                }
+
+                if (!userChoice) {
+                    console.log("Check-in cancelled by user.");
+                    return;
+                }
+
+                for (var ci = 0; ci < choices.length; ci++) {
+                    if (choices[ci] === userChoice) {
+                        selectedEntry = checkedOutSchemas[ci];
+                        break;
+                    }
+                }
+            }
+        }
+
+        // If still no entry (e.g. metadata was deleted), ask manually
+        if (!selectedEntry) {
+            var manualId = window.prompt("No locally checked-out schema found. Enter EasyEA Schema ID:", "");
+            if (!manualId) return;
+            manualId = ("" + manualId).trim();
+
+            var fallbackFile = null;
+            if (SCHEMAS_DIR.exists()) {
+                var sFiles = SCHEMAS_DIR.listFiles();
+                if (sFiles) {
+                    for (var sf = 0; sf < sFiles.length; sf++) {
+                        if (sFiles[sf].getName().indexOf(manualId) !== -1 && sFiles[sf].getName().endsWith(".archimate")) {
+                            fallbackFile = sFiles[sf];
+                            break;
+                        }
+                    }
+                }
+            }
+
+            selectedEntry = {
+                schema_id: manualId,
+                schema_name: "Schema (" + manualId + ")",
+                version: "v1.x",
+                archimate_file: fallbackFile || new File(SCHEMAS_DIR, manualId + ".archimate"),
+                meta_file: null
+            };
+        }
+
+        var schemaId = selectedEntry.schema_id;
+        var schemaName = selectedEntry.schema_name;
+        var modelFile = selectedEntry.archimate_file;
+
+        console.log("Recognized EasyEA Schema: '" + schemaName + "' (ID: " + schemaId + ")");
+
+        // 3. Find matching open model in Archi and save to disk
+        var matchedOpenModel = null;
+        if (openModels && openModels.size() > 0) {
+            for (var omIdx = 0; omIdx < openModels.size(); omIdx++) {
+                var om = openModels.get(omIdx);
+                var rawOm = getRawModel(om);
+                var fOm = getModelFile(om);
+
+                if ((fOm && fOm.getAbsolutePath() === modelFile.getAbsolutePath()) ||
+                    (fOm && fOm.getName() === modelFile.getName()) ||
+                    (om.getName() === schemaName)) {
+                    matchedOpenModel = rawOm;
+                    break;
+                }
+            }
+            if (!matchedOpenModel) {
+                matchedOpenModel = getRawModel(openModels.get(0));
+            }
+        }
+
+        if (matchedOpenModel) {
+            console.log("Saving model changes in Archi...");
+            try {
+                if (matchedOpenModel.getFile() === null && modelFile) {
+                    try { matchedOpenModel.setFile(modelFile); } catch(sfErr) {}
+                }
+                IEditorModelManager.INSTANCE.saveModel(matchedOpenModel);
+            } catch(saveErr) {
+                console.log("Save note: " + saveErr);
+            }
+        }
+
+        // 4. Verify file existence and read content
+        if (!modelFile || !modelFile.exists()) {
+            if (SCHEMAS_DIR.exists()) {
+                var dirList = SCHEMAS_DIR.listFiles();
+                if (dirList) {
+                    for (var d = 0; d < dirList.length; d++) {
+                        if (dirList[d].getName().indexOf(schemaId) !== -1 && dirList[d].getName().endsWith(".archimate")) {
+                            modelFile = dirList[d];
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!modelFile || !modelFile.exists()) {
+            window.alert("Unable to find schema file on disk:\n" + (modelFile ? modelFile.getAbsolutePath() : "Directory ~/.easyea/checked_out/"));
+            return;
+        }
+
+        var xmlScanner = new Scanner(modelFile).useDelimiter("\\A");
+        var xmlContent = xmlScanner.hasNext() ? xmlScanner.next() : "";
+        xmlScanner.close();
+
+        if (!xmlContent || xmlContent.trim().length === 0) {
+            window.alert("Schema file (" + modelFile.getName() + ") is empty.");
+            return;
+        }
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        // 7. Send checkin-diff
+        console.log("Sending model to EasyEA to calculate differences (Diff)...");
+
+        var boundary = "----EasyEABoundary" + new java.util.Date().getTime();
+        var crlf = "\r\n";
+        var multipartBody = "--" + boundary + crlf +
+            "Content-Disposition: form-data; name=\"file\"; filename=\"schema.archimate\"" + crlf +
+            "Content-Type: application/xml" + crlf + crlf +
+            xmlContent + crlf +
+            "--" + boundary + "--" + crlf;
+
+        var reqDiff = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/" + schemaId + "/checkin-diff"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+            .POST(HttpRequest.BodyPublishers.ofString(multipartBody))
+            .build();
+
+        var respDiff = client.send(reqDiff, HttpResponse.BodyHandlers.ofString());
+        if (respDiff.statusCode() !== 200) {
+            var diffErr = respDiff.body();
+            try {
+                var dObj = JSON.parse(diffErr);
+                if (dObj.detail) diffErr = dObj.detail;
+            } catch(e) {}
+            window.alert("Error calculating differences:\n" + diffErr);
+            return;
+        }
+
+        var diffResult = JSON.parse(respDiff.body());
+
+        // 8. Summary
+        var summary = "=== Changes Summary for '" + schemaName + "' ===\n\n" +
+            "• New Elements: " + (diffResult.new_elements ? diffResult.new_elements.length : 0) + "\n" +
+            "• Modified Elements: " + (diffResult.modified_elements ? diffResult.modified_elements.length : 0) + "\n" +
+            "• Removed Elements: " + (diffResult.removed_elements ? diffResult.removed_elements.length : 0) + "\n" +
+            "• New Relationships: " + (diffResult.new_relationships ? diffResult.new_relationships.length : 0) + "\n" +
+            "• Removed Relationships: " + (diffResult.removed_relationships ? diffResult.removed_relationships.length : 0) + "\n\n" +
+            "Do you want to confirm and check in this version?";
+
+        console.log("Diff completed for " + schemaName + ":");
+        console.log("New Elements: " + (diffResult.new_elements ? diffResult.new_elements.length : 0));
+        console.log("Modified Elements: " + (diffResult.modified_elements ? diffResult.modified_elements.length : 0));
+        console.log("Removed Elements: " + (diffResult.removed_elements ? diffResult.removed_elements.length : 0));
+
+        var confirmed = window.confirm(summary);
+        if (!confirmed) {
+            console.log("Check-in cancelled by user.");
+            return;
+        }
+
+        // 9. Commit message
+        var commitMsg = window.prompt("Enter a description of your changes (Commit Message):", "Diagram update from Archi");
+        if (commitMsg === null) commitMsg = "Diagram update from Archi";
+
+        // 10. Confirm Check-in
+        var autoChanges = [];
+        if (diffResult.modified_elements) {
+            for (var mi = 0; mi < diffResult.modified_elements.length; mi++) {
+                var meObj = diffResult.modified_elements[mi];
+                if (meObj.changes) {
+                    for (var chi = 0; chi < meObj.changes.length; chi++) {
+                        var chObj = meObj.changes[chi];
+                        autoChanges.push({
+                            id: meObj.id,
+                            field: chObj.field,
+                            prop_key: chObj.prop_key,
+                            new_value: chObj.new_value,
+                            overwrite: true
+                        });
+                    }
+                }
+            }
+        }
+
+        var confirmPayload = JSON.stringify({
+            file_content: xmlContent,
+            xml_content: xmlContent,
+            commit_message: ("" + commitMsg).trim(),
+            new_elements: diffResult.new_elements || [],
+            new_relationships: diffResult.new_relationships || [],
+            attribute_resolutions: autoChanges,
+            overwrite_attributes: true,
+            remove_deleted_from_catalog: false
+        });
+
+        var reqConfirm = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/" + schemaId + "/checkin-confirm"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(confirmPayload))
+            .build();
+
+        var respConfirm = client.send(reqConfirm, HttpResponse.BodyHandlers.ofString());
+        if (respConfirm.statusCode() !== 200) {
+            var confErr = respConfirm.body();
+            try {
+                var cObj = JSON.parse(confErr);
+                if (cObj.detail) confErr = cObj.detail;
+            } catch(e) {}
+            window.alert("Error saving check-in:\n" + confErr);
+            return;
+        }
+
+        var confirmRes = JSON.parse(respConfirm.body());
+
+        // Cleanup local checkout metadata
+        if (selectedEntry && selectedEntry.meta_file && selectedEntry.meta_file.exists()) {
+            try { selectedEntry.meta_file.delete(); } catch(delErr) {}
+        }
+
+        console.log("✓ Check-in completed successfully!");
+        console.log("New version: " + (confirmRes.schema ? confirmRes.schema.current_version : "updated"));
+
+        window.alert(
+            "Schema '" + schemaName + "' has been committed to EasyEA successfully!\n\n" +
+            "New version: " + (confirmRes.schema ? confirmRes.schema.current_version : "v1.x") + "\n" +
+            "Elements and relationships have been synchronized in the repository and the lock has been released."
+        );
+
+    } catch (e) {
+        var errStr = "Error during check-in:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

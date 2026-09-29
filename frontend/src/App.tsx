@@ -12,6 +12,7 @@ import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { DiagramViewer } from './features/architect/DiagramViewer';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
 import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
+import { SchemaRepository } from './features/schemas/SchemaRepository';
 import { DataImportHub } from './features/architect/DataImportHub';
 import { AdminHub } from './features/admin/AdminHub';
 import { LoginScreen } from './features/auth/LoginScreen';
@@ -201,6 +202,7 @@ export function App() {
                         onClearInitialView={() => setSelectedSavedView(null)}
                       />
                     )}
+                    {architectureTab === 'schemas' && <SchemaRepository modelId={selectedModelId} />}
                     {architectureTab === 'diagrams' && <DiagramViewer modelId={selectedModelId} />}
                     {architectureTab === 'relations' && <RelationsMatrix modelId={selectedModelId} />}
                     {architectureTab === 'saved-views' && (

@@ -1,4 +1,7 @@
 import pytest
+import io
+import zipfile
+import openpyxl
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -890,6 +893,109 @@ def test_saved_views_crud():
     # Verify 404 after deletion
     res_verify_del = client.get(f"/api/saved-views/{view_id}")
     assert res_verify_del.status_code == 404
+
+
+def test_saved_view_export_and_roundtrip_reimport():
+    # 1. Create a saved filter view targeting Application components with multi-attribute rules
+    payload = {
+        "model_id": "sample-easybank-ea",
+        "name": "Export Test Applications",
+        "description": "Export testing for round-trip import",
+        "author": "QA Architect",
+        "is_shared": True,
+        "tags": ["Export", "Test"],
+        "filter_config": {
+            "selectedLayer": "Application",
+            "selectedType": "ApplicationComponent",
+            "search": "",
+            "searchInProps": False,
+            "relationshipFilter": "all",
+            "documentationFilter": "all",
+            "matchLogic": "AND",
+            "attributeFilterRules": [
+                {
+                    "id": "rule-1",
+                    "attributeName": "annual_cost",
+                    "operator": "gte",
+                    "value": "0"
+                }
+            ],
+            "sortBy": "name_asc"
+        }
+    }
+    res_create = client.post("/api/saved-views", json=payload)
+    assert res_create.status_code == 201
+    view_id = res_create.json()["id"]
+
+    # 2. Test GET /{view_id}/export?format=xlsx
+    res_exp_xlsx = client.get(f"/api/saved-views/{view_id}/export?format=xlsx")
+    assert res_exp_xlsx.status_code == 200
+    assert "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" in res_exp_xlsx.headers["content-type"]
+    assert "attachment; filename=" in res_exp_xlsx.headers["content-disposition"]
+
+    # Validate Excel content
+    xlsx_bytes = res_exp_xlsx.content
+    wb = openpyxl.load_workbook(io.BytesIO(xlsx_bytes))
+    assert "Elements" in wb.sheetnames
+    assert "Relationships" in wb.sheetnames
+    assert "Metamodel_Guide" in wb.sheetnames
+    
+    ws_elements = wb["Elements"]
+    assert ws_elements.max_row > 1, "Elements sheet must have data rows, not just headers!"
+    headers = [cell.value for cell in ws_elements[1]]
+    assert "id" in headers
+    assert "name" in headers
+    assert "type" in headers
+    assert "annual_cost" in headers
+    assert "business_fit" in headers
+
+    # Verify first data row has non-empty name, type, layer
+    first_row = [cell.value for cell in ws_elements[2]]
+    assert first_row[headers.index("name")] is not None
+    assert first_row[headers.index("type")] == "ApplicationComponent"
+
+    # Validate Relationships sheet
+    ws_rel = wb["Relationships"]
+    assert ws_rel.max_row >= 1
+    rel_headers = [cell.value for cell in ws_rel[1]]
+    assert "source" in rel_headers
+    assert "target" in rel_headers
+    assert "type" in rel_headers
+
+    # 3. Test POST /api/saved-views/export with CSV zip
+    res_exp_csv = client.post("/api/saved-views/export", json={
+        "model_id": "sample-easybank-ea",
+        "view_id": view_id,
+        "format": "csv"
+    })
+    assert res_exp_csv.status_code == 200
+    assert "application/zip" in res_exp_csv.headers["content-type"]
+    with zipfile.ZipFile(io.BytesIO(res_exp_csv.content)) as zf:
+        namelist = zf.namelist()
+        assert "elements.csv" in namelist
+        assert "relationships.csv" in namelist
+        
+        elem_csv_text = zf.read("elements.csv").decode("utf-8-sig")
+        lines = [l for l in elem_csv_text.strip().splitlines() if l]
+        assert len(lines) > 1, "elements.csv must have data lines beyond the header!"
+
+    # 4. Test Round-Trip Re-Import of the exported Excel
+    res_dry_reimport = client.post(
+        "/api/import/upload",
+        data={"model_id": "sample-easybank-ea", "dry_run": "true", "update_existing": "true"},
+        files={"file": ("export_reimport.xlsx", xlsx_bytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")}
+    )
+    assert res_dry_reimport.status_code == 200
+    dry_data = res_dry_reimport.json()
+    assert dry_data["dry_run"] is True
+    assert dry_data["status"] == "success"
+    assert dry_data["errors_count"] == 0
+    assert dry_data["elements_updated"] > 0 or dry_data["elements_created"] > 0
+
+    # 5. Clean up test saved view
+    client.delete(f"/api/saved-views/{view_id}")
+
+
 
 
 

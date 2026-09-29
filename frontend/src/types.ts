@@ -1,7 +1,7 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
 export type BusinessSubTab = 'overview' | 'apm' | 'overlap' | 'processes';
-export type ArchitectureSubTab = 'repository' | 'diagrams' | 'relations' | 'saved-views' | 'import';
+export type ArchitectureSubTab = 'repository' | 'schemas' | 'diagrams' | 'relations' | 'saved-views' | 'import';
 export type AdminSubTab = 'models' | 'metamodel' | 'apm_config' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
@@ -275,6 +275,7 @@ export interface DiagramViewDetail {
   name: string;
   viewpoint?: string;
   documentation?: string;
+  drawio_xml?: string;
   nodes: Array<{
     id: string;
     element_id?: string;
@@ -286,6 +287,7 @@ export interface DiagramViewDetail {
     y: number;
     width: number;
     height: number;
+    parent_id?: string;
   }>;
   connections: Array<{
     id: string;
@@ -388,6 +390,7 @@ export interface SystemAuthSettings {
   enable_single_logout: boolean;
   rbac_mode: 'hybrid' | 'idp_sync' | 'internal';
   role_mappings: RoleMappingRule[];
+  max_schema_versions?: number;
 }
 export interface IdpConnectionTestResult {
   success: boolean;
@@ -450,4 +453,100 @@ export interface SavedViewUpdatePayload {
   tags?: string[];
   filter_config?: SavedViewFilterConfig;
 }
+
+export interface SchemaFolder {
+  id: string;
+  model_id: string;
+  parent_id: string | null;
+  name: string;
+  order_index: number;
+  schema_count?: number;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface ArchiSchema {
+  id: string;
+  model_id: string;
+  folder_id: string | null;
+  name: string;
+  viewpoint: string;
+  documentation: string;
+  status: 'available' | 'checked_out';
+  locked_by_user_id: string | null;
+  locked_by_username: string | null;
+  locked_at: string | null;
+  current_version: string;
+  nodes_count?: number;
+  connections_count?: number;
+  view_data?: any;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SchemaVersionHistory {
+  id: string;
+  version_number: number;
+  version_label: string;
+  commit_message: string;
+  author_user_id?: string;
+  author_name: string;
+  has_raw_xml?: boolean;
+  created_at: string;
+}
+
+export interface SchemaDiffChange {
+  field: string;
+  label: string;
+  prop_key?: string;
+  current_value: string;
+  new_value: string;
+  overwrite: boolean;
+}
+
+export interface SchemaDiffModifiedElement {
+  id: string;
+  xml_id?: string;
+  name: string;
+  type: string;
+  changes: SchemaDiffChange[];
+}
+
+export interface SchemaDiffNewElement {
+  xml_id: string;
+  name: string;
+  type: string;
+  layer: string;
+  documentation?: string;
+  properties?: Record<string, any>;
+}
+
+export interface SchemaDiffRemovedElement {
+  id: string;
+  name: string;
+  type: string;
+  layer: string;
+  remove_from_catalog: boolean;
+}
+
+export interface SchemaDiffResult {
+  has_differences: boolean;
+  summary: {
+    new_elements_count: number;
+    modified_elements_count: number;
+    removed_elements_count: number;
+    new_relationships_count: number;
+    modified_relationships_count: number;
+    removed_relationships_count: number;
+  };
+  modified_elements: SchemaDiffModifiedElement[];
+  new_elements: SchemaDiffNewElement[];
+  removed_elements: SchemaDiffRemovedElement[];
+  modified_relationships: any[];
+  new_relationships: any[];
+  removed_relationships: any[];
+  xml_content?: string;
+  parsed_view_data?: any;
+}
+
 

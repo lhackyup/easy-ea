@@ -8,7 +8,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
@@ -28,6 +28,7 @@ from app.services.metamodel_service import (
     ARCHIMATE_RELATIONSHIP_RULES
 )
 from app.api.relationships import is_rel_type_allowed, get_allowed_rel_names_for_types
+from app.services.drawio_service import export_model_to_drawio, parse_and_import_drawio
 
 router = APIRouter(prefix="/import", tags=["Data Import"])
 
@@ -878,3 +879,68 @@ def delete_import_history(history_id: str, db: Session = Depends(get_db)):
     db.delete(record)
     db.commit()
     return {"message": "History entry deleted successfully."}
+
+
+@router.get("/drawio/export")
+def export_model_drawio(model_id: str, db: Session = Depends(get_db)):
+    """Exports all views of a model into a multi-diagram .drawio XML package."""
+    workspace = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Model Workspace not found")
+    
+    xml_content = export_model_to_drawio(model_id, db)
+    filename = f"{workspace.name.replace(' ', '_')}_Architecture_Views.drawio"
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+
+@router.post("/drawio")
+async def import_drawio_file_endpoint(
+    model_id: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """
+    Uploads and imports a .drawio diagram file, extracting elements,
+    relationships, and diagram views into the model.
+    """
+    workspace = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
+    if not workspace:
+        raise HTTPException(status_code=404, detail="Model Workspace not found")
+
+    content_bytes = await file.read()
+    try:
+        xml_str = content_bytes.decode("utf-8")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Il file fornito non è un file XML/Draw.io UTF-8 valido.")
+
+    try:
+        res = parse_and_import_drawio(model_id, xml_str, db)
+        
+        # Log to ImportHistory
+        hist = ImportHistory(
+            id=f"hist-{uuid.uuid4().hex[:12]}",
+            model_id=model_id,
+            filename=file.filename or "diagram.drawio",
+            file_format="drawio",
+            file_size_bytes=len(content_bytes),
+            user_name="Architect",
+            status="SUCCESS",
+            elements_created=res.get("created_elements", 0),
+            elements_updated=0,
+            relationships_created=res.get("created_relations", 0),
+            errors_count=0,
+            warnings_count=0,
+            details=[f"Importate {res.get('imported_views', 0)} viste da file Draw.io."]
+        )
+        db.add(hist)
+        db.commit()
+
+        return res
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=f"Errore durante l'importazione Draw.io: {str(e)}")
+

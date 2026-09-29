@@ -20,7 +20,8 @@ import {
   Building2,
   KeyRound,
   UploadCloud,
-  BookmarkCheck
+  BookmarkCheck,
+  FolderGit2
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -78,6 +79,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'repository' as ArchitectureSubTab,
       label: t.subtabs.archimateRepository,
       icon: Database
+    },
+    {
+      id: 'schemas' as ArchitectureSubTab,
+      label: t.subtabs.schemaRepository,
+      icon: FolderGit2
     },
     {
       id: 'relations' as ArchitectureSubTab,

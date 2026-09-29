@@ -1,0 +1,228 @@
+/**
+ * EasyEA Discard Checkout Script for Archi (jArchi)
+ * Cancels current checkout and releases the schema lock on EasyEA without saving changes.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Discard Check-out ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function getModelFile(m) {
+        if (!m) return null;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getFile === "function") {
+            try { var f = raw.getFile(); if (f) return f; } catch(e) {}
+        }
+        if (m && typeof m.getFile === "function") {
+            try { var f2 = m.getFile(); if (f2) return f2; } catch(e) {}
+        }
+        if (m && m.file) return m.file;
+        return null;
+    }
+
+    function getModelName(m) {
+        if (!m) return "Schema";
+        if (typeof m.getName === "function") {
+            try { return m.getName(); } catch(e) {}
+        }
+        if (m.name) return m.name;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getName === "function") {
+            try { return raw.getName(); } catch(e) {}
+        }
+        return "Schema";
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        // 1. Scan checked out schemas from ~/.easyea/checked_out/
+        var checkedOutSchemas = [];
+        if (SCHEMAS_DIR.exists()) {
+            var dirFiles = SCHEMAS_DIR.listFiles();
+            if (dirFiles) {
+                for (var i = 0; i < dirFiles.length; i++) {
+                    var f = dirFiles[i];
+                    if (f.getName().endsWith(".meta.json")) {
+                        try {
+                            var scanner = new Scanner(f).useDelimiter("\\A");
+                            var content = scanner.hasNext() ? scanner.next() : "{}";
+                            scanner.close();
+                            var p = JSON.parse(content);
+                            if (p.schema_id) {
+                                var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
+                                var archFile = new File(SCHEMAS_DIR, archFileName);
+                                checkedOutSchemas.push({
+                                    schema_id: p.schema_id,
+                                    schema_name: p.schema_name || "Schema",
+                                    version: p.version || "v1.0",
+                                    meta_file: f,
+                                    archimate_file: archFile
+                                });
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        }
+
+        var openModels = IEditorModelManager.INSTANCE.getModels();
+        var selectedEntry = null;
+
+        var currentActiveModel = (typeof model !== "undefined" && model) ? model : null;
+        if (currentActiveModel) {
+            var activeFile = getModelFile(currentActiveModel);
+            var activePropId = null;
+            try {
+                if (typeof $ !== "undefined") activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+            } catch(e) {}
+
+            for (var m = 0; m < checkedOutSchemas.length; m++) {
+                var cs = checkedOutSchemas[m];
+                if ((activePropId && activePropId === cs.schema_id) ||
+                    (activeFile && cs.archimate_file.getAbsolutePath() === activeFile.getAbsolutePath()) ||
+                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : ""))) {
+                    selectedEntry = cs;
+                    break;
+                }
+            }
+        }
+
+        if (!selectedEntry) {
+            if (checkedOutSchemas.length === 1) {
+                selectedEntry = checkedOutSchemas[0];
+            } else if (checkedOutSchemas.length > 1) {
+                var choices = [];
+                for (var k = 0; k < checkedOutSchemas.length; k++) {
+                    choices.push((k + 1) + ". " + checkedOutSchemas[k].schema_name + " (" + checkedOutSchemas[k].version + ") - ID: " + checkedOutSchemas[k].schema_id);
+                }
+
+                var userChoice = null;
+                if (typeof window.promptSelection === "function") {
+                    userChoice = window.promptSelection("Select schema to discard check-out:", choices);
+                } else {
+                    var promptTxt = "Select schema to discard check-out:\n\n" + choices.join("\n") + "\n\nEnter number:";
+                    var choiceNum = window.prompt(promptTxt, "1");
+                    if (choiceNum !== null) {
+                        var idx = parseInt(("" + choiceNum).trim(), 10) - 1;
+                        if (!isNaN(idx) && idx >= 0 && idx < choices.length) userChoice = choices[idx];
+                    }
+                }
+
+                if (!userChoice) {
+                    console.log("Operation cancelled by user.");
+                    return;
+                }
+
+                for (var ci = 0; ci < choices.length; ci++) {
+                    if (choices[ci] === userChoice) {
+                        selectedEntry = checkedOutSchemas[ci];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!selectedEntry) {
+            var manualId = window.prompt("Enter EasyEA Schema ID to discard check-out:", "");
+            if (!manualId) return;
+            manualId = ("" + manualId).trim();
+            selectedEntry = {
+                schema_id: manualId,
+                schema_name: "Schema (" + manualId + ")",
+                version: "v1.x",
+                archimate_file: new File(SCHEMAS_DIR, manualId + ".archimate"),
+                meta_file: null
+            };
+        }
+
+        var schemaId = selectedEntry.schema_id;
+        var schemaName = selectedEntry.schema_name;
+
+        var confirmed = window.confirm(
+            "Are you sure you want to cancel the check-out for schema '" + schemaName + "'?\n\nThe lock on EasyEA will be released and uncommitted changes will be lost."
+        );
+
+        if (!confirmed) {
+            console.log("Operation cancelled.");
+            return;
+        }
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        var req = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/" + schemaId + "/discard-checkout"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build();
+
+        var resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() === 200) {
+            if (selectedEntry && selectedEntry.meta_file && selectedEntry.meta_file.exists()) {
+                try { selectedEntry.meta_file.delete(); } catch(e) {}
+            }
+            console.log("✓ Lock released successfully for schema: " + schemaName);
+            window.alert("Lock for schema '" + schemaName + "' has been released successfully on EasyEA.");
+        } else {
+            var errBody = resp.body();
+            try {
+                var errObj = JSON.parse(errBody);
+                if (errObj.detail) errBody = errObj.detail;
+            } catch(e) {}
+            window.alert("Unable to release lock:\n" + errBody);
+        }
+    } catch (e) {
+        var errStr = "Error during discard check-out:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

@@ -45,6 +45,7 @@ export const it = {
     businessViews: 'Viste Business',
     
     archimateRepository: 'Oggetti ed Elementi',
+    schemaRepository: 'Schema Repository',
     graphicViews: 'Diagrammi e Viste Grafiche',
     relationsMatrix: 'Relazioni e Connessioni',
     savedViews: 'Viste Salvate',
@@ -381,6 +382,11 @@ export const it = {
     updateViewSuccess: 'Vista aggiornata con successo!',
     deleteViewConfirm: 'Sei sicuro di voler eliminare questa vista salvata?',
     deleteViewSuccess: 'Vista eliminata con successo.',
+    exportResultsBtn: 'Esporta Risultati',
+    exportExcel: 'Esporta in Excel (.xlsx)',
+    exportCsv: 'Esporta in CSV (.zip)',
+    exportingData: 'Generazione file in corso...',
+    exportDataSuccess: 'File esportato con successo!',
   },
 
   // Saved Views Catalog
@@ -405,7 +411,10 @@ export const it = {
     typeLabel: 'Tipo',
     matchLogicLabel: 'Logica',
     rulesLabel: 'Regole',
-    exportJsonBtn: 'Esporta JSON',
+    exportJsonBtn: 'Esporta JSON (Config)',
+    exportExcelBtn: 'Esporta Excel (.xlsx)',
+    exportCsvBtn: 'Esporta CSV (.zip)',
+    exportOptionDesc: '100% compatibile per re-importazione',
     manageSavedViews: 'Gestisci Viste Salvate',
   },
 

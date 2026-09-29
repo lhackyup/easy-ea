@@ -51,9 +51,13 @@ import {
   Bookmark,
   Users,
   User,
-  ExternalLink
+  ExternalLink,
+  FileSpreadsheet,
+  FileArchive,
+  Download
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 
 export interface AttributeFilterRule {
   id: string;
@@ -77,6 +81,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   onClearInitialView,
 }) => {
   const { t, interpolate } = useLanguage();
+  const { user } = useAuth();
+  const currentAuthor = user?.full_name || user?.username || user?.email || 'Architetto';
   const [elements, setElements] = useState<ArchimateElementItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedLayer, setSelectedLayer] = useState('All');
@@ -93,7 +99,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   const [matchLogic, setMatchLogic] = useState<'AND' | 'OR'>('AND');
   const [attributeFilterRules, setAttributeFilterRules] = useState<AttributeFilterRule[]>([]);
 
-  // Saved Views State
+  // Saved Views & Export State
   const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
   const [activeSavedView, setActiveSavedView] = useState<SavedFilterView | null>(null);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
@@ -103,6 +109,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   const [saveViewTags, setSaveViewTags] = useState('');
   const [saveViewIsShared, setSaveViewIsShared] = useState(true);
   const [savingView, setSavingView] = useState(false);
+  const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   // Metamodel Layers & Types structure
   const [metamodelLayers, setMetamodelLayers] = useState<MetamodelLayer[]>([]);
@@ -791,7 +799,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   const handleOpenSaveViewModal = () => {
     setSaveViewName(activeSavedView ? `${activeSavedView.name} (Nuova)` : '');
     setSaveViewDesc(activeSavedView?.description || '');
-    setSaveViewAuthor(activeSavedView?.author || 'Enterprise Architect');
+    setSaveViewAuthor(currentAuthor);
     setSaveViewTags(activeSavedView?.tags?.join(', ') || '');
     setSaveViewIsShared(activeSavedView?.is_shared ?? true);
     setIsSaveViewModalOpen(true);
@@ -824,7 +832,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         model_id: modelId,
         name: saveViewName.trim(),
         description: saveViewDesc.trim() || undefined,
-        author: saveViewAuthor.trim() || 'Enterprise Architect',
+        author: currentAuthor,
         is_shared: saveViewIsShared,
         tags: parsedTags,
         filter_config: filterConfig
@@ -1094,6 +1102,53 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     allAvailableAttributes
   ]);
 
+  const handleExportRepository = async (format: 'xlsx' | 'csv') => {
+    try {
+      setExporting(true);
+      setExportDropdownOpen(false);
+      showNotification(t.architect.exportingData, 'success');
+
+      const viewName =
+        activeSavedView?.name ||
+        (selectedLayer !== 'All' ? `${selectedLayer}_Layer` : 'Repository_Export');
+
+      const payload = {
+        model_id: modelId,
+        view_name: viewName,
+        format: format,
+        element_ids: filteredElements.map((e) => e.id),
+        include_relationships: true
+      };
+
+      const res = await fetch('/api/saved-views/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const ext = format === 'xlsx' ? 'xlsx' : 'zip';
+        const cleanName = viewName.toLowerCase().replace(/[^a-z0-9]/gi, '_') || 'repository_export';
+        a.download = `EasyEA_${cleanName}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showNotification(t.architect.exportDataSuccess, 'success');
+      } else {
+        showNotification('Errore durante l\'esportazione dei dati', 'error');
+      }
+    } catch (err) {
+      showNotification('Errore di connessione durante l\'export', 'error');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const getLayerColor = (layer: string) => {
     switch (layer) {
       case 'Strategy': return 'bg-amber-100 text-amber-900 border-amber-300';
@@ -1326,6 +1381,61 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
               <span>{t.architect.saveViewBtn}</span>
             </button>
 
+            {/* Export Dropdown */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setExportDropdownOpen(!exportDropdownOpen)}
+                disabled={exporting || filteredElements.length === 0}
+                className={`px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 border shadow-2xs cursor-pointer ${
+                  exportDropdownOpen
+                    ? 'bg-slate-200 text-slate-900 border-slate-300 ring-2 ring-emerald-500/20'
+                    : 'bg-white hover:bg-slate-50 text-slate-700 border-slate-200'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+                title={t.architect.exportResultsBtn}
+              >
+                <Download className={`w-3.5 h-3.5 text-emerald-600 ${exporting ? 'animate-bounce' : ''}`} />
+                <span>{exporting ? t.architect.exportingData : t.architect.exportResultsBtn}</span>
+                <ChevronDown className="w-3 h-3 text-slate-400" />
+              </button>
+
+              {exportDropdownOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-20"
+                    onClick={() => setExportDropdownOpen(false)}
+                  />
+                  <div className="absolute right-0 mt-1.5 w-56 bg-white rounded-xl shadow-xl border border-slate-200 py-1.5 z-30 animate-fadeIn">
+                    <div className="px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                      {t.architect.exportResultsBtn} ({filteredElements.length})
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleExportRepository('xlsx')}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-emerald-50 hover:text-emerald-900 flex items-center space-x-2 transition cursor-pointer"
+                    >
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{t.architect.exportExcel}</span>
+                        <span className="text-[10px] text-slate-400">Cartella Excel con relazioni (.xlsx)</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportRepository('csv')}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-blue-50 hover:text-blue-900 flex items-center space-x-2 transition cursor-pointer"
+                    >
+                      <FileArchive className="w-4 h-4 text-blue-600 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="font-semibold">{t.architect.exportCsv}</span>
+                        <span className="text-[10px] text-slate-400">Archivio ZIP con CSV UTF-8 (.zip)</span>
+                      </div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+
             {/* Advanced Filter Toggle Button */}
             <button
               onClick={() => setIsAdvancedFilterOpen(!isAdvancedFilterOpen)}
@@ -1371,6 +1481,29 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
             </div>
 
             <div className="flex items-center space-x-2">
+              <div className="flex items-center gap-1 border-r border-emerald-200 pr-2 mr-1">
+                <button
+                  type="button"
+                  onClick={() => handleExportRepository('xlsx')}
+                  disabled={exporting}
+                  className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 bg-white hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-300 shadow-2xs cursor-pointer transition"
+                  title="Esporta questa vista in Excel (.xlsx)"
+                >
+                  <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
+                  <span>XLSX</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportRepository('csv')}
+                  disabled={exporting}
+                  className="text-[11px] font-bold text-blue-800 hover:text-blue-950 flex items-center gap-1 bg-white hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 shadow-2xs cursor-pointer transition"
+                  title="Esporta questa vista in CSV (.zip)"
+                >
+                  <FileArchive className="w-3 h-3 text-blue-600" />
+                  <span>CSV</span>
+                </button>
+              </div>
+
               <button
                 type="button"
                 onClick={handleUpdateCurrentView}
@@ -3045,15 +3178,20 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.architect.viewAuthorLabel}
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{t.architect.viewAuthorLabel}</span>
+                    <span className="text-[10px] font-medium text-slate-400">Utente loggato</span>
                   </label>
-                  <input
-                    type="text"
-                    value={saveViewAuthor}
-                    onChange={(e) => setSaveViewAuthor(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-500"
-                  />
+                  <div className="relative flex items-center">
+                    <User className="w-3.5 h-3.5 text-emerald-600 absolute left-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={currentAuthor}
+                      readOnly
+                      disabled
+                      className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-slate-700 cursor-not-allowed select-none focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div>

@@ -115,7 +115,8 @@ def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemA
     for field in [
         "allow_local_login", "allow_idp_login", "provider_name",
         "issuer_url", "client_id", "client_secret", "scopes",
-        "prompt_login", "enable_single_logout", "rbac_mode", "role_mappings"
+        "prompt_login", "enable_single_logout", "rbac_mode", "role_mappings",
+        "max_schema_versions"
     ]:
         if field in updates:
             setattr(auth_cfg, field, updates[field])

@@ -20,7 +20,8 @@ import {
   Sliders,
   Sparkles,
   Save,
-  Info
+  Info,
+  FolderGit2
 } from 'lucide-react';
 
 interface AuthConfigManagerProps {
@@ -786,6 +787,44 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models }) 
               </tbody>
             </table>
           </div>
+        </div>
+      </div>
+
+      {/* SECTION 4: Schema Repository & Version Retention */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="border-b border-slate-100 pb-3">
+          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <FolderGit2 className="w-4 h-4 text-purple-600" />
+            <span>Schema Repository & Conservazione Storico Versioni</span>
+          </h4>
+          <p className="text-xs text-slate-500 mt-1">
+            Configura le policy globali di retention per le versioni storiche degli schemi ArchiMate importati.
+          </p>
+        </div>
+
+        <div className="max-w-md space-y-2">
+          <label className="block text-xs font-bold text-slate-700">
+            Numero Massimo di Versioni da Conservare per Schema (N)
+          </label>
+          <div className="flex items-center space-x-3">
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={settings.max_schema_versions ?? 10}
+              onChange={(e) =>
+                setSettings({
+                  ...settings,
+                  max_schema_versions: parseInt(e.target.value) || 10
+                })
+              }
+              className="w-32 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 font-bold"
+            />
+            <span className="text-xs text-slate-500">versioni (default: 10)</span>
+          </div>
+          <p className="text-[11px] text-slate-400">
+            Durante ogni operazione di Check-in, le versioni più vecchie oltre questo limite verranno automaticamente eliminate.
+          </p>
         </div>
       </div>
 

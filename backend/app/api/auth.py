@@ -48,6 +48,7 @@ class SystemAuthSettingsUpdateRequest(BaseModel):
     enable_single_logout: Optional[bool] = None
     rbac_mode: Optional[str] = None
     role_mappings: Optional[List[Dict[str, Any]]] = None
+    max_schema_versions: Optional[int] = None
 
 
 class IdpConnectionTestRequest(BaseModel):
@@ -301,16 +302,18 @@ def oidc_callback(
             }
 
         # Redirect user back to the origin frontend with session token
+        separator = "&" if "?" in target_frontend else "?"
         return RedirectResponse(
-            url=f"{target_frontend}/?token={session_token}",
+            url=f"{target_frontend}{separator}token={session_token}",
             status_code=302
         )
 
     except Exception as exc:
         if format == "json":
             raise HTTPException(status_code=500, detail=f"OIDC Token Exchange Error: {str(exc)}")
+        separator = "&" if "?" in target_frontend else "?"
         return RedirectResponse(
-            url=f"{target_frontend}/?auth_error={urllib.parse.quote(str(exc))}",
+            url=f"{target_frontend}{separator}auth_error={urllib.parse.quote(str(exc))}",
             status_code=302
         )
 

@@ -1,0 +1,217 @@
+/**
+ * EasyEA Checkout Script for Archi (jArchi)
+ * Connects to EasyEA, lists available schemas, performs check-out and opens the model directly in Archi.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Check-out ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        // 1. Fetch models
+        var reqModels = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/models"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .GET()
+            .build();
+
+        var respModels = client.send(reqModels, HttpResponse.BodyHandlers.ofString());
+        if (respModels.statusCode() !== 200) {
+            window.alert("Session expired or server unreachable (HTTP " + respModels.statusCode() + "). Please run 'EasyEA_Settings.ajs' again.");
+            return;
+        }
+
+        var modelsList = JSON.parse(respModels.body());
+        if (!modelsList || modelsList.length === 0) {
+            window.alert("No workspace / library found on EasyEA.");
+            return;
+        }
+
+        var defaultModelId = modelsList[0].id;
+
+        // 2. Fetch schemas for model
+        var reqSchemas = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/" + defaultModelId + "/list"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .GET()
+            .build();
+
+        var respSchemas = client.send(reqSchemas, HttpResponse.BodyHandlers.ofString());
+        var schemasList = JSON.parse(respSchemas.body()) || [];
+
+        if (schemasList.length === 0) {
+            window.alert("No schemas available in EasyEA repository for the selected workspace.");
+            return;
+        }
+
+        // 3. Selection list
+        var schemaLabels = [];
+        for (var i = 0; i < schemasList.length; i++) {
+            var s = schemasList[i];
+            var statusStr = (s.status === "checked_out")
+                ? " [🔒 CHECKED OUT by " + (s.locked_by_username || "Architect") + "]"
+                : " [🟢 AVAILABLE]";
+            schemaLabels.push((i + 1) + ". " + s.name + " (" + s.current_version + ")" + statusStr);
+        }
+
+        var selectedLabel = null;
+        if (typeof window.promptSelection === "function") {
+            selectedLabel = window.promptSelection("Select the EasyEA schema to download and lock:", schemaLabels);
+        } else {
+            var promptMsg = "Select the EasyEA schema to download and lock:\n\n" + schemaLabels.join("\n") + "\n\nEnter number (1 - " + schemasList.length + "):";
+            var choice = window.prompt(promptMsg, "1");
+            if (choice !== null) {
+                var idx = parseInt(("" + choice).trim(), 10) - 1;
+                if (!isNaN(idx) && idx >= 0 && idx < schemasList.length) {
+                    selectedLabel = schemaLabels[idx];
+                }
+            }
+        }
+
+        if (!selectedLabel) {
+            console.log("Check-out cancelled.");
+            return;
+        }
+
+        var selectedIndex = 0;
+        for (var k = 0; k < schemaLabels.length; k++) {
+            if (schemaLabels[k] === selectedLabel) {
+                selectedIndex = k;
+                break;
+            }
+        }
+
+        var selectedSchema = schemasList[selectedIndex];
+        console.log("Requesting lock (check-out) for: " + selectedSchema.name + " (ID: " + selectedSchema.id + ")...");
+
+        // 4. Perform checkout on EasyEA
+        var reqCheckout = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/" + selectedSchema.id + "/checkout"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .POST(HttpRequest.BodyPublishers.noBody())
+            .build();
+
+        var respCheckout = client.send(reqCheckout, HttpResponse.BodyHandlers.ofString());
+        if (respCheckout.statusCode() !== 200) {
+            var errDetail = respCheckout.body();
+            try {
+                var errObj = JSON.parse(errDetail);
+                if (errObj.detail) errDetail = errObj.detail;
+            } catch(ex) {}
+            window.alert("Unable to lock schema:\n" + errDetail);
+            return;
+        }
+
+        // 5. Download .archimate XML
+        console.log("Downloading schema XML file...");
+        var reqDownload = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/" + selectedSchema.id + "/download"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .GET()
+            .build();
+
+        var respDownload = client.send(reqDownload, HttpResponse.BodyHandlers.ofString());
+        if (respDownload.statusCode() !== 200) {
+            window.alert("Error downloading schema file from EasyEA.");
+            return;
+        }
+
+        var xmlContent = respDownload.body();
+
+        // 6. Save locally
+        if (!SCHEMAS_DIR.exists()) {
+            SCHEMAS_DIR.mkdirs();
+        }
+
+        var cleanName = selectedSchema.name.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+        var localFile = new File(SCHEMAS_DIR, selectedSchema.id + "_" + cleanName + ".archimate");
+
+        var writer = new FileWriter(localFile);
+        writer.write(xmlContent);
+        writer.close();
+
+        // Save metadata
+        var metaFile = new File(SCHEMAS_DIR, localFile.getName() + ".meta.json");
+        var metaWriter = new FileWriter(metaFile);
+        metaWriter.write(JSON.stringify({
+            schema_id: selectedSchema.id,
+            model_id: defaultModelId,
+            schema_name: selectedSchema.name,
+            version: selectedSchema.current_version,
+            checked_out_at: new Date().toISOString()
+        }, null, 2));
+        metaWriter.close();
+
+        console.log("✓ Schema file saved: " + localFile.getAbsolutePath());
+        console.log("Opening schema in Archi...");
+
+        // 7. Open model in Archi
+        var loadedModel = IEditorModelManager.INSTANCE.openModel(localFile);
+
+        try {
+            if (typeof $ !== "undefined" && loadedModel) {
+                $(loadedModel).prop("EasyEA_Schema_ID", selectedSchema.id);
+                $(loadedModel).prop("EasyEA_Model_ID", defaultModelId);
+                $(loadedModel).prop("EasyEA_Schema_Name", selectedSchema.name);
+            }
+        } catch(propErr) {}
+
+        window.alert(
+            "Schema '" + selectedSchema.name + "' has been locked successfully and opened in Archi!\n\n" +
+            "You can now edit it in the designer. When finished, run 'EasyEA_Checkin.ajs' to commit changes to EasyEA."
+        );
+
+    } catch (e) {
+        var errStr = "Error during check-out:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

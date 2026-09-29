@@ -22,6 +22,8 @@ from app.api.rbac import router as rbac_router
 from app.api.auth import router as auth_router
 from app.api.data_import import router as data_import_router
 from app.api.saved_views import router as saved_views_router
+from app.api.schemas import router as schemas_router
+from app.api.plugin_api import router as plugin_router
 
 from sqlalchemy import text
 
@@ -56,6 +58,7 @@ _safe_add_column("users", "username VARCHAR")
 _safe_add_column("users", "password_hash VARCHAR")
 _safe_add_column("users", "auth_provider VARCHAR DEFAULT 'local'")
 _safe_add_column("users", "external_id VARCHAR")
+_safe_add_column("system_auth_settings", "max_schema_versions INTEGER DEFAULT 10")
 
 
 # Auto-seed sample model, backfill codes and default custom attributes if needed
@@ -121,6 +124,8 @@ app.include_router(metamodel_router, prefix=settings.API_V1_STR)
 app.include_router(rbac_router, prefix=settings.API_V1_STR)
 app.include_router(data_import_router, prefix=settings.API_V1_STR)
 app.include_router(saved_views_router, prefix=settings.API_V1_STR)
+app.include_router(schemas_router, prefix=settings.API_V1_STR)
+app.include_router(plugin_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 

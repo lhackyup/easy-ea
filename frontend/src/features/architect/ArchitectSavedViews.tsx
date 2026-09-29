@@ -18,10 +18,14 @@ import {
   AlertCircle,
   X,
   RotateCcw,
-  Sparkles
+  Sparkles,
+  FileSpreadsheet,
+  FileArchive,
+  FileText
 } from 'lucide-react';
 import { SavedFilterView, SavedViewUpdatePayload } from '../../types';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface ArchitectSavedViewsProps {
   modelId: string;
@@ -35,6 +39,8 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
   onNavigateToRepository,
 }) => {
   const { t, interpolate } = useLanguage();
+  const { user } = useAuth();
+  const currentAuthor = user?.full_name || user?.username || user?.email || 'Architetto';
   const [views, setViews] = useState<SavedFilterView[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -106,7 +112,7 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
     setEditingView(view);
     setEditName(view.name);
     setEditDesc(view.description || '');
-    setEditAuthor(view.author || 'Enterprise Architect');
+    setEditAuthor(view.author || currentAuthor);
     setEditTags((view.tags || []).join(', '));
     setEditIsShared(view.is_shared ?? true);
   };
@@ -126,7 +132,7 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
       const payload: SavedViewUpdatePayload = {
         name: editName.trim(),
         description: editDesc.trim() || undefined,
-        author: editAuthor.trim() || 'Enterprise Architect',
+        author: editAuthor || currentAuthor,
         is_shared: editIsShared,
         tags: parsedTags,
       };
@@ -147,6 +153,31 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
       showFeedback('error', 'Errore durante l\'aggiornamento.');
     } finally {
       setSavingEdit(false);
+    }
+  };
+
+  const handleExportView = async (view: SavedFilterView, format: 'xlsx' | 'csv') => {
+    try {
+      showFeedback('success', t.architect.exportingData);
+      const res = await fetch(`/api/saved-views/${view.id}/export?format=${format}`);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const ext = format === 'xlsx' ? 'xlsx' : 'zip';
+        const cleanName = view.name.toLowerCase().replace(/[^a-z0-9]/gi, '_') || 'saved_view';
+        a.download = `EasyEA_${cleanName}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        showFeedback('success', t.architect.exportDataSuccess);
+      } else {
+        showFeedback('error', 'Errore durante l\'esportazione della vista.');
+      }
+    } catch (err) {
+      showFeedback('error', 'Errore di connessione durante l\'export.');
     }
   };
 
@@ -335,6 +366,20 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
                     </div>
 
                     <div className="flex items-center space-x-1 opacity-80 group-hover:opacity-100 transition">
+                      <button
+                        onClick={() => handleExportView(view, 'xlsx')}
+                        className="p-1 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition"
+                        title={t.savedViews.exportExcelBtn}
+                      >
+                        <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                      </button>
+                      <button
+                        onClick={() => handleExportView(view, 'csv')}
+                        className="p-1 text-slate-400 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition"
+                        title={t.savedViews.exportCsvBtn}
+                      >
+                        <FileArchive className="w-3.5 h-3.5 text-purple-600" />
+                      </button>
                       <button
                         onClick={() => handleExportJson(view)}
                         className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
@@ -533,15 +578,20 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.architect.viewAuthorLabel}
+                  <label className="block text-xs font-bold text-slate-700 mb-1 flex items-center justify-between">
+                    <span>{t.architect.viewAuthorLabel}</span>
+                    <span className="text-[10px] font-medium text-slate-400">Autore (non modificabile)</span>
                   </label>
-                  <input
-                    type="text"
-                    value={editAuthor}
-                    onChange={(e) => setEditAuthor(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs font-medium text-slate-900 focus:outline-none focus:border-emerald-500"
-                  />
+                  <div className="relative flex items-center">
+                    <User className="w-3.5 h-3.5 text-emerald-600 absolute left-3 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={editAuthor || currentAuthor}
+                      readOnly
+                      disabled
+                      className="w-full bg-slate-100 border border-slate-200 rounded-xl pl-8 pr-3 py-2 text-xs font-bold text-slate-700 cursor-not-allowed select-none focus:outline-none"
+                    />
+                  </div>
                 </div>
 
                 <div>

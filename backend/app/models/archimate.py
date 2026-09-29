@@ -22,6 +22,8 @@ class ModelWorkspace(Base):
     relationships = relationship("ArchimateRelationship", back_populates="workspace", cascade="all, delete-orphan")
     views = relationship("ArchimateView", back_populates="workspace", cascade="all, delete-orphan")
     saved_views = relationship("SavedFilterView", back_populates="workspace", cascade="all, delete-orphan")
+    schema_folders = relationship("SchemaFolder", back_populates="workspace", cascade="all, delete-orphan")
+    schemas = relationship("ArchiSchema", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class ArchimateElement(Base):
@@ -163,6 +165,7 @@ class SystemAuthSettings(Base):
     enable_single_logout = Column(Boolean, default=True)
     rbac_mode = Column(String, default="hybrid") # hybrid, idp_sync, internal
     role_mappings = Column(JSON, default=list) # List of mapping rule objects
+    max_schema_versions = Column(Integer, default=10) # Max versions to keep per schema in repository
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
@@ -201,3 +204,62 @@ class SavedFilterView(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     workspace = relationship("ModelWorkspace", back_populates="saved_views")
+
+
+class SchemaFolder(Base):
+    __tablename__ = "schema_folders"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    parent_id = Column(String, ForeignKey("schema_folders.id", ondelete="CASCADE"), nullable=True, index=True)
+    name = Column(String, nullable=False)
+    order_index = Column(Integer, default=0)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    workspace = relationship("ModelWorkspace", back_populates="schema_folders")
+    parent = relationship("SchemaFolder", remote_side=[id], backref="subfolders")
+    schemas = relationship("ArchiSchema", back_populates="folder", cascade="all, delete-orphan")
+
+
+class ArchiSchema(Base):
+    __tablename__ = "archi_schemas"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    folder_id = Column(String, ForeignKey("schema_folders.id", ondelete="SET NULL"), nullable=True, index=True)
+    name = Column(String, nullable=False, index=True)
+    viewpoint = Column(String, nullable=True, default="Total")
+    documentation = Column(Text, nullable=True)
+    status = Column(String, default="available", index=True) # "available", "checked_out"
+    locked_by_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    locked_by_username = Column(String, nullable=True)
+    locked_at = Column(DateTime, nullable=True)
+    current_version = Column(String, default="v1.0")
+    view_data = Column(JSON, default=dict) # visual nodes, connections, bounds
+    raw_xml = Column(Text, nullable=True) # Standalone Archi / Open Exchange XML content
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    workspace = relationship("ModelWorkspace", back_populates="schemas")
+    folder = relationship("SchemaFolder", back_populates="schemas")
+    locked_by = relationship("User", foreign_keys=[locked_by_user_id])
+    versions = relationship("SchemaVersionHistory", back_populates="schema", cascade="all, delete-orphan", order_by="desc(SchemaVersionHistory.version_number)")
+
+
+class SchemaVersionHistory(Base):
+    __tablename__ = "schema_version_history"
+
+    id = Column(String, primary_key=True, index=True)
+    schema_id = Column(String, ForeignKey("archi_schemas.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number = Column(Integer, nullable=False, index=True)
+    version_label = Column(String, nullable=False) # e.g. "v1.0", "v1.1"
+    commit_message = Column(Text, nullable=True)
+    author_user_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    author_name = Column(String, nullable=True)
+    view_data_snapshot = Column(JSON, default=dict)
+    raw_xml_snapshot = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+
+    schema = relationship("ArchiSchema", back_populates="versions")
+
