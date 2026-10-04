@@ -8,6 +8,7 @@ import { CheckinDiffModal } from './CheckinDiffModal';
 import { SchemaVersionHistoryModal } from './SchemaVersionHistoryModal';
 import { CreateSchemaModal } from './CreateSchemaModal';
 import { ArchiPluginModal } from './ArchiPluginModal';
+import { DrawioPaletteModal } from './DrawioPaletteModal';
 import {
   Folder,
   FolderPlus,
@@ -31,7 +32,8 @@ import {
   MoreVertical,
   CheckCircle2,
   Move,
-  Cpu
+  Cpu,
+  Palette
 } from 'lucide-react';
 
 interface SchemaRepositoryProps {
@@ -53,6 +55,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isPluginModalOpen, setIsPluginModalOpen] = useState(false);
+  const [isDrawioPaletteOpen, setIsDrawioPaletteOpen] = useState(false);
   const [previewSchema, setPreviewSchema] = useState<ArchiSchema | null>(null);
   const [checkinSchema, setCheckinSchema] = useState<ArchiSchema | null>(null);
   const [historySchema, setHistorySchema] = useState<ArchiSchema | null>(null);
@@ -604,6 +607,17 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <span>Plugin Archi</span>
             </button>
 
+            {/* Draw.io Palette Button */}
+            <button
+              type="button"
+              onClick={() => setIsDrawioPaletteOpen(true)}
+              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-amber-200"
+              title="Scarica la Palette ArchiMate 3.x per Draw.io Desktop"
+            >
+              <Palette className="w-4 h-4 text-amber-200" />
+              <span>Palette Draw.io</span>
+            </button>
+
             {/* New Schema Button */}
             <button
               type="button"
@@ -670,6 +684,13 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                             <div className="flex items-center space-x-2 mt-0.5">
                               <span className="px-2 py-0.2 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
                                 {schema.current_version}
+                              </span>
+                              <span className={`px-2 py-0.2 rounded-md text-[10px] font-bold border ${
+                                schema.format === 'drawio'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}>
+                                {schema.format === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
                               </span>
                               {schema.viewpoint && (
                                 <span className="text-[10px] font-semibold text-slate-500">
@@ -753,8 +774,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
 
                         <a
                           href={api.downloadSchemaXmlUrl(schema.id)}
-                          download={`${schema.name}.archimate`}
-                          title="Scarica copia .archimate"
+                          download={`${schema.name}.${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
+                          title={`Scarica copia .${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
                           className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
                         >
                           <Download className="w-4 h-4" />
@@ -876,6 +897,12 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
         <ArchiPluginModal
           isOpen={isPluginModalOpen}
           onClose={() => setIsPluginModalOpen(false)}
+        />
+      )}
+      {isDrawioPaletteOpen && (
+        <DrawioPaletteModal
+          isOpen={isDrawioPaletteOpen}
+          onClose={() => setIsDrawioPaletteOpen(false)}
         />
       )}
     </div>

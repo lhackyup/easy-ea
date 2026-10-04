@@ -15,6 +15,7 @@ class ModelWorkspace(Base):
     description = Column(Text, nullable=True)
     version = Column(String, default="1.0.0")
     source_format = Column(String, default="manual") # archi_native, open_exchange, manual
+    modeling_tool = Column(String, default="archi") # archi, drawio
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
@@ -236,8 +237,9 @@ class ArchiSchema(Base):
     locked_by_username = Column(String, nullable=True)
     locked_at = Column(DateTime, nullable=True)
     current_version = Column(String, default="v1.0")
+    format = Column(String, default="archi") # archi, drawio
     view_data = Column(JSON, default=dict) # visual nodes, connections, bounds
-    raw_xml = Column(Text, nullable=True) # Standalone Archi / Open Exchange XML content
+    raw_xml = Column(Text, nullable=True) # Standalone Archi / Open Exchange XML content or Drawio XML
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 

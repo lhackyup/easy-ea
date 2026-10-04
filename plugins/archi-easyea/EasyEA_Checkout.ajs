@@ -26,7 +26,7 @@
     var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
 
     function loadConfig() {
-        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
         if (CONFIG_FILE.exists()) {
             try {
                 var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
@@ -36,6 +36,10 @@
                 if (parsed.server_url) config.server_url = parsed.server_url;
                 if (parsed.token) config.token = parsed.token;
                 if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
             } catch (e) {}
         }
         return config;
@@ -52,41 +56,98 @@
             .version(HttpClient.Version.HTTP_1_1)
             .build();
 
-        // 1. Fetch models
-        var reqModels = HttpRequest.newBuilder()
-            .uri(URI.create(config.server_url + "/api/models"))
-            .version(HttpClient.Version.HTTP_1_1)
-            .header("Authorization", "Bearer " + config.token)
-            .GET()
-            .build();
+        // 1. Verify / Resolve Active Library
+        var activeModelId = config.model_id || config.library_id;
+        var activeLibraryName = config.library_name || "Enterprise Architecture Library";
+        var activeLibraryCode = config.library_code || "";
 
-        var respModels = client.send(reqModels, HttpResponse.BodyHandlers.ofString());
-        if (respModels.statusCode() !== 200) {
-            window.alert("Session expired or server unreachable (HTTP " + respModels.statusCode() + "). Please run 'EasyEA_Settings.ajs' again.");
-            return;
+        if (!activeModelId) {
+            // Fetch available models from server
+            var reqModels = HttpRequest.newBuilder()
+                .uri(URI.create(config.server_url + "/api/models"))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Authorization", "Bearer " + config.token)
+                .GET()
+                .build();
+
+            var respModels = client.send(reqModels, HttpResponse.BodyHandlers.ofString());
+            if (respModels.statusCode() !== 200) {
+                window.alert("Session expired or server unreachable (HTTP " + respModels.statusCode() + "). Please run 'EasyEA_Settings.ajs' again.");
+                return;
+            }
+
+            var modelsList = JSON.parse(respModels.body()) || [];
+            if (modelsList.length === 0) {
+                window.alert("No library / workspace found on EasyEA.");
+                return;
+            }
+
+            if (modelsList.length === 1) {
+                activeModelId = modelsList[0].id;
+                activeLibraryName = modelsList[0].name;
+                activeLibraryCode = modelsList[0].code || "";
+            } else {
+                var libChoices = [];
+                for (var li = 0; li < modelsList.length; li++) {
+                    var lm = modelsList[li];
+                    var lcode = lm.code ? " [" + lm.code + "]" : "";
+                    libChoices.push((li + 1) + ". " + lm.name + lcode + " - ID: " + lm.id);
+                }
+                var selLibChoice = null;
+                if (typeof window.promptSelection === "function") {
+                    selLibChoice = window.promptSelection("Select the target Library for Check-out:", libChoices);
+                } else {
+                    var lPrompt = "Select target Library for Check-out:\n\n" + libChoices.join("\n") + "\n\nEnter number:";
+                    var lNum = window.prompt(lPrompt, "1");
+                    if (lNum !== null) {
+                        var lIdx = parseInt(("" + lNum).trim(), 10) - 1;
+                        if (!isNaN(lIdx) && lIdx >= 0 && lIdx < modelsList.length) selLibChoice = libChoices[lIdx];
+                    }
+                }
+                if (!selLibChoice) {
+                    console.log("Check-out cancelled.");
+                    return;
+                }
+                for (var lk = 0; lk < libChoices.length; lk++) {
+                    if (libChoices[lk] === selLibChoice) {
+                        activeModelId = modelsList[lk].id;
+                        activeLibraryName = modelsList[lk].name;
+                        activeLibraryCode = modelsList[lk].code || "";
+                        break;
+                    }
+                }
+            }
+
+            config.model_id = activeModelId;
+            config.library_id = activeModelId;
+            config.library_name = activeLibraryName;
+            config.library_code = activeLibraryCode;
+            try {
+                var fw = new FileWriter(CONFIG_FILE);
+                fw.write(JSON.stringify(config, null, 2));
+                fw.close();
+            } catch(ce) {}
         }
 
-        var modelsList = JSON.parse(respModels.body());
-        if (!modelsList || modelsList.length === 0) {
-            window.alert("No workspace / library found on EasyEA.");
-            return;
-        }
+        console.log("Target Library: " + activeLibraryName + (activeLibraryCode ? " [" + activeLibraryCode + "]" : "") + " (" + activeModelId + ")");
 
-        var defaultModelId = modelsList[0].id;
-
-        // 2. Fetch schemas for model
+        // 2. Fetch schemas for active library
         var reqSchemas = HttpRequest.newBuilder()
-            .uri(URI.create(config.server_url + "/api/schemas/" + defaultModelId + "/list"))
+            .uri(URI.create(config.server_url + "/api/schemas/" + encodeURIComponent(activeModelId) + "/list"))
             .version(HttpClient.Version.HTTP_1_1)
             .header("Authorization", "Bearer " + config.token)
             .GET()
             .build();
 
         var respSchemas = client.send(reqSchemas, HttpResponse.BodyHandlers.ofString());
-        var schemasList = JSON.parse(respSchemas.body()) || [];
+        if (respSchemas.statusCode() !== 200) {
+            window.alert("Failed to retrieve schemas for library '" + activeLibraryName + "' (HTTP " + respSchemas.statusCode() + "):\n" + respSchemas.body());
+            return;
+        }
 
+        var schemasList = JSON.parse(respSchemas.body()) || [];
         if (schemasList.length === 0) {
-            window.alert("No schemas available in EasyEA repository for the selected workspace.");
+            window.alert("No schemas available in EasyEA repository for library '" + activeLibraryName + "'.");
             return;
         }
 
@@ -183,7 +244,9 @@
         var metaWriter = new FileWriter(metaFile);
         metaWriter.write(JSON.stringify({
             schema_id: selectedSchema.id,
-            model_id: defaultModelId,
+            model_id: activeModelId,
+            library_name: activeLibraryName,
+            library_code: activeLibraryCode,
             schema_name: selectedSchema.name,
             version: selectedSchema.current_version,
             checked_out_at: new Date().toISOString()
@@ -199,13 +262,17 @@
         try {
             if (typeof $ !== "undefined" && loadedModel) {
                 $(loadedModel).prop("EasyEA_Schema_ID", selectedSchema.id);
-                $(loadedModel).prop("EasyEA_Model_ID", defaultModelId);
+                $(loadedModel).prop("EasyEA_Model_ID", activeModelId);
+                $(loadedModel).prop("EasyEA_Library_Name", activeLibraryName);
+                $(loadedModel).prop("EasyEA_Library_Code", activeLibraryCode);
                 $(loadedModel).prop("EasyEA_Schema_Name", selectedSchema.name);
             }
         } catch(propErr) {}
 
         window.alert(
             "Schema '" + selectedSchema.name + "' has been locked successfully and opened in Archi!\n\n" +
+            "• Active Library: " + activeLibraryName + (activeLibraryCode ? " [" + activeLibraryCode + "]" : "") + "\n" +
+            "• Version: " + selectedSchema.current_version + "\n\n" +
             "You can now edit it in the designer. When finished, run 'EasyEA_Checkin.ajs' to commit changes to EasyEA."
         );
 

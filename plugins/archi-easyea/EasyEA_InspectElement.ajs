@@ -1,0 +1,577 @@
+/**
+ * EasyEA Inspect Element & Repository 360° for Archi (jArchi)
+ * Provides comprehensive inspection of the selected element:
+ * - APM & Governance Metamodel (TIME Quadrant, Lifecycle, Criticality, Owners, SLA, Hosting, Cost)
+ * - Custom Attributes & Documentation
+ * - Central Repository Relationships (Incoming & Outgoing, showing what is on-diagram vs missing)
+ * - Actions: One-click Expand missing neighbors or Sync APM properties to Archi model
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Element Inspector & Repository 360° ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var URLEncoder = Java.type("java.net.URLEncoder");
+    var StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function getModelFile(m) {
+        if (!m) return null;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getFile === "function") {
+            try { var f = raw.getFile(); if (f) return f; } catch(e) {}
+        }
+        if (m && typeof m.getFile === "function") {
+            try { var f2 = m.getFile(); if (f2) return f2; } catch(e) {}
+        }
+        if (m && m.file) return m.file;
+        return null;
+    }
+
+    function mapToJArchiType(typeStr) {
+        if (!typeStr) return "application-component";
+        var clean = typeStr.replace(/^archimate:/i, "").trim();
+        return clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    }
+
+    function mapToJArchiRelType(relTypeStr) {
+        if (!relTypeStr) return "association-relationship";
+        var clean = relTypeStr.replace(/^archimate:/i, "").trim();
+        if (!clean.toLowerCase().endsWith("relationship")) {
+            clean += "Relationship";
+        }
+        return clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        var activeModelId = config.model_id || config.library_id;
+        var activeLibraryName = config.library_name || "Active Library";
+        var activeLibraryCode = config.library_code || "";
+
+        // =============================================================
+        // 1. CHECKOUT VALIDATION
+        // =============================================================
+        var checkedOutSchemas = [];
+        if (SCHEMAS_DIR.exists()) {
+            var dirFiles = SCHEMAS_DIR.listFiles();
+            if (dirFiles) {
+                for (var i = 0; i < dirFiles.length; i++) {
+                    var f = dirFiles[i];
+                    if (f.getName().endsWith(".meta.json")) {
+                        try {
+                            var scanner = new Scanner(f).useDelimiter("\\A");
+                            var content = scanner.hasNext() ? scanner.next() : "{}";
+                            scanner.close();
+                            var p = JSON.parse(content);
+                            if (p.schema_id) {
+                                var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
+                                var archFile = new File(SCHEMAS_DIR, archFileName);
+                                var entry = {
+                                    schema_id: p.schema_id,
+                                    model_id: p.model_id || activeModelId || "sample-easybank-ea",
+                                    library_name: p.library_name || activeLibraryName,
+                                    library_code: p.library_code || activeLibraryCode,
+                                    schema_name: p.schema_name || "Schema",
+                                    version: p.version || "v1.0",
+                                    meta_file: f,
+                                    archimate_file: archFile
+                                };
+                                if (!activeModelId || !entry.model_id || entry.model_id === activeModelId) {
+                                    checkedOutSchemas.push(entry);
+                                }
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        }
+
+        if (checkedOutSchemas.length === 0) {
+            window.alert(
+                "Access Restricted:\n\n" +
+                "Element Inspector is available for schemas checked out from library '" + activeLibraryName + "'.\n\n" +
+                "Please perform a check-out first using 'EasyEA_Checkout.ajs'."
+            );
+            return;
+        }
+
+        var activeCheckedOut = checkedOutSchemas[0];
+        var currentActiveModel = (typeof model !== "undefined" && model) ? model : null;
+        if (!currentActiveModel) {
+            window.alert("No active Archi model open. Please ensure your checked-out model is loaded.");
+            return;
+        }
+
+        // Locate active diagram view
+        var diagramViewsCollection = $(model).find("archimate-diagram-model");
+        if (!diagramViewsCollection || diagramViewsCollection.length === 0) {
+            diagramViewsCollection = $(model).find("view");
+        }
+        var diagramViews = [];
+        if (diagramViewsCollection) {
+            diagramViewsCollection.each(function(v) {
+                var already = false;
+                for (var vi = 0; vi < diagramViews.length; vi++) {
+                    if (diagramViews[vi].id === v.id) { already = true; break; }
+                }
+                if (!already) diagramViews.push(v);
+            });
+        }
+        if (diagramViews.length === 0) {
+            window.alert("No diagram view found in the active model.");
+            return;
+        }
+
+        var targetView = diagramViews[0];
+
+        // =============================================================
+        // 2. IDENTIFY SELECTED TARGET ELEMENT
+        // =============================================================
+        var selectedConcept = null;
+        var selectedVisual = null;
+
+        if (typeof selection !== "undefined" && selection && selection.length > 0) {
+            $(selection).each(function(sObj) {
+                if (sObj.concept) {
+                    selectedConcept = sObj.concept;
+                    selectedVisual = sObj;
+                } else if (sObj.type && sObj.type !== "archimate-diagram-model" && sObj.type !== "sketch-model" && sObj.bounds === undefined) {
+                    selectedConcept = sObj;
+                }
+            });
+        }
+
+        // If no element selected, list elements from the diagram view
+        if (!selectedConcept) {
+            var viewElements = [];
+            var viewElementLabels = [];
+            $(targetView).children().each(function(vNode) {
+                if (vNode.concept) {
+                    viewElements.push(vNode);
+                    viewElementLabels.push(vNode.concept.name + " (" + vNode.concept.type + ")");
+                }
+            });
+
+            if (viewElements.length === 0) {
+                window.alert("The active diagram view does not contain any elements to inspect.");
+                return;
+            }
+
+            var selPrompt = null;
+            if (typeof window.promptSelection === "function") {
+                selPrompt = window.promptSelection("Select an element from current diagram to inspect:", viewElementLabels);
+            } else {
+                var pText = "Select an element to inspect:\n\n" + viewElementLabels.slice(0, 20).join("\n") + "\n\nEnter index (1 - " + viewElements.length + "):";
+                var pNum = window.prompt(pText, "1");
+                if (pNum !== null) {
+                    var pIdx = parseInt(("" + pNum).trim(), 10) - 1;
+                    if (!isNaN(pIdx) && pIdx >= 0 && pIdx < viewElementLabels.length) selPrompt = viewElementLabels[pIdx];
+                }
+            }
+
+            if (!selPrompt) {
+                console.log("Inspection cancelled.");
+                return;
+            }
+
+            for (var vxi = 0; vxi < viewElementLabels.length; vxi++) {
+                if (viewElementLabels[vxi] === selPrompt) {
+                    selectedVisual = viewElements[vxi];
+                    selectedConcept = viewElements[vxi].concept;
+                    break;
+                }
+            }
+        }
+
+        if (!selectedConcept) {
+            window.alert("No valid ArchiMate element selected for inspection.");
+            return;
+        }
+
+        console.log("Inspecting element: '" + selectedConcept.name + "' (" + selectedConcept.type + ")...");
+
+        // =============================================================
+        // 3. FETCH ELEMENT METADATA & RELATIONS FROM EASYEA REPO
+        // =============================================================
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        var targetModelId = activeCheckedOut.model_id || activeModelId || "sample-easybank-ea";
+        var easyId = $(selectedConcept).prop("EasyEA_Element_ID");
+
+        var elemData = null;
+
+        if (easyId) {
+            try {
+                var reqDirect = HttpRequest.newBuilder()
+                    .uri(URI.create(config.server_url + "/api/elements/" + encodeURIComponent(easyId)))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .header("Authorization", "Bearer " + config.token)
+                    .GET()
+                    .build();
+
+                var respDirect = client.send(reqDirect, HttpResponse.BodyHandlers.ofString());
+                if (respDirect.statusCode() === 200) {
+                    elemData = JSON.parse(respDirect.body());
+                }
+            } catch(eDirect) {}
+        }
+
+        if (!elemData) {
+            // Search element in the active library
+            var sUrl = config.server_url + "/api/elements?model_id=" + encodeURIComponent(targetModelId) + "&search=" + URLEncoder.encode(selectedConcept.name, StandardCharsets.UTF_8);
+            var reqSearch = HttpRequest.newBuilder()
+                .uri(URI.create(sUrl))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Authorization", "Bearer " + config.token)
+                .GET()
+                .build();
+
+            var respSearch = client.send(reqSearch, HttpResponse.BodyHandlers.ofString());
+            if (respSearch.statusCode() === 200) {
+                var foundList = JSON.parse(respSearch.body()) || [];
+                if (foundList.length > 0) {
+                    // Fetch full detail with relations
+                    var targetFoundId = foundList[0].id;
+                    var reqFull = HttpRequest.newBuilder()
+                        .uri(URI.create(config.server_url + "/api/elements/" + encodeURIComponent(targetFoundId)))
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .header("Authorization", "Bearer " + config.token)
+                        .GET()
+                        .build();
+                    var respFull = client.send(reqFull, HttpResponse.BodyHandlers.ofString());
+                    if (respFull.statusCode() === 200) {
+                        elemData = JSON.parse(respFull.body());
+                        // Save prop on model element
+                        try { $(selectedConcept).prop("EasyEA_Element_ID", elemData.id); } catch(pe) {}
+                    }
+                }
+            }
+        }
+
+        if (!elemData) {
+            window.alert(
+                "Element Not Synced in Repository:\n\n" +
+                "The element '" + selectedConcept.name + "' is currently local to this diagram and does not yet exist in the central repository library '" + activeLibraryName + "'.\n\n" +
+                "It will be registered automatically upon Check-in ('EasyEA_Checkin.ajs')."
+            );
+            return;
+        }
+
+        // =============================================================
+        // 4. ANALYZE REPOSITORY RELATIONSHIPS VS CURRENT DIAGRAM
+        // =============================================================
+        var outgoing = elemData.outgoing_relations || [];
+        var incoming = elemData.incoming_relations || [];
+
+        // Build index of elements present in current diagram
+        var diagramConceptNames = {};
+        var diagramEasyIds = {};
+        $(targetView).children().each(function(vN) {
+            if (vN.concept) {
+                diagramConceptNames[vN.concept.name] = vN;
+                var eId = $(vN.concept).prop("EasyEA_Element_ID");
+                if (eId) diagramEasyIds[eId] = vN;
+            }
+        });
+
+        var missingConnected = [];
+        var onDiagramConnected = [];
+
+        for (var oi = 0; oi < outgoing.length; oi++) {
+            var outR = outgoing[oi];
+            var isDrawn = diagramEasyIds[outR.target_id] || diagramConceptNames[outR.target_name];
+            var relItem = {
+                direction: "Outgoing (-->)",
+                rel_id: outR.id,
+                rel_type: outR.type,
+                rel_name: outR.name || "(unnamed)",
+                other_id: outR.target_id,
+                other_name: outR.target_name,
+                other_type: outR.target_type || "ApplicationComponent",
+                other_layer: outR.target_layer || "",
+                is_on_diagram: !!isDrawn,
+                is_source: true
+            };
+            if (isDrawn) onDiagramConnected.push(relItem);
+            else missingConnected.push(relItem);
+        }
+
+        for (var ii = 0; ii < incoming.length; ii++) {
+            var inR = incoming[ii];
+            var isDrawnIn = diagramEasyIds[inR.source_id] || diagramConceptNames[inR.source_name];
+            var relItemIn = {
+                direction: "Incoming (<--)",
+                rel_id: inR.id,
+                rel_type: inR.type,
+                rel_name: inR.name || "(unnamed)",
+                other_id: inR.source_id,
+                other_name: inR.source_name,
+                other_type: inR.source_type || "ApplicationComponent",
+                other_layer: inR.source_layer || "",
+                is_on_diagram: !!isDrawnIn,
+                is_source: false
+            };
+            if (isDrawnIn) onDiagramConnected.push(relItemIn);
+            else missingConnected.push(relItemIn);
+        }
+
+        // =============================================================
+        // 5. PRINT 360° REPORT TO CONSOLE
+        // =============================================================
+        var apm = elemData.apm || {};
+        var props = elemData.properties || {};
+
+        console.log("----------------------------------------------------------------");
+        console.log("📌 ELEMENT 360° INSPECTION: " + elemData.name);
+        console.log("----------------------------------------------------------------");
+        console.log("• Type:          " + elemData.type + (elemData.layer ? " [" + elemData.layer + " Layer]" : ""));
+        console.log("• Repository ID: " + elemData.id);
+        console.log("• Library:       " + activeLibraryName + (activeLibraryCode ? " [" + activeLibraryCode + "]" : ""));
+        if (elemData.documentation) console.log("• Documentation: " + elemData.documentation);
+        
+        console.log("\n📊 GOVERNANCE & APM ATTRIBUTES:");
+        console.log("• TIME Quadrant:       " + (apm.time_quadrant || props.eea_time_quadrant || "N/A"));
+        console.log("• Lifecycle Status:    " + (apm.lifecycle_status || props.eea_lifecycle_status || "N/A"));
+        console.log("• Criticality:         " + (apm.business_criticality || props.eea_business_criticality || "N/A"));
+        console.log("• Business Owner:      " + (apm.business_owner || props.eea_business_owner || "N/A"));
+        console.log("• Technical Owner:     " + (apm.technical_owner || props.eea_technical_owner || "N/A"));
+        console.log("• Hosting / Cloud:     " + (apm.hosting_type || props.eea_hosting_type || "N/A"));
+        console.log("• Data Classification: " + (apm.data_classification || props.eea_data_classification || "N/A"));
+        console.log("• SLA Level:           " + (apm.sla_level || props.eea_sla_level || "N/A"));
+        console.log("• Annual Cost:         " + (apm.annual_cost !== undefined ? "€ " + apm.annual_cost : "N/A"));
+
+        console.log("\n🔗 RELATIONSHIPS (" + (outgoing.length + incoming.length) + " total in Central Repository):");
+        console.log("  • Present in Diagram: " + onDiagramConnected.length);
+        console.log("  • Missing in Diagram: " + missingConnected.length);
+
+        if (onDiagramConnected.length > 0) {
+            console.log("\n  [✓ In Diagram]");
+            for (var c1 = 0; c1 < onDiagramConnected.length; c1++) {
+                var o1 = onDiagramConnected[c1];
+                console.log("    " + o1.direction + " " + o1.rel_type + " -> " + o1.other_name + " (" + o1.other_type + ")");
+            }
+        }
+
+        if (missingConnected.length > 0) {
+            console.log("\n  [⬡ In Central Repository ONLY]");
+            for (var c2 = 0; c2 < missingConnected.length; c2++) {
+                var m2 = missingConnected[c2];
+                console.log("    " + m2.direction + " " + m2.rel_type + " -> " + m2.other_name + " (" + m2.other_type + ")");
+            }
+        }
+        console.log("----------------------------------------------------------------\n");
+
+        // =============================================================
+        // 6. ACTION PROMPT DIALOG
+        // =============================================================
+        var actionChoices = [
+            "1. View Full APM & Metamodel Attribute Sheet",
+            "2. Expand " + missingConnected.length + " Missing Connected Element(s) into Diagram",
+            "3. Sync Repository APM Properties into Local Archi Element",
+            "4. Close Inspector"
+        ];
+
+        var selAction = null;
+        if (typeof window.promptSelection === "function") {
+            selAction = window.promptSelection("EasyEA 360° Inspector: '" + elemData.name + "'\nSelect action to perform:", actionChoices);
+        } else {
+            var actionPrompt = "EasyEA 360° Inspector: '" + elemData.name + "'\n\n" +
+                actionChoices.join("\n") + "\n\nEnter number (1 - " + actionChoices.length + "):";
+            var aNum = window.prompt(actionPrompt, "1");
+            if (aNum !== null) {
+                var aIdx = parseInt(("" + aNum).trim(), 10) - 1;
+                if (!isNaN(aIdx) && aIdx >= 0 && aIdx < actionChoices.length) selAction = actionChoices[aIdx];
+            }
+        }
+
+        if (!selAction || selAction.indexOf("4.") === 0) {
+            console.log("Inspector closed.");
+            return;
+        }
+
+        // ACTION 1: View Full Sheet
+        if (selAction.indexOf("1.") === 0) {
+            var sheet = "📋 ELEMENT DETAILS: " + elemData.name + "\n" +
+                "────────────────────────────────────────\n" +
+                "• Type: " + elemData.type + "\n" +
+                "• Layer: " + (elemData.layer || "N/A") + "\n" +
+                "• Library: " + activeLibraryName + " [" + activeLibraryCode + "]\n" +
+                "• Repository ID: " + elemData.id + "\n\n" +
+                "📊 GOVERNANCE & APM:\n" +
+                "• TIME Quadrant: " + (apm.time_quadrant || props.eea_time_quadrant || "N/A") + "\n" +
+                "• Lifecycle: " + (apm.lifecycle_status || props.eea_lifecycle_status || "N/A") + "\n" +
+                "• Criticality: " + (apm.business_criticality || props.eea_business_criticality || "N/A") + "\n" +
+                "• Business Owner: " + (apm.business_owner || props.eea_business_owner || "N/A") + "\n" +
+                "• Tech Owner: " + (apm.technical_owner || props.eea_technical_owner || "N/A") + "\n" +
+                "• Hosting: " + (apm.hosting_type || props.eea_hosting_type || "N/A") + "\n" +
+                "• Data Class: " + (apm.data_classification || props.eea_data_classification || "N/A") + "\n" +
+                "• SLA: " + (apm.sla_level || props.eea_sla_level || "N/A") + "\n" +
+                "• Cost: " + (apm.annual_cost !== undefined ? "€ " + apm.annual_cost : "N/A") + "\n\n" +
+                "🔗 RELATIONSHIPS:\n" +
+                "• Total Repository Links: " + (outgoing.length + incoming.length) + "\n" +
+                "• Present in Diagram: " + onDiagramConnected.length + "\n" +
+                "• Missing from Diagram: " + missingConnected.length;
+
+            window.alert(sheet);
+
+        // ACTION 2: Expand Missing Connected Elements
+        } else if (selAction.indexOf("2.") === 0) {
+            if (missingConnected.length === 0) {
+                window.alert("All connected elements are already placed on the current diagram.");
+                return;
+            }
+
+            console.log("Expanding " + missingConnected.length + " missing elements on diagram...");
+            var addedCount = 0;
+            var relConnectedCount = 0;
+
+            // Base position around selected visual or center
+            var baseX = (selectedVisual && selectedVisual.bounds) ? selectedVisual.bounds.x : 200;
+            var baseY = (selectedVisual && selectedVisual.bounds) ? selectedVisual.bounds.y : 200;
+
+            for (var mi = 0; mi < missingConnected.length; mi++) {
+                var mItem = missingConnected[mi];
+                var jType = mapToJArchiType(mItem.other_type);
+                
+                // Find or create in model tree
+                var newConcept = null;
+                $(model).find("element").each(function(eObj) {
+                    if (eObj.name === mItem.other_name) newConcept = eObj;
+                });
+
+                if (!newConcept) {
+                    try {
+                        newConcept = model.createElement(jType, mItem.other_name);
+                        $(newConcept).prop("EasyEA_Element_ID", mItem.other_id);
+                        if (mItem.other_layer) $(newConcept).prop("EasyEA_Layer", mItem.other_layer);
+                        console.log("Created element in model tree: " + mItem.other_name);
+                    } catch(ce) {
+                        newConcept = model.createElement("application-component", mItem.other_name);
+                    }
+                }
+
+                // Compute layout position
+                var angle = (2 * Math.PI * mi) / missingConnected.length;
+                var dist = 220;
+                var nodeX = Math.max(20, Math.round(baseX + Math.cos(angle) * dist));
+                var nodeY = Math.max(20, Math.round(baseY + Math.sin(angle) * dist));
+
+                var newVisual = targetView.add(newConcept, nodeX, nodeY, 150, 65);
+                addedCount++;
+
+                // Draw relationship
+                var jRelType = mapToJArchiRelType(mItem.rel_type);
+                var srcV = mItem.is_source ? selectedVisual : newVisual;
+                var tgtV = mItem.is_source ? newVisual : selectedVisual;
+
+                try {
+                    if (srcV && tgtV) {
+                        var archRel = model.createRelationship(jRelType, mItem.rel_name || "", srcV.concept, tgtV.concept);
+                        targetView.add(archRel, srcV, tgtV);
+                        relConnectedCount++;
+                    }
+                } catch(reErr) {
+                    console.log("Note on connecting relationship: " + reErr);
+                }
+            }
+
+            // Save model
+            try {
+                var rawM = getRawModel(model);
+                if (rawM && IEditorModelManager.INSTANCE.isModelDirty(rawM)) {
+                    IEditorModelManager.INSTANCE.saveModel(rawM);
+                }
+            } catch(se) {}
+
+            window.alert(
+                "Expand Completed!\n\n" +
+                "• " + addedCount + " connected element(s) added to diagram.\n" +
+                "• " + relConnectedCount + " relationship(s) automatically drawn."
+            );
+
+        // ACTION 3: Sync Properties to Archi Element
+        } else if (selAction.indexOf("3.") === 0) {
+            try {
+                if (apm.time_quadrant) $(selectedConcept).prop("TIME_Quadrant", apm.time_quadrant);
+                if (apm.lifecycle_status) $(selectedConcept).prop("Lifecycle_Status", apm.lifecycle_status);
+                if (apm.business_criticality) $(selectedConcept).prop("Business_Criticality", apm.business_criticality);
+                if (apm.business_owner) $(selectedConcept).prop("Business_Owner", apm.business_owner);
+                if (apm.technical_owner) $(selectedConcept).prop("Technical_Owner", apm.technical_owner);
+                if (apm.hosting_type) $(selectedConcept).prop("Hosting_Type", apm.hosting_type);
+                if (apm.data_classification) $(selectedConcept).prop("Data_Classification", apm.data_classification);
+                if (apm.sla_level) $(selectedConcept).prop("SLA_Level", apm.sla_level);
+                if (apm.annual_cost !== undefined) $(selectedConcept).prop("Annual_Cost_EUR", "" + apm.annual_cost);
+                $(selectedConcept).prop("EasyEA_Element_ID", elemData.id);
+                $(selectedConcept).prop("EasyEA_Library_Scope", activeLibraryName);
+
+                var rawM2 = getRawModel(model);
+                if (rawM2 && IEditorModelManager.INSTANCE.isModelDirty(rawM2)) {
+                    IEditorModelManager.INSTANCE.saveModel(rawM2);
+                }
+
+                console.log("✓ APM & Metamodel properties synced to Archi element: " + selectedConcept.name);
+                window.alert("APM properties successfully synced into Archi element properties for '" + selectedConcept.name + "'!");
+            } catch(syncErr) {
+                window.alert("Failed to sync properties: " + syncErr);
+            }
+        }
+
+    } catch(err) {
+        var msg = "Error during Element Inspector execution:\n" + err;
+        console.error(msg);
+        window.alert(msg);
+    }
+})();

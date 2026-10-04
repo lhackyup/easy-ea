@@ -143,3 +143,56 @@ def test_parse_and_import_drawio():
     res_data = response.json()
     assert "imported_views" in res_data
     db.close()
+
+
+def test_schema_drawio_palette_and_schema_diff():
+    from app.services.drawio_service import (
+        generate_drawio_archimate_library_xml,
+        export_schema_to_drawio_xml,
+        parse_drawio_file_to_canonical_model
+    )
+    from app.models.archimate import ArchiSchema
+    from app.services.schema_diff_service import compute_schema_diff
+
+    db = TestingSessionLocal()
+    schema = db.query(ArchiSchema).first()
+    assert schema is not None
+
+    # Test Palette XML generation
+    palette_xml = generate_drawio_archimate_library_xml()
+    assert "<mxlibrary>" in palette_xml
+    assert "</mxlibrary>" in palette_xml
+    assert "BusinessActor" in palette_xml
+    assert "ApplicationComponent" in palette_xml
+
+    # Test Palette REST API
+    res = client.get("/api/schemas/drawio/palette")
+    assert res.status_code == 200
+    assert "<mxlibrary>" in res.text
+
+    # Test schema export to Draw.io XML
+    drawio_xml = export_schema_to_drawio_xml(schema, db)
+    assert "<mxfile" in drawio_xml
+    assert "<diagram" in drawio_xml
+    assert "<mxGraphModel" in drawio_xml
+
+    # Test parse Draw.io XML to canonical model
+    canonical = parse_drawio_file_to_canonical_model(drawio_xml)
+    assert len(canonical.get("elements", [])) > 0
+    assert len(canonical.get("views", [])) == 1
+
+    # Test compute_schema_diff on the exported Draw.io file
+    diff = compute_schema_diff(schema, canonical, db)
+    assert "new_elements" in diff
+    assert "modified_elements" in diff
+    assert "removed_elements" in diff
+
+    # Test Checkout with format drawio
+    schema.format = "drawio"
+    db.commit()
+
+    download_res = client.get(f"/api/schemas/{schema.id}/download")
+    assert download_res.status_code == 200
+    assert 'filename="' in download_res.headers.get("content-disposition", "")
+    assert ".drawio" in download_res.headers.get("content-disposition", "")
+    db.close()

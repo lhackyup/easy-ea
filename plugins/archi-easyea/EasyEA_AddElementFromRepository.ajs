@@ -1,0 +1,569 @@
+/**
+ * EasyEA Search and Add Element from Central Repository for Archi (jArchi)
+ * Allows searching elements in the central EasyEA repository and adding them directly
+ * to the currently active ArchiMate diagram view.
+ * 
+ * Requirement: ONLY enabled if a schema is currently checked out.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Add Element from Central Repository ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var URLEncoder = Java.type("java.net.URLEncoder");
+    var StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function getModelFile(m) {
+        if (!m) return null;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getFile === "function") {
+            try { var f = raw.getFile(); if (f) return f; } catch(e) {}
+        }
+        if (m && typeof m.getFile === "function") {
+            try { var f2 = m.getFile(); if (f2) return f2; } catch(e) {}
+        }
+        if (m && m.file) return m.file;
+        return null;
+    }
+
+    function getModelName(m) {
+        if (!m) return "Schema";
+        if (typeof m.getName === "function") {
+            try { return m.getName(); } catch(e) {}
+        }
+        if (m.name) return m.name;
+        var raw = getRawModel(m);
+        if (raw && typeof raw.getName === "function") {
+            try { return raw.getName(); } catch(e) {}
+        }
+        return "Schema";
+    }
+
+    function mapToJArchiType(typeStr) {
+        if (!typeStr) return "application-component";
+        var clean = typeStr.replace(/^archimate:/i, "").trim();
+        var kebab = clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+        return kebab;
+    }
+
+    function mapToJArchiRelType(relTypeStr) {
+        if (!relTypeStr) return "association-relationship";
+        var clean = relTypeStr.replace(/^archimate:/i, "").trim();
+        if (!clean.toLowerCase().endsWith("relationship")) {
+            clean += "Relationship";
+        }
+        return clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        var activeModelId = config.model_id || config.library_id;
+        var activeLibraryName = config.library_name || "Active Library";
+        var activeLibraryCode = config.library_code || "";
+
+        console.log("Active Library Scope: " + activeLibraryName + (activeLibraryCode ? " [" + activeLibraryCode + "]" : "") + (activeModelId ? " (" + activeModelId + ")" : ""));
+
+        // =============================================================
+        // 1. CHECKOUT VALIDATION
+        // The script is strictly enabled only if a checkout is active.
+        // =============================================================
+        var allCheckedOutSchemas = [];
+        var checkedOutSchemas = [];
+        if (SCHEMAS_DIR.exists()) {
+            var dirFiles = SCHEMAS_DIR.listFiles();
+            if (dirFiles) {
+                for (var i = 0; i < dirFiles.length; i++) {
+                    var f = dirFiles[i];
+                    if (f.getName().endsWith(".meta.json")) {
+                        try {
+                            var scanner = new Scanner(f).useDelimiter("\\A");
+                            var content = scanner.hasNext() ? scanner.next() : "{}";
+                            scanner.close();
+                            var p = JSON.parse(content);
+                            if (p.schema_id) {
+                                var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
+                                var archFile = new File(SCHEMAS_DIR, archFileName);
+                                var entry = {
+                                    schema_id: p.schema_id,
+                                    model_id: p.model_id || "sample-easybank-ea",
+                                    library_name: p.library_name || "",
+                                    library_code: p.library_code || "",
+                                    schema_name: p.schema_name || "Schema",
+                                    version: p.version || "v1.0",
+                                    meta_file: f,
+                                    archimate_file: archFile
+                                };
+                                allCheckedOutSchemas.push(entry);
+
+                                if (!activeModelId || !entry.model_id || entry.model_id === activeModelId) {
+                                    checkedOutSchemas.push(entry);
+                                }
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        }
+
+        if (checkedOutSchemas.length === 0) {
+            if (allCheckedOutSchemas.length > 0) {
+                window.alert(
+                    "Library Scope Restriction:\n\n" +
+                    "No schemas currently checked out for the active library '" + activeLibraryName + "'.\n\n" +
+                    "There are " + allCheckedOutSchemas.length + " schema(s) checked out under other libraries.\n" +
+                    "Please check out a schema from library '" + activeLibraryName + "' or switch library in 'EasyEA_Settings.ajs'."
+                );
+            } else {
+                window.alert(
+                    "Access Restricted:\n\n" +
+                    "This action is ONLY available for schemas currently checked out from EasyEA.\n\n" +
+                    "Please perform a check-out first using 'EasyEA_Checkout.ajs' before adding repository elements."
+                );
+            }
+            console.log("Operation aborted: No active schema checkout found for active library.");
+            return;
+        }
+
+        // Identify target checked out schema
+        var activeCheckedOut = null;
+        var currentActiveModel = (typeof model !== "undefined" && model) ? model : null;
+
+        if (currentActiveModel) {
+            var activeFile = getModelFile(currentActiveModel);
+            var activePropId = null;
+            try {
+                if (typeof $ !== "undefined") activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+            } catch(e) {}
+
+            for (var m = 0; m < checkedOutSchemas.length; m++) {
+                var cs = checkedOutSchemas[m];
+                if ((activePropId && activePropId === cs.schema_id) ||
+                    (activeFile && cs.archimate_file.getAbsolutePath() === activeFile.getAbsolutePath()) ||
+                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : ""))) {
+                    activeCheckedOut = cs;
+                    break;
+                }
+            }
+        }
+
+        if (!activeCheckedOut) {
+            if (checkedOutSchemas.length === 1) {
+                activeCheckedOut = checkedOutSchemas[0];
+            } else {
+                var schemaChoices = [];
+                for (var sc = 0; sc < checkedOutSchemas.length; sc++) {
+                    schemaChoices.push((sc + 1) + ". " + checkedOutSchemas[sc].schema_name + " (ID: " + checkedOutSchemas[sc].schema_id + ")");
+                }
+                var selChoice = null;
+                if (typeof window.promptSelection === "function") {
+                    selChoice = window.promptSelection("Select the active checked-out schema to work with:", schemaChoices);
+                } else {
+                    var pText = "Select active checked-out schema:\n\n" + schemaChoices.join("\n") + "\n\nEnter number:";
+                    var cNum = window.prompt(pText, "1");
+                    if (cNum !== null) {
+                        var cIdx = parseInt(("" + cNum).trim(), 10) - 1;
+                        if (!isNaN(cIdx) && cIdx >= 0 && cIdx < schemaChoices.length) selChoice = schemaChoices[cIdx];
+                    }
+                }
+                if (!selChoice) {
+                    console.log("Operation cancelled.");
+                    return;
+                }
+                for (var sci = 0; sci < schemaChoices.length; sci++) {
+                    if (schemaChoices[sci] === selChoice) {
+                        activeCheckedOut = checkedOutSchemas[sci];
+                        break;
+                    }
+                }
+            }
+        }
+
+        console.log("Active Checked-out Schema Verified: '" + activeCheckedOut.schema_name + "' (ID: " + activeCheckedOut.schema_id + ")");
+
+        // =============================================================
+        // 2. LOCATE TARGET DIAGRAM VIEW IN ARCHI
+        // =============================================================
+        if (typeof $ === "undefined" || !model) {
+            window.alert("No active Archi model open. Please ensure your checked-out model is loaded in Archi.");
+            return;
+        }
+
+        // Deep recursive search for all views in the model (inside Views folder and subfolders)
+        var diagramViewsCollection = $(model).find("archimate-diagram-model");
+        if (!diagramViewsCollection || diagramViewsCollection.length === 0) {
+            diagramViewsCollection = $(model).find("view");
+        }
+        if (!diagramViewsCollection || diagramViewsCollection.length === 0) {
+            diagramViewsCollection = $("archimate-diagram-model");
+        }
+        if (!diagramViewsCollection || diagramViewsCollection.length === 0) {
+            diagramViewsCollection = $("view");
+        }
+
+        var diagramViews = [];
+        if (diagramViewsCollection) {
+            diagramViewsCollection.each(function(v) {
+                // Ensure unique views
+                var already = false;
+                for (var vi = 0; vi < diagramViews.length; vi++) {
+                    if (diagramViews[vi].id === v.id) { already = true; break; }
+                }
+                if (!already) diagramViews.push(v);
+            });
+        }
+
+        // If still no view exists, offer to create one automatically
+        if (diagramViews.length === 0) {
+            var doCreate = window.confirm(
+                "No ArchiMate diagram views found in the model.\n\n" +
+                "Would you like to automatically create a new diagram view ('" + (activeCheckedOut.schema_name || "Main View") + "')?"
+            );
+            if (doCreate) {
+                try {
+                    var newView = model.createArchimateDiagramModel(activeCheckedOut.schema_name || "Main View");
+                    diagramViews.push(newView);
+                    console.log("Created new diagram view: " + newView.name);
+                } catch(cvErr) {
+                    window.alert("Failed to create diagram view automatically: " + cvErr);
+                    return;
+                }
+            } else {
+                window.alert("Operation cancelled. Please create a diagram view in Archi and run the script again.");
+                return;
+            }
+        }
+
+        // Detect if user has a view or element inside a view currently selected
+        var selectedView = null;
+        if (typeof selection !== "undefined" && selection && selection.length > 0) {
+            try {
+                $(selection).each(function(selObj) {
+                    if (selObj.type === "archimate-diagram-model" || selObj.type === "sketch-model") {
+                        selectedView = selObj;
+                    } else if (selObj.view) {
+                        selectedView = selObj.view;
+                    } else {
+                        var pV = $(selObj).parents("view").first();
+                        if (pV) selectedView = pV;
+                    }
+                });
+            } catch(e) {}
+        }
+
+        var targetView = diagramViews[0];
+
+        if (diagramViews.length === 1) {
+            targetView = diagramViews[0];
+        } else if (selectedView) {
+            // If the selected object is in our diagramViews, use it directly
+            for (var sv = 0; sv < diagramViews.length; sv++) {
+                if (diagramViews[sv].id === selectedView.id) {
+                    targetView = diagramViews[sv];
+                    break;
+                }
+            }
+        } else {
+            // Multiple views exist and none specifically selected: prompt the user
+            var viewNames = [];
+            for (var vi = 0; vi < diagramViews.length; vi++) {
+                viewNames.push((vi + 1) + ". " + (diagramViews[vi].name || "Untitled View"));
+            }
+            var selViewName = null;
+            if (typeof window.promptSelection === "function") {
+                selViewName = window.promptSelection("Select target Diagram View to insert the element into:", viewNames);
+            } else {
+                var vPrompt = "Select target Diagram View:\n\n" + viewNames.join("\n") + "\n\nEnter number:";
+                var vNum = window.prompt(vPrompt, "1");
+                if (vNum !== null) {
+                    var vIdx = parseInt(("" + vNum).trim(), 10) - 1;
+                    if (!isNaN(vIdx) && vIdx >= 0 && vIdx < diagramViews.length) selViewName = viewNames[vIdx];
+                }
+            }
+            if (selViewName) {
+                for (var vji = 0; vji < viewNames.length; vji++) {
+                    if (viewNames[vji] === selViewName) {
+                        targetView = diagramViews[vji];
+                        break;
+                    }
+                }
+            }
+        }
+
+        console.log("Target Diagram View: " + (targetView.name || "Default View"));
+
+        // =============================================================
+        // 3. SEARCH ELEMENTS IN CENTRAL REPOSITORY
+        // =============================================================
+        var searchQuery = window.prompt(
+            "Search Elements in Library '" + activeLibraryName + "':\n(Enter element name or keyword, or leave empty to browse all)",
+            ""
+        );
+
+        if (searchQuery === null) {
+            console.log("Search cancelled by user.");
+            return;
+        }
+        searchQuery = ("" + searchQuery).trim();
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        var encodedQuery = URLEncoder.encode(searchQuery, StandardCharsets.UTF_8);
+        var targetModelId = activeCheckedOut.model_id || activeModelId || "sample-easybank-ea";
+        var elementsUrl = config.server_url + "/api/elements?model_id=" + encodeURIComponent(targetModelId);
+        if (searchQuery.length > 0) {
+            elementsUrl += "&search=" + encodedQuery;
+        }
+
+        console.log("Searching elements in library '" + activeLibraryName + "' (" + targetModelId + "): " + elementsUrl + "...");
+
+        var reqSearch = HttpRequest.newBuilder()
+            .uri(URI.create(elementsUrl))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + config.token)
+            .GET()
+            .build();
+
+        var respSearch = client.send(reqSearch, HttpResponse.BodyHandlers.ofString());
+        if (respSearch.statusCode() !== 200) {
+            window.alert("Failed to search repository elements (HTTP " + respSearch.statusCode() + "):\n" + respSearch.body());
+            return;
+        }
+
+        var elementsList = JSON.parse(respSearch.body()) || [];
+        if (elementsList.length === 0) {
+            window.alert("No elements found in the central repository matching '" + searchQuery + "'.");
+            return;
+        }
+
+        // Build selection list
+        var elementLabels = [];
+        for (var ei = 0; ei < elementsList.length; ei++) {
+            var item = elementsList[ei];
+            var layerTag = item.layer ? "[" + item.layer + "] " : "";
+            var docSnippet = item.documentation ? " - " + item.documentation.substring(0, 40) + "..." : "";
+            elementLabels.push((ei + 1) + ". " + layerTag + item.name + " (" + item.type + ")" + docSnippet);
+        }
+
+        var selectedElementLabel = null;
+        if (typeof window.promptSelection === "function") {
+            selectedElementLabel = window.promptSelection("Select element to add to diagram (" + elementsList.length + " results):", elementLabels);
+        } else {
+            var promptElemTxt = "Select element to add to diagram:\n\n" + elementLabels.slice(0, 20).join("\n") +
+                (elementLabels.length > 20 ? "\n... (and " + (elementLabels.length - 20) + " more)" : "") +
+                "\n\nEnter number (1 - " + elementsList.length + "):";
+            var elemChoice = window.prompt(promptElemTxt, "1");
+            if (elemChoice !== null) {
+                var eIdx = parseInt(("" + elemChoice).trim(), 10) - 1;
+                if (!isNaN(eIdx) && eIdx >= 0 && eIdx < elementsList.length) {
+                    selectedElementLabel = elementLabels[eIdx];
+                }
+            }
+        }
+
+        if (!selectedElementLabel) {
+            console.log("Element selection cancelled.");
+            return;
+        }
+
+        var selectedIndex = 0;
+        for (var ek = 0; ek < elementLabels.length; ek++) {
+            if (elementLabels[ek] === selectedElementLabel) {
+                selectedIndex = ek;
+                break;
+            }
+        }
+
+        var chosenElement = elementsList[selectedIndex];
+        console.log("Selected element to insert: '" + chosenElement.name + "' (" + chosenElement.type + ", ID: " + chosenElement.id + ")");
+
+        // =============================================================
+        // 4. INSTANTIATE AND INSERT INTO ARCHI DIAGRAM
+        // =============================================================
+        var jArchiType = mapToJArchiType(chosenElement.type);
+        console.log("Mapped jArchi type: " + jArchiType);
+
+        // Check if element already exists in the model tree
+        var modelElement = null;
+        try {
+            var existingInModel = $(model).find(jArchiType).filter(function(elem) {
+                return elem.name === chosenElement.name;
+            }).first();
+
+            if (existingInModel) {
+                modelElement = existingInModel;
+                console.log("Found existing element in model tree: " + modelElement.name);
+            }
+        } catch(findErr) {}
+
+        if (!modelElement) {
+            try {
+                modelElement = model.createElement(jArchiType, chosenElement.name);
+                if (chosenElement.documentation) {
+                    modelElement.documentation = chosenElement.documentation;
+                }
+                console.log("Created new element in model tree: " + modelElement.name);
+            } catch(createErr) {
+                // Fallback to application-component if specific type failed
+                console.log("Fallback to application-component due to: " + createErr);
+                modelElement = model.createElement("application-component", chosenElement.name);
+            }
+        }
+
+        // Set EasyEA tracking properties
+        try {
+            $(modelElement).prop("EasyEA_Element_ID", chosenElement.id);
+            if (chosenElement.layer) $(modelElement).prop("EasyEA_Layer", chosenElement.layer);
+            if (chosenElement.type) $(modelElement).prop("EasyEA_Type", chosenElement.type);
+        } catch(propEx) {}
+
+        // Calculate neat layout position
+        var existingNodes = $(targetView).children();
+        var nodeCount = existingNodes ? existingNodes.length : 0;
+        var posX = 100 + (nodeCount % 4) * 180;
+        var posY = 100 + Math.floor(nodeCount / 4) * 110;
+        var nodeW = 150;
+        var nodeH = 65;
+
+        // Add visual representation to diagram view
+        var visualNode = targetView.add(modelElement, posX, posY, nodeW, nodeH);
+        console.log("✓ Added visual node to diagram view at (" + posX + ", " + posY + ")");
+
+        // =============================================================
+        // 5. OPTIONALLY AUTO-CONNECT EXISTING RELATIONSHIPS
+        // =============================================================
+        var connectedRelsCount = 0;
+        try {
+            var reqRels = HttpRequest.newBuilder()
+                .uri(URI.create(config.server_url + "/api/relationships?model_id=" + encodeURIComponent(targetModelId)))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Authorization", "Bearer " + config.token)
+                .GET()
+                .build();
+
+            var respRels = client.send(reqRels, HttpResponse.BodyHandlers.ofString());
+            if (respRels.statusCode() === 200) {
+                var allRels = JSON.parse(respRels.body()) || [];
+                var viewNodes = $(targetView).children();
+
+                // Map element IDs in current view
+                var viewElementMap = {};
+                for (var vn = 0; vn < viewNodes.length; vn++) {
+                    var vObj = viewNodes[vn];
+                    var concept = vObj.concept;
+                    if (concept) {
+                        var eeaId = $(concept).prop("EasyEA_Element_ID");
+                        if (eeaId) viewElementMap[eeaId] = vObj;
+                        viewElementMap[concept.name] = vObj;
+                    }
+                }
+
+                for (var ri = 0; ri < allRels.length; ri++) {
+                    var rel = allRels[ri];
+                    if (rel.source_id === chosenElement.id || rel.target_id === chosenElement.id) {
+                        var isSource = rel.source_id === chosenElement.id;
+                        var otherId = isSource ? rel.target_id : rel.source_id;
+
+                        var otherVisual = viewElementMap[otherId];
+                        if (otherVisual && otherVisual !== visualNode) {
+                            var srcVisual = isSource ? visualNode : otherVisual;
+                            var tgtVisual = isSource ? otherVisual : visualNode;
+
+                            var jArchiRelType = mapToJArchiRelType(rel.type);
+                            try {
+                                var archRel = model.createRelationship(jArchiRelType, rel.name || "", srcVisual.concept, tgtVisual.concept);
+                                targetView.add(archRel, srcVisual, tgtVisual);
+                                connectedRelsCount++;
+                                console.log("✓ Connected existing relationship: " + jArchiRelType + " with " + otherVisual.concept.name);
+                            } catch(relAddErr) {
+                                console.log("Note on relationship connection: " + relAddErr);
+                            }
+                        }
+                    }
+                }
+            }
+        } catch(relsEx) {
+            console.log("Relationship check note: " + relsEx);
+        }
+
+        // =============================================================
+        // 6. SAVE MODEL CHANGES & NOTIFY
+        // =============================================================
+        try {
+            var rawActiveModel = getRawModel(model);
+            if (rawActiveModel) {
+                IEditorModelManager.INSTANCE.saveModel(rawActiveModel);
+            }
+        } catch(saveErr) {}
+
+        var relMessage = connectedRelsCount > 0
+            ? "\n\n• " + connectedRelsCount + " existing relationship(s) automatically connected to other diagram elements."
+            : "";
+
+        window.alert(
+            "Element Successfully Added!\n\n" +
+            "• Name: " + chosenElement.name + "\n" +
+            "• Type: " + chosenElement.type + "\n" +
+            "• Layer: " + (chosenElement.layer || "Standard") + "\n" +
+            "• Diagram View: " + (targetView.name || "Default View") +
+            relMessage + "\n\n" +
+            "You can now reposition the component in Archi and run 'EasyEA_Checkin.ajs' when ready to commit."
+        );
+
+    } catch (err) {
+        var msg = "Error while adding element from repository:\n" + err;
+        console.error(msg);
+        window.alert(msg);
+    }
+})();

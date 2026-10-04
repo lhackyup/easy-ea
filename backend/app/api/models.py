@@ -71,6 +71,7 @@ def list_models(db: Session = Depends(get_db)):
             "description": m.description,
             "version": m.version,
             "source_format": m.source_format,
+            "modeling_tool": getattr(m, "modeling_tool", "archi") or "archi",
             "element_count": elem_count,
             "relationship_count": rel_count,
             "view_count": view_count,
@@ -101,6 +102,7 @@ def get_model_detail(model_id: str, db: Session = Depends(get_db)):
         "description": m.description,
         "version": m.version,
         "source_format": m.source_format,
+        "modeling_tool": getattr(m, "modeling_tool", "archi") or "archi",
         "element_count": elem_count,
         "relationship_count": rel_count,
         "view_count": view_count,
@@ -144,7 +146,8 @@ async def upload_archi_model(
             name=final_name,
             description=parsed_data.get("description", f"Imported from {file.filename}"),
             version="1.0.0",
-            source_format=parsed_data.get("source_format", "archi_native")
+            source_format=parsed_data.get("source_format", "archi_native"),
+            modeling_tool="archi"
         )
         db.add(workspace)
 
@@ -211,6 +214,7 @@ async def upload_archi_model(
             "model_id": workspace_id,
             "code": final_code,
             "name": final_name,
+            "modeling_tool": "archi",
             "elements_imported": len(parsed_data.get("elements", [])),
             "relationships_imported": len(parsed_data.get("relationships", [])),
             "views_imported": len(parsed_data.get("views", []))
@@ -224,11 +228,13 @@ class ModelCreate(BaseModel):
     code: Optional[str] = None
     description: Optional[str] = ""
     version: Optional[str] = "1.0.0"
+    modeling_tool: Optional[str] = "archi"
 
 class ModelUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     version: Optional[str] = None
+    modeling_tool: Optional[str] = None
 
 @router.post("", response_model=Dict[str, Any])
 def create_empty_model(payload: ModelCreate, db: Session = Depends(get_db)):
@@ -241,7 +247,8 @@ def create_empty_model(payload: ModelCreate, db: Session = Depends(get_db)):
         name=payload.name,
         description=payload.description or "Nuovo modello architetturale",
         version=payload.version or "1.0.0",
-        source_format="manual"
+        source_format="manual",
+        modeling_tool=payload.modeling_tool or "archi"
     )
     db.add(workspace)
     db.commit()
@@ -252,7 +259,8 @@ def create_empty_model(payload: ModelCreate, db: Session = Depends(get_db)):
         "name": workspace.name,
         "description": workspace.description,
         "version": workspace.version,
-        "source_format": workspace.source_format
+        "source_format": workspace.source_format,
+        "modeling_tool": workspace.modeling_tool or "archi"
     }
 
 @router.put("/{model_id}")
@@ -267,6 +275,8 @@ def update_model(model_id: str, payload: ModelUpdate, db: Session = Depends(get_
         m.description = payload.description
     if payload.version is not None:
         m.version = payload.version
+    if payload.modeling_tool is not None:
+        m.modeling_tool = payload.modeling_tool
     db.commit()
     return {"message": "Model updated successfully"}
 

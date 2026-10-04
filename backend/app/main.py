@@ -50,6 +50,8 @@ def _safe_add_column(table_name: str, column_def: str):
 
 _safe_add_column("application_business_attributes", "in_apm_scope BOOLEAN DEFAULT TRUE")
 _safe_add_column("model_workspaces", "code VARCHAR(4)")
+_safe_add_column("model_workspaces", "modeling_tool VARCHAR DEFAULT 'archi'")
+_safe_add_column("archi_schemas", "format VARCHAR DEFAULT 'archi'")
 _safe_add_column("custom_attribute_definitions", "model_id VARCHAR")
 _safe_add_column("custom_attribute_definitions", "library_code VARCHAR(4)")
 _safe_add_column("custom_attribute_definitions", "section VARCHAR DEFAULT 'Custom Attributes'")

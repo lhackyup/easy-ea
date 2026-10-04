@@ -96,11 +96,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: BookmarkCheck
     },
     {
-      id: 'diagrams' as ArchitectureSubTab,
-      label: t.subtabs.graphicViews,
-      icon: Boxes
-    },
-    {
       id: 'import' as ArchitectureSubTab,
       label: t.subtabs.dataImport,
       icon: UploadCloud

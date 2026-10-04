@@ -46,6 +46,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
   const [isCodeManual, setIsCodeManual] = useState(false);
   const [newModelDesc, setNewModelDesc] = useState('');
   const [newModelVersion, setNewModelVersion] = useState('1.0.0');
+  const [newModelingTool, setNewModelingTool] = useState<'archi' | 'drawio'>('archi');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -72,7 +73,8 @@ export const AdminHub: React.FC<AdminHubProps> = ({
         name: newModelName.trim(),
         code: trimmedCode || undefined,
         description: newModelDesc.trim(),
-        version: newModelVersion.trim()
+        version: newModelVersion.trim(),
+        modeling_tool: newModelingTool
       });
       onRefreshModels();
       onSelectModel(created.id);
@@ -81,6 +83,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
       setIsCodeManual(false);
       setNewModelDesc('');
       setNewModelVersion('1.0.0');
+      setNewModelingTool('archi');
     } catch (err: any) {
       console.error(err);
       setFormError(err.message || t.admin.errorCreatingLibrary);
@@ -167,6 +170,13 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                           <h4 className="text-sm font-bold text-slate-900">{m.name}</h4>
                           <span className="text-[10px] font-mono px-2 py-0.5 bg-slate-100 text-slate-600 rounded">
                             v{m.version}
+                          </span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border ${
+                            m.modeling_tool === 'drawio'
+                              ? 'bg-amber-50 text-amber-800 border-amber-300'
+                              : 'bg-blue-50 text-blue-800 border-blue-300'
+                          }`}>
+                            {m.modeling_tool === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
                           </span>
                           {isSelected && (
                             <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full">
@@ -296,6 +306,41 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                 <p className="text-[11px] text-slate-500 mt-1 leading-snug">
                   {t.admin.helpLibraryCode}
                 </p>
+              </div>
+
+              {/* Modeling Tool Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">Strumento di Modellazione Predefinito</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setNewModelingTool('archi')}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      newModelingTool === 'archi'
+                        ? 'bg-blue-50/80 border-blue-500 ring-1 ring-blue-500 text-blue-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span>🏛️ Archi Tool</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 leading-tight">File nativi .archimate / Open Exchange</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewModelingTool('drawio')}
+                    className={`p-2.5 rounded-xl border text-left transition flex flex-col gap-1 ${
+                      newModelingTool === 'drawio'
+                        ? 'bg-amber-50/80 border-amber-500 ring-1 ring-amber-500 text-amber-900'
+                        : 'bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 font-bold text-xs">
+                      <span>🎨 Draw.io Desktop</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 leading-tight">File .drawio con Palette ArchiMate 3.x</span>
+                  </button>
+                </div>
               </div>
 
               <div>

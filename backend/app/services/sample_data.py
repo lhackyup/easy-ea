@@ -1,5 +1,14 @@
 from sqlalchemy.orm import Session
-from app.models.archimate import ModelWorkspace, ArchimateElement, ArchimateRelationship, ArchimateView, ApplicationBusinessAttributes
+from app.models.archimate import (
+    ModelWorkspace,
+    ArchimateElement,
+    ArchimateRelationship,
+    ArchimateView,
+    ApplicationBusinessAttributes,
+    SchemaFolder,
+    ArchiSchema,
+    SchemaVersionHistory
+)
 from app.services.apm_service import calculate_time_quadrant
 
 def seed_sample_model(db: Session) -> str:
@@ -204,6 +213,48 @@ def seed_sample_model(db: Session) -> str:
             view_data=v["view_data"]
         )
         db.add(view)
+
+    # 7. Schema Folders & Schemas (for Schema Repository)
+    folder_core = SchemaFolder(
+        id="folder-sample-core",
+        model_id=workspace.id,
+        name="Core Banking Ecosystem",
+        order_index=1
+    )
+    folder_integ = SchemaFolder(
+        id="folder-sample-integ",
+        model_id=workspace.id,
+        name="Payment & Fraud Workflows",
+        order_index=2
+    )
+    db.add(folder_core)
+    db.add(folder_integ)
+
+    schema_sample = ArchiSchema(
+        id="schema-core-banking-overview",
+        model_id=workspace.id,
+        folder_id=folder_core.id,
+        name="Core Banking & Payment Ecosystem",
+        viewpoint="Application Usage",
+        documentation="Overall interaction view between payment channels, core banking, and anti-fraud engines.",
+        status="available",
+        current_version="v1.0",
+        format="archi",
+        view_data=views_data[0]["view_data"],
+        raw_xml=None
+    )
+    db.add(schema_sample)
+
+    ver_sample = SchemaVersionHistory(
+        id="ver-sample-core-v1",
+        schema_id=schema_sample.id,
+        version_number=1,
+        version_label="v1.0",
+        commit_message="Architettura iniziale di riferimento EasyBank Core",
+        author_name="Lead Enterprise Architect",
+        view_data_snapshot=views_data[0]["view_data"]
+    )
+    db.add(ver_sample)
 
     db.commit()
     return workspace.id

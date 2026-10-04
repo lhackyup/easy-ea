@@ -20,6 +20,11 @@ from app.parsers.archi_parser import ArchiModelParser, detect_layer
 from app.services.auth_service import get_user_from_token, get_system_auth_settings
 from app.services.schema_export_service import generate_standalone_archi_xml
 from app.services.schema_diff_service import compute_schema_diff
+from app.services.drawio_service import (
+    export_schema_to_drawio_xml,
+    parse_drawio_file_to_canonical_model,
+    generate_drawio_archimate_library_xml
+)
 
 router = APIRouter(prefix="/schemas", tags=["schemas"])
 
@@ -69,6 +74,7 @@ class SchemaCreateRequest(BaseModel):
     documentation: Optional[str] = ""
     view_data: Optional[Dict[str, Any]] = None
     raw_xml: Optional[str] = None
+    format: Optional[str] = None
 
 
 class SchemaUpdateRequest(BaseModel):
@@ -231,6 +237,7 @@ def _serialize_schema(s: ArchiSchema) -> Dict[str, Any]:
         "name": s.name,
         "viewpoint": s.viewpoint or "Total",
         "documentation": s.documentation or "",
+        "format": getattr(s, "format", "archi") or "archi",
         "status": s.status or "available",
         "locked_by_user_id": s.locked_by_user_id,
         "locked_by_username": s.locked_by_username,
@@ -293,6 +300,7 @@ def create_schema(
 
     schema_id = f"schema-{uuid.uuid4().hex[:8]}"
     view_data = payload.view_data or {"nodes": [], "connections": []}
+    schema_format = payload.format or getattr(ws, "modeling_tool", "archi") or "archi"
 
     new_schema = ArchiSchema(
         id=schema_id,
@@ -301,6 +309,7 @@ def create_schema(
         name=payload.name.strip() or "Nuovo Schema",
         viewpoint=payload.viewpoint or "Total",
         documentation=payload.documentation or "",
+        format=schema_format,
         status="available",
         current_version="v1.0",
         view_data=view_data,
@@ -336,7 +345,7 @@ async def import_schema_file(
     authorization: Optional[str] = Header(None),
     db: Session = Depends(get_db)
 ):
-    """Imports an .archimate or Open Exchange XML file into a new schema."""
+    """Imports an .archimate, .drawio, or Open Exchange XML file into a new schema."""
     user = _require_user(authorization, db)
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not ws:
@@ -345,13 +354,24 @@ async def import_schema_file(
     content = await file.read()
     xml_str = content.decode("utf-8", errors="ignore")
 
-    try:
-        parser = ArchiModelParser(xml_str)
-        parsed = parser.parse()
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore di parsing del file Archi XML: {str(e)}")
+    is_drawio = (
+        file.filename.lower().endswith(".drawio")
+        or "<mxfile" in xml_str
+        or "<mxGraphModel" in xml_str
+    )
 
-    name = schema_name or parsed.get("name") or file.filename.replace(".archimate", "").replace(".xml", "")
+    try:
+        if is_drawio:
+            parsed = parse_drawio_file_to_canonical_model(xml_str)
+            schema_format = "drawio"
+        else:
+            parser = ArchiModelParser(xml_str)
+            parsed = parser.parse()
+            schema_format = "archi"
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Errore di parsing del file di schema: {str(e)}")
+
+    name = schema_name or parsed.get("name") or file.filename.replace(".archimate", "").replace(".drawio", "").replace(".xml", "")
     views = parsed.get("views", [])
     first_view = views[0] if views else {}
     view_data = first_view.get("view_data", {"nodes": [], "connections": []})
@@ -410,6 +430,7 @@ async def import_schema_file(
         name=name,
         viewpoint=viewpoint,
         documentation=parsed.get("description", ""),
+        format=schema_format,
         status="available",
         current_version="v1.0",
         view_data=view_data,
@@ -505,6 +526,17 @@ def delete_schema(
 # CHECKOUT & LOCK MANAGEMENT
 # ============================================================================
 
+@router.get("/drawio/palette")
+def download_drawio_palette():
+    """Generates and downloads the ArchiMate 3.x Draw.io custom palette (.xml)."""
+    palette_xml = generate_drawio_archimate_library_xml()
+    return Response(
+        content=palette_xml,
+        media_type="application/xml",
+        headers={"Content-Disposition": 'attachment; filename="EasyEA_ArchiMate3_Palette.xml"'}
+    )
+
+
 @router.post("/{schema_id}/checkout")
 def checkout_schema(
     schema_id: str,
@@ -512,7 +544,7 @@ def checkout_schema(
     db: Session = Depends(get_db)
 ):
     """
-    Locks the schema for the current user and returns the standalone .archimate XML.
+    Locks the schema for the current user and returns the standalone XML (.archimate or .drawio).
     """
     user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
@@ -533,16 +565,22 @@ def checkout_schema(
     db.commit()
     db.refresh(schema)
 
-    # Generate standalone Archi XML
-    xml_content = generate_standalone_archi_xml(schema, db)
+    ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first()
+    is_drawio = (getattr(schema, "format", "archi") == "drawio") or (ws and getattr(ws, "modeling_tool", "archi") == "drawio")
 
     safe_name = schema.name.replace(" ", "_").replace("/", "_")
-    filename = f"{safe_name}.archimate"
+    if is_drawio:
+        xml_content = export_schema_to_drawio_xml(schema, db)
+        filename = f"{safe_name}.drawio"
+    else:
+        xml_content = generate_standalone_archi_xml(schema, db)
+        filename = f"{safe_name}.archimate"
 
     return {
         "schema": _serialize_schema(schema),
         "filename": filename,
-        "xml_content": xml_content
+        "xml_content": xml_content,
+        "format": "drawio" if is_drawio else "archi"
     }
 
 
@@ -551,18 +589,27 @@ def download_schema_xml(
     schema_id: str,
     db: Session = Depends(get_db)
 ):
-    """Download .archimate XML without locking."""
+    """Download schema XML (.archimate or .drawio) without locking."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
 
-    xml_content = generate_standalone_archi_xml(schema, db)
+    ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first()
+    is_drawio = (getattr(schema, "format", "archi") == "drawio") or (ws and getattr(ws, "modeling_tool", "archi") == "drawio")
     safe_name = schema.name.replace(" ", "_").replace("/", "_")
-    filename = f"{safe_name}.archimate"
+
+    if is_drawio:
+        xml_content = export_schema_to_drawio_xml(schema, db)
+        filename = f"{safe_name}.drawio"
+        media_type = "application/xml"
+    else:
+        xml_content = generate_standalone_archi_xml(schema, db)
+        filename = f"{safe_name}.archimate"
+        media_type = "application/octet-stream"
 
     return Response(
         content=xml_content,
-        media_type="application/octet-stream",
+        media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
     )
 
@@ -643,7 +690,7 @@ async def checkin_diff(
     db: Session = Depends(get_db)
 ):
     """
-    Uploads modified .archimate file and calculates the Diff against EasyEA DB.
+    Uploads modified .archimate or .drawio file and calculates the Diff against EasyEA DB.
     """
     user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
@@ -660,14 +707,24 @@ async def checkin_diff(
     content = await file.read()
     xml_str = content.decode("utf-8", errors="ignore")
 
+    is_drawio = (
+        file.filename.lower().endswith(".drawio")
+        or "<mxfile" in xml_str
+        or "<mxGraphModel" in xml_str
+    )
+
     try:
-        parser = ArchiModelParser(xml_str)
-        parsed = parser.parse()
+        if is_drawio:
+            parsed = parse_drawio_file_to_canonical_model(xml_str)
+        else:
+            parser = ArchiModelParser(xml_str)
+            parsed = parser.parse()
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore nel parsing del file Archi: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Errore nel parsing del file di schema: {str(e)}")
 
     diff_result = compute_schema_diff(schema, parsed, db)
     diff_result["xml_content"] = xml_str
+    diff_result["format"] = "drawio" if is_drawio else "archi"
     return diff_result
 
 
@@ -702,8 +759,11 @@ def checkin_confirm(
     
     if raw_xml_text:
         try:
-            parser = ArchiModelParser(raw_xml_text)
-            parsed_model = parser.parse()
+            if "<mxfile" in raw_xml_text or "<mxGraphModel" in raw_xml_text:
+                parsed_model = parse_drawio_file_to_canonical_model(raw_xml_text)
+            else:
+                parser = ArchiModelParser(raw_xml_text)
+                parsed_model = parser.parse()
             diff = compute_schema_diff(schema, parsed_model, db)
             if not payload.new_elements:
                 payload.new_elements = diff.get("new_elements", [])
@@ -721,6 +781,15 @@ def checkin_confirm(
                             "new_value": ch.get("new_value"),
                             "overwrite": True
                         })
+                for mr in diff.get("modified_relationships", []):
+                    for ch in mr.get("changes", []):
+                        auto_res.append({
+                            "id": mr.get("id"),
+                            "field": ch.get("field"),
+                            "prop_key": ch.get("prop_key"),
+                            "new_value": ch.get("new_value"),
+                            "overwrite": True
+                        })
                 payload.attribute_resolutions = auto_res
             xml_to_db_id_map = diff.get("xml_elem_to_db_elem_id", {})
         except Exception:
@@ -730,12 +799,12 @@ def checkin_confirm(
     if payload.attribute_resolutions:
         for res in payload.attribute_resolutions:
             if res.get("overwrite") is True:
-                elem_id = res.get("id")
+                item_id = res.get("id")
                 field = res.get("field")
                 new_val = res.get("new_value")
                 
                 el = db.query(ArchimateElement).filter(
-                    ArchimateElement.id == elem_id,
+                    ArchimateElement.id == item_id,
                     ArchimateElement.model_id == model_id
                 ).first()
                 if el:
@@ -748,6 +817,21 @@ def checkin_confirm(
                         props = dict(el.properties or {})
                         props[prop_k] = new_val
                         el.properties = props
+                else:
+                    rel = db.query(ArchimateRelationship).filter(
+                        ArchimateRelationship.id == item_id,
+                        ArchimateRelationship.model_id == model_id
+                    ).first()
+                    if rel:
+                        if field == "documentation":
+                            rel.documentation = new_val
+                        elif field == "name":
+                            rel.name = new_val
+                        elif field and field.startswith("prop_"):
+                            prop_k = res.get("prop_key") or field[5:]
+                            props = dict(rel.properties or {})
+                            props[prop_k] = new_val
+                            rel.properties = props
 
     # 2. Insert new elements confirmed
     if payload.new_elements:
@@ -815,11 +899,15 @@ def checkin_confirm(
     if payload.catalog_removals:
         for rem in payload.catalog_removals:
             if rem.get("remove_from_catalog") is True:
-                elem_id = rem.get("id")
-                if elem_id:
+                target_id = rem.get("id")
+                if target_id:
                     db.query(ArchimateElement).filter(
-                        ArchimateElement.id == elem_id,
+                        ArchimateElement.id == target_id,
                         ArchimateElement.model_id == model_id
+                    ).delete(synchronize_session=False)
+                    db.query(ArchimateRelationship).filter(
+                        ArchimateRelationship.id == target_id,
+                        ArchimateRelationship.model_id == model_id
                     ).delete(synchronize_session=False)
 
     # 5. Parse updated view_data if XML provided

@@ -25,7 +25,7 @@
     var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
 
     function loadConfig() {
-        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
         if (CONFIG_FILE.exists()) {
             try {
                 var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
@@ -35,6 +35,10 @@
                 if (parsed.server_url) config.server_url = parsed.server_url;
                 if (parsed.token) config.token = parsed.token;
                 if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
             } catch (e) {}
         }
         return config;
@@ -82,7 +86,14 @@
             return;
         }
 
+        var activeModelId = config.model_id || config.library_id;
+        var activeLibraryName = config.library_name || "Active Library";
+        var activeLibraryCode = config.library_code || "";
+
+        console.log("Active Library Scope: " + activeLibraryName + (activeLibraryCode ? " [" + activeLibraryCode + "]" : "") + (activeModelId ? " (" + activeModelId + ")" : ""));
+
         // 1. Scan checked out schemas from ~/.easyea/checked_out/
+        var allCheckedOutSchemas = [];
         var checkedOutSchemas = [];
         if (SCHEMAS_DIR.exists()) {
             var dirFiles = SCHEMAS_DIR.listFiles();
@@ -98,18 +109,37 @@
                             if (p.schema_id) {
                                 var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
                                 var archFile = new File(SCHEMAS_DIR, archFileName);
-                                checkedOutSchemas.push({
+                                var entry = {
                                     schema_id: p.schema_id,
+                                    model_id: p.model_id,
+                                    library_name: p.library_name || "",
+                                    library_code: p.library_code || "",
                                     schema_name: p.schema_name || "Schema",
                                     version: p.version || "v1.0",
                                     meta_file: f,
                                     archimate_file: archFile
-                                });
+                                };
+                                allCheckedOutSchemas.push(entry);
+
+                                if (!activeModelId || !entry.model_id || entry.model_id === activeModelId) {
+                                    checkedOutSchemas.push(entry);
+                                }
                             }
                         } catch(e) {}
                     }
                 }
             }
+        }
+
+        if (checkedOutSchemas.length === 0 && allCheckedOutSchemas.length > 0) {
+            window.alert(
+                "Library Scope Restriction:\n\n" +
+                "No schemas currently checked out for the active library '" + activeLibraryName + "'.\n\n" +
+                "There are " + allCheckedOutSchemas.length + " schema(s) checked out under other libraries.\n" +
+                "To manage schemas from another library, switch your active library using 'EasyEA_Settings.ajs'."
+            );
+            console.log("Discard check-out aborted: active library has no checked out schemas.");
+            return;
         }
 
         var openModels = IEditorModelManager.INSTANCE.getModels();
@@ -119,9 +149,22 @@
         if (currentActiveModel) {
             var activeFile = getModelFile(currentActiveModel);
             var activePropId = null;
+            var activePropModelId = null;
             try {
-                if (typeof $ !== "undefined") activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+                if (typeof $ !== "undefined") {
+                    activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+                    activePropModelId = $(currentActiveModel).prop("EasyEA_Model_ID");
+                }
             } catch(e) {}
+
+            if (activePropModelId && activeModelId && activePropModelId !== activeModelId) {
+                window.alert(
+                    "Library Scope Restriction:\n\n" +
+                    "The currently open model belongs to library ID '" + activePropModelId + "', but the active library in EasyEA Settings is '" + activeLibraryName + "' (" + activeModelId + ").\n\n" +
+                    "Operations are restricted to the active library. Please switch active library in 'EasyEA_Settings.ajs'."
+                );
+                return;
+            }
 
             for (var m = 0; m < checkedOutSchemas.length; m++) {
                 var cs = checkedOutSchemas[m];
@@ -140,14 +183,15 @@
             } else if (checkedOutSchemas.length > 1) {
                 var choices = [];
                 for (var k = 0; k < checkedOutSchemas.length; k++) {
-                    choices.push((k + 1) + ". " + checkedOutSchemas[k].schema_name + " (" + checkedOutSchemas[k].version + ") - ID: " + checkedOutSchemas[k].schema_id);
+                    var lTag = checkedOutSchemas[k].library_code ? " [" + checkedOutSchemas[k].library_code + "]" : "";
+                    choices.push((k + 1) + ". " + checkedOutSchemas[k].schema_name + lTag + " (" + checkedOutSchemas[k].version + ") - ID: " + checkedOutSchemas[k].schema_id);
                 }
 
                 var userChoice = null;
                 if (typeof window.promptSelection === "function") {
-                    userChoice = window.promptSelection("Select schema to discard check-out:", choices);
+                    userChoice = window.promptSelection("Select schema from library '" + activeLibraryName + "' to discard check-out:", choices);
                 } else {
-                    var promptTxt = "Select schema to discard check-out:\n\n" + choices.join("\n") + "\n\nEnter number:";
+                    var promptTxt = "Select schema from library '" + activeLibraryName + "' to discard check-out:\n\n" + choices.join("\n") + "\n\nEnter number:";
                     var choiceNum = window.prompt(promptTxt, "1");
                     if (choiceNum !== null) {
                         var idx = parseInt(("" + choiceNum).trim(), 10) - 1;
@@ -194,6 +238,25 @@
             return;
         }
 
+        // Find matching open model in Archi to close
+        var matchedOpenModel = null;
+        if (openModels && openModels.size() > 0) {
+            for (var omIdx = 0; omIdx < openModels.size(); omIdx++) {
+                var om = openModels.get(omIdx);
+                var rawOm = getRawModel(om);
+                var fOm = getModelFile(om);
+
+                if (selectedEntry.archimate_file && fOm && fOm.getAbsolutePath() === selectedEntry.archimate_file.getAbsolutePath()) {
+                    matchedOpenModel = rawOm;
+                    break;
+                }
+                if (currentActiveModel && (om === currentActiveModel || rawOm === getRawModel(currentActiveModel))) {
+                    matchedOpenModel = rawOm;
+                    break;
+                }
+            }
+        }
+
         var client = HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_1_1)
             .build();
@@ -207,11 +270,32 @@
 
         var resp = client.send(req, HttpResponse.BodyHandlers.ofString());
         if (resp.statusCode() === 200) {
+            // Close model in Archi
+            if (matchedOpenModel) {
+                try {
+                    if (IEditorModelManager.INSTANCE.isModelDirty(matchedOpenModel)) {
+                        try { IEditorModelManager.INSTANCE.saveModel(matchedOpenModel); } catch(sErr) {}
+                    }
+                    IEditorModelManager.INSTANCE.closeModel(matchedOpenModel);
+                    console.log("✓ Model closed in Archi.");
+                } catch(closeErr) {
+                    console.log("Note on closing model in Archi: " + closeErr);
+                }
+            }
+
             if (selectedEntry && selectedEntry.meta_file && selectedEntry.meta_file.exists()) {
                 try { selectedEntry.meta_file.delete(); } catch(e) {}
             }
+            if (selectedEntry && selectedEntry.archimate_file && selectedEntry.archimate_file.exists()) {
+                try { selectedEntry.archimate_file.delete(); } catch(e2) {}
+            }
+
             console.log("✓ Lock released successfully for schema: " + schemaName);
-            window.alert("Lock for schema '" + schemaName + "' has been released successfully on EasyEA.");
+            window.alert(
+                "Check-out cancelled for schema '" + schemaName + "'!\n\n" +
+                "• Lock has been released on EasyEA.\n" +
+                "• The model has been closed in Archi."
+            );
         } else {
             var errBody = resp.body();
             try {

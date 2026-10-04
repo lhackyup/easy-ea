@@ -138,7 +138,7 @@ export const CreateSchemaModal: React.FC<CreateSchemaModalProps> = ({
             }`}
           >
             <Upload className="w-3.5 h-3.5" />
-            <span>Importa File Archi (.archimate / XML)</span>
+            <span>Importa File (.archimate / .drawio / XML)</span>
           </button>
         </div>
 
@@ -154,16 +154,16 @@ export const CreateSchemaModal: React.FC<CreateSchemaModalProps> = ({
           {tab === 'import' && (
             <div>
               <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                File .archimate / Open Exchange XML *
+                File .archimate / .drawio / Open Exchange XML *
               </label>
               <input
                 type="file"
-                accept=".archimate,.xml"
+                accept=".archimate,.drawio,.xml"
                 onChange={(e) => {
                   if (e.target.files && e.target.files[0]) {
                     setFile(e.target.files[0]);
                     if (!name) {
-                      setName(e.target.files[0].name.replace('.archimate', '').replace('.xml', ''));
+                      setName(e.target.files[0].name.replace('.archimate', '').replace('.drawio', '').replace('.xml', ''));
                     }
                   }
                 }}

@@ -1,0 +1,431 @@
+/**
+ * EasyEA Expand Neighbors for Archi (jArchi)
+ * Automatically discovers and adds 1-hop connected elements from the central repository
+ * directly to the active ArchiMate diagram view, laying them out intelligently and drawing all relationships.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Expand Connected Neighbors ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var URLEncoder = Java.type("java.net.URLEncoder");
+    var StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function mapToJArchiType(typeStr) {
+        if (!typeStr) return "application-component";
+        var clean = typeStr.replace(/^archimate:/i, "").trim();
+        return clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    }
+
+    function mapToJArchiRelType(relTypeStr) {
+        if (!relTypeStr) return "association-relationship";
+        var clean = relTypeStr.replace(/^archimate:/i, "").trim();
+        if (!clean.toLowerCase().endsWith("relationship")) {
+            clean += "Relationship";
+        }
+        return clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        var activeModelId = config.model_id || config.library_id;
+        var activeLibraryName = config.library_name || "Active Library";
+        var activeLibraryCode = config.library_code || "";
+
+        // 1. Validate Active Checkout
+        var checkedOutSchemas = [];
+        if (SCHEMAS_DIR.exists()) {
+            var dirFiles = SCHEMAS_DIR.listFiles();
+            if (dirFiles) {
+                for (var i = 0; i < dirFiles.length; i++) {
+                    var f = dirFiles[i];
+                    if (f.getName().endsWith(".meta.json")) {
+                        try {
+                            var scanner = new Scanner(f).useDelimiter("\\A");
+                            var content = scanner.hasNext() ? scanner.next() : "{}";
+                            scanner.close();
+                            var p = JSON.parse(content);
+                            if (p.schema_id) {
+                                var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
+                                var archFile = new File(SCHEMAS_DIR, archFileName);
+                                var entry = {
+                                    schema_id: p.schema_id,
+                                    model_id: p.model_id || activeModelId || "sample-easybank-ea",
+                                    schema_name: p.schema_name || "Schema",
+                                    meta_file: f,
+                                    archimate_file: archFile
+                                };
+                                if (!activeModelId || !entry.model_id || entry.model_id === activeModelId) {
+                                    checkedOutSchemas.push(entry);
+                                }
+                            }
+                        } catch(e) {}
+                    }
+                }
+            }
+        }
+
+        if (checkedOutSchemas.length === 0) {
+            window.alert(
+                "Access Restricted:\n\n" +
+                "Expanding connected elements is available for schemas checked out from library '" + activeLibraryName + "'.\n\n" +
+                "Please perform a check-out first using 'EasyEA_Checkout.ajs'."
+            );
+            return;
+        }
+
+        var activeCheckedOut = checkedOutSchemas[0];
+        var targetModelId = activeCheckedOut.model_id || activeModelId || "sample-easybank-ea";
+
+        if (!model) {
+            window.alert("No active Archi model open.");
+            return;
+        }
+
+        // Locate diagram view
+        var diagramViewsCollection = $(model).find("archimate-diagram-model");
+        if (!diagramViewsCollection || diagramViewsCollection.length === 0) diagramViewsCollection = $(model).find("view");
+        var diagramViews = [];
+        if (diagramViewsCollection) {
+            diagramViewsCollection.each(function(v) {
+                var already = false;
+                for (var vi = 0; vi < diagramViews.length; vi++) {
+                    if (diagramViews[vi].id === v.id) { already = true; break; }
+                }
+                if (!already) diagramViews.push(v);
+            });
+        }
+        if (diagramViews.length === 0) {
+            window.alert("No diagram view found in current model.");
+            return;
+        }
+
+        var targetView = diagramViews[0];
+
+        // 2. Identify Selected Element(s)
+        var selectedVisuals = [];
+        if (typeof selection !== "undefined" && selection && selection.length > 0) {
+            $(selection).each(function(sObj) {
+                if (sObj.concept) selectedVisuals.push(sObj);
+            });
+        }
+
+        if (selectedVisuals.length === 0) {
+            var viewNodes = [];
+            var viewLabels = [];
+            $(targetView).children().each(function(vN) {
+                if (vN.concept) {
+                    viewNodes.push(vN);
+                    viewLabels.push(vN.concept.name + " (" + vN.concept.type + ")");
+                }
+            });
+
+            if (viewNodes.length === 0) {
+                window.alert("The active diagram view is empty.");
+                return;
+            }
+
+            var selPrompt = null;
+            if (typeof window.promptSelection === "function") {
+                selPrompt = window.promptSelection("Select source element to expand neighbors:", viewLabels);
+            } else {
+                var pMsg = "Select source element to expand:\n\n" + viewLabels.slice(0, 20).join("\n") + "\n\nEnter index (1 - " + viewNodes.length + "):";
+                var pChoice = window.prompt(pMsg, "1");
+                if (pChoice !== null) {
+                    var idx = parseInt(("" + pChoice).trim(), 10) - 1;
+                    if (!isNaN(idx) && idx >= 0 && idx < viewLabels.length) selPrompt = viewLabels[idx];
+                }
+            }
+
+            if (!selPrompt) return;
+
+            for (var vi = 0; vi < viewLabels.length; vi++) {
+                if (viewLabels[vi] === selPrompt) {
+                    selectedVisuals.push(viewNodes[vi]);
+                    break;
+                }
+            }
+        }
+
+        var primaryVisual = selectedVisuals[0];
+        var primaryConcept = primaryVisual.concept;
+
+        console.log("Expanding neighbors for '" + primaryConcept.name + "' in library '" + activeLibraryName + "'...");
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        // 3. Fetch full element details & relationships
+        var easyId = $(primaryConcept).prop("EasyEA_Element_ID");
+        var elemData = null;
+
+        if (easyId) {
+            try {
+                var reqD = HttpRequest.newBuilder()
+                    .uri(URI.create(config.server_url + "/api/elements/" + encodeURIComponent(easyId)))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .header("Authorization", "Bearer " + config.token)
+                    .GET()
+                    .build();
+                var respD = client.send(reqD, HttpResponse.BodyHandlers.ofString());
+                if (respD.statusCode() === 200) elemData = JSON.parse(respD.body());
+            } catch(e) {}
+        }
+
+        if (!elemData) {
+            var sUrl = config.server_url + "/api/elements?model_id=" + encodeURIComponent(targetModelId) + "&search=" + URLEncoder.encode(primaryConcept.name, StandardCharsets.UTF_8);
+            var reqS = HttpRequest.newBuilder()
+                .uri(URI.create(sUrl))
+                .version(HttpClient.Version.HTTP_1_1)
+                .header("Authorization", "Bearer " + config.token)
+                .GET()
+                .build();
+            var respS = client.send(reqS, HttpResponse.BodyHandlers.ofString());
+            if (respS.statusCode() === 200) {
+                var fList = JSON.parse(respS.body()) || [];
+                if (fList.length > 0) {
+                    var reqFull = HttpRequest.newBuilder()
+                        .uri(URI.create(config.server_url + "/api/elements/" + encodeURIComponent(fList[0].id)))
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .header("Authorization", "Bearer " + config.token)
+                        .GET()
+                        .build();
+                    var respFull = client.send(reqFull, HttpResponse.BodyHandlers.ofString());
+                    if (respFull.statusCode() === 200) elemData = JSON.parse(respFull.body());
+                }
+            }
+        }
+
+        if (!elemData) {
+            window.alert("Element '" + primaryConcept.name + "' does not exist in the central repository library yet.");
+            return;
+        }
+
+        // 4. Filter missing neighbors
+        var outgoing = elemData.outgoing_relations || [];
+        var incoming = elemData.incoming_relations || [];
+
+        var diagramConceptNames = {};
+        var diagramEasyIds = {};
+        $(targetView).children().each(function(vN) {
+            if (vN.concept) {
+                diagramConceptNames[vN.concept.name] = vN;
+                var eid = $(vN.concept).prop("EasyEA_Element_ID");
+                if (eid) diagramEasyIds[eid] = vN;
+            }
+        });
+
+        var missingList = [];
+        for (var oi = 0; oi < outgoing.length; oi++) {
+            var outR = outgoing[oi];
+            var drawn = diagramEasyIds[outR.target_id] || diagramConceptNames[outR.target_name];
+            if (!drawn) {
+                missingList.push({
+                    direction: "Outgoing (-->)",
+                    rel_id: outR.id,
+                    rel_type: outR.type,
+                    rel_name: outR.name || "",
+                    other_id: outR.target_id,
+                    other_name: outR.target_name,
+                    other_type: outR.target_type || "ApplicationComponent",
+                    other_layer: outR.target_layer || "",
+                    is_source: true
+                });
+            }
+        }
+
+        for (var ii = 0; ii < incoming.length; ii++) {
+            var inR = incoming[ii];
+            var drawnIn = diagramEasyIds[inR.source_id] || diagramConceptNames[inR.source_name];
+            if (!drawnIn) {
+                missingList.push({
+                    direction: "Incoming (<--)",
+                    rel_id: inR.id,
+                    rel_type: inR.type,
+                    rel_name: inR.name || "",
+                    other_id: inR.source_id,
+                    other_name: inR.source_name,
+                    other_type: inR.source_type || "ApplicationComponent",
+                    other_layer: inR.source_layer || "",
+                    is_source: false
+                });
+            }
+        }
+
+        if (missingList.length === 0) {
+            window.alert("All " + (outgoing.length + incoming.length) + " connected repository elements are already present in this diagram view!");
+            return;
+        }
+
+        // 5. Select items to expand
+        var choices = [
+            "0. [Expand ALL " + missingList.length + " Missing Neighbors]"
+        ];
+        for (var k = 0; k < missingList.length; k++) {
+            var item = missingList[k];
+            var lTag = item.other_layer ? "[" + item.other_layer + "] " : "";
+            choices.push((k + 1) + ". " + item.direction + " " + lTag + item.other_name + " (" + item.other_type + ") via " + item.rel_type);
+        }
+
+        var chosenOption = null;
+        if (typeof window.promptSelection === "function") {
+            chosenOption = window.promptSelection("Select connected neighbor(s) to expand for '" + primaryConcept.name + "':", choices);
+        } else {
+            var pTxt = "Select connected neighbor(s) to expand for '" + primaryConcept.name + "':\n\n" + choices.join("\n") + "\n\nEnter number:";
+            var choiceNum = window.prompt(pTxt, "0");
+            if (choiceNum !== null) {
+                var cIndex = parseInt(("" + choiceNum).trim(), 10);
+                if (cIndex === 0) chosenOption = choices[0];
+                else if (!isNaN(cIndex) && cIndex >= 1 && cIndex < choices.length) chosenOption = choices[cIndex];
+            }
+        }
+
+        if (!chosenOption) {
+            console.log("Expand cancelled.");
+            return;
+        }
+
+        var toExpand = [];
+        if (chosenOption.indexOf("0.") === 0) {
+            toExpand = missingList;
+        } else {
+            for (var cj = 1; cj < choices.length; cj++) {
+                if (choices[cj] === chosenOption) {
+                    toExpand.push(missingList[cj - 1]);
+                    break;
+                }
+            }
+        }
+
+        console.log("Instantiating and laying out " + toExpand.length + " elements...");
+
+        var baseX = (primaryVisual && primaryVisual.bounds) ? primaryVisual.bounds.x : 250;
+        var baseY = (primaryVisual && primaryVisual.bounds) ? primaryVisual.bounds.y : 250;
+        var addedNodes = 0;
+        var connectedRels = 0;
+
+        for (var te = 0; te < toExpand.length; te++) {
+            var expItem = toExpand[te];
+            var jType = mapToJArchiType(expItem.other_type);
+
+            // Find or create in model tree
+            var conceptObj = null;
+            $(model).find("element").each(function(e) {
+                if (e.name === expItem.other_name) conceptObj = e;
+            });
+
+            if (!conceptObj) {
+                try {
+                    conceptObj = model.createElement(jType, expItem.other_name);
+                    $(conceptObj).prop("EasyEA_Element_ID", expItem.other_id);
+                    if (expItem.other_layer) $(conceptObj).prop("EasyEA_Layer", expItem.other_layer);
+                } catch(ce) {
+                    conceptObj = model.createElement("application-component", expItem.other_name);
+                }
+            }
+
+            // Directional positioning: outgoing to the right/bottom, incoming to the left/top
+            var angle = 0;
+            if (toExpand.length === 1) {
+                angle = expItem.is_source ? 0 : Math.PI; // right for outgoing, left for incoming
+            } else {
+                angle = (2 * Math.PI * te) / toExpand.length;
+            }
+
+            var radius = 220;
+            var posX = Math.max(20, Math.round(baseX + Math.cos(angle) * radius));
+            var posY = Math.max(20, Math.round(baseY + Math.sin(angle) * radius));
+
+            var newV = targetView.add(conceptObj, posX, posY, 150, 65);
+            addedNodes++;
+
+            // Connect relation
+            var jRel = mapToJArchiRelType(expItem.rel_type);
+            var src = expItem.is_source ? primaryVisual : newV;
+            var tgt = expItem.is_source ? newV : primaryVisual;
+
+            try {
+                if (src && tgt) {
+                    var aRel = model.createRelationship(jRel, expItem.rel_name || "", src.concept, tgt.concept);
+                    targetView.add(aRel, src, tgt);
+                    connectedRels++;
+                    console.log("✓ Connected " + jRel + " between " + src.concept.name + " and " + tgt.concept.name);
+                }
+            } catch(relErr) {
+                console.log("Note on relation drawing: " + relErr);
+            }
+        }
+
+        // Save model
+        try {
+            var rawM = getRawModel(model);
+            if (rawM && IEditorModelManager.INSTANCE.isModelDirty(rawM)) {
+                IEditorModelManager.INSTANCE.saveModel(rawM);
+            }
+        } catch(se) {}
+
+        console.log("✓ Expand completed successfully: " + addedNodes + " node(s), " + connectedRels + " relation(s).");
+        window.alert(
+            "Expand Connected Neighbors Successful!\n\n" +
+            "• " + addedNodes + " new element(s) placed on diagram.\n" +
+            "• " + connectedRels + " relationship(s) automatically drawn."
+        );
+
+    } catch(err) {
+        var msg = "Error during Expand Neighbors execution:\n" + err;
+        console.error(msg);
+        window.alert(msg);
+    }
+})();

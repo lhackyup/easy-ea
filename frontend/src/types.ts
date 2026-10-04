@@ -1,7 +1,7 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
 export type BusinessSubTab = 'overview' | 'apm' | 'overlap' | 'processes';
-export type ArchitectureSubTab = 'repository' | 'schemas' | 'diagrams' | 'relations' | 'saved-views' | 'import';
+export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'saved-views' | 'import';
 export type AdminSubTab = 'models' | 'metamodel' | 'apm_config' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
@@ -116,6 +116,7 @@ export interface ModelWorkspace {
   description?: string;
   version: string;
   source_format: string;
+  modeling_tool?: 'archi' | 'drawio';
   element_count: number;
   relationship_count: number;
   view_count: number;
@@ -472,6 +473,7 @@ export interface ArchiSchema {
   name: string;
   viewpoint: string;
   documentation: string;
+  format?: 'archi' | 'drawio';
   status: 'available' | 'checked_out';
   locked_by_user_id: string | null;
   locked_by_username: string | null;
@@ -529,6 +531,36 @@ export interface SchemaDiffRemovedElement {
   remove_from_catalog: boolean;
 }
 
+export interface SchemaDiffNewRelationship {
+  xml_id: string;
+  type: string;
+  name?: string;
+  source_xml_id?: string;
+  target_xml_id?: string;
+  source_name?: string;
+  target_name?: string;
+  documentation?: string;
+  properties?: Record<string, any>;
+}
+
+export interface SchemaDiffModifiedRelationship {
+  id: string;
+  xml_id?: string;
+  type: string;
+  source_name?: string;
+  target_name?: string;
+  changes: SchemaDiffChange[];
+}
+
+export interface SchemaDiffRemovedRelationship {
+  id: string;
+  type: string;
+  name?: string;
+  source_name?: string;
+  target_name?: string;
+  remove_from_catalog: boolean;
+}
+
 export interface SchemaDiffResult {
   has_differences: boolean;
   summary: {
@@ -542,9 +574,9 @@ export interface SchemaDiffResult {
   modified_elements: SchemaDiffModifiedElement[];
   new_elements: SchemaDiffNewElement[];
   removed_elements: SchemaDiffRemovedElement[];
-  modified_relationships: any[];
-  new_relationships: any[];
-  removed_relationships: any[];
+  modified_relationships: SchemaDiffModifiedRelationship[];
+  new_relationships: SchemaDiffNewRelationship[];
+  removed_relationships: SchemaDiffRemovedRelationship[];
   xml_content?: string;
   parsed_view_data?: any;
 }

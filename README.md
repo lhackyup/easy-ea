@@ -63,6 +63,16 @@ PYTHONPATH=. pytest tests/test_all.py
 
 ---
 
+## 🔌 Plugin Desktop per Strumenti di Modellazione
+
+EasyEA si integra direttamente con i client desktop degli architetti:
+
+- **Archi Tool (jArchi Plugin)**: [`plugins/archi-easyea`](plugins/archi-easyea/README.md) - Check-out/in, Diff visivo e riutilizzo catalogo direttamente dall'editor Archi 5.x.
+- **Draw.io Desktop (JavaScript Plugin)**: [`plugins/drawio-easyea`](plugins/drawio-easyea/README.md) - Menu integrato in Draw.io per Check-out/in con Diff, forme ArchiMate 3.x e sincronizzazione con il catalogo centrale.
+
+
+---
+
 ## ☁️ Deployment sul Cloud a Basso Costo
 
 - **Render.com / Railway**:

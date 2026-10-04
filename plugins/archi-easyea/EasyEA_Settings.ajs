@@ -31,7 +31,7 @@
     var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
 
     function loadConfig() {
-        var config = { server_url: "http://localhost:8000", token: "", username: "" };
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
         if (CONFIG_FILE.exists()) {
             try {
                 var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
@@ -41,6 +41,10 @@
                 if (parsed.server_url) config.server_url = parsed.server_url;
                 if (parsed.token) config.token = parsed.token;
                 if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
             } catch (e) {}
         }
         return config;
@@ -73,6 +77,73 @@
             } catch(e2) {}
         }
         return opened;
+    }
+
+    function selectWorkingLibrary(targetServerUrl, authToken, currentModelId) {
+        console.log("Fetching available libraries from EasyEA repository...");
+        var reqModels = HttpRequest.newBuilder()
+            .uri(URI.create(targetServerUrl + "/api/models"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Authorization", "Bearer " + authToken)
+            .GET()
+            .build();
+
+        var respModels = client.send(reqModels, HttpResponse.BodyHandlers.ofString());
+        if (respModels.statusCode() !== 200) {
+            window.alert("Failed to retrieve libraries (HTTP " + respModels.statusCode() + "):\n" + respModels.body());
+            return null;
+        }
+
+        var modelsList = JSON.parse(respModels.body()) || [];
+        if (modelsList.length === 0) {
+            window.alert("No library / workspace found on EasyEA repository.");
+            return null;
+        }
+
+        if (modelsList.length === 1) {
+            var singleLib = modelsList[0];
+            console.log("Single library available: " + singleLib.name + " (" + (singleLib.code || singleLib.id) + ")");
+            return singleLib;
+        }
+
+        var choices = [];
+        var defaultIdx = 0;
+        for (var i = 0; i < modelsList.length; i++) {
+            var m = modelsList[i];
+            var codeTag = m.code ? " [" + m.code + "]" : "";
+            var elemInfo = (m.element_count !== undefined) ? " (" + m.element_count + " elements, " + (m.view_count || 0) + " views)" : "";
+            choices.push((i + 1) + ". " + m.name + codeTag + elemInfo + " - ID: " + m.id);
+            if (currentModelId && (m.id === currentModelId || (m.code && m.code === currentModelId))) {
+                defaultIdx = i;
+            }
+        }
+
+        var selectedChoice = null;
+        if (typeof window.promptSelection === "function") {
+            selectedChoice = window.promptSelection("Select the target Library for Archi operations:", choices);
+        } else {
+            var pMsg = "Select the target Library for Archi operations:\n\n" + choices.join("\n") + "\n\nEnter number (1 - " + choices.length + "):";
+            var choiceNum = window.prompt(pMsg, "" + (defaultIdx + 1));
+            if (choiceNum !== null) {
+                var cIdx = parseInt(("" + choiceNum).trim(), 10) - 1;
+                if (!isNaN(cIdx) && cIdx >= 0 && cIdx < choices.length) {
+                    selectedChoice = choices[cIdx];
+                }
+            }
+        }
+
+        if (!selectedChoice) {
+            console.log("Library selection cancelled.");
+            return null;
+        }
+
+        for (var k = 0; k < choices.length; k++) {
+            if (choices[k] === selectedChoice) {
+                return modelsList[k];
+            }
+        }
+
+        return modelsList[0];
     }
 
     try {
@@ -201,7 +272,7 @@
                                 ".card{background:#1e293b;padding:2.5rem;border-radius:1.25rem;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);border:1px solid #334155;text-align:center;max-width:420px;}" +
                                 "h1{color:#4ade80;font-size:1.5rem;margin:0 0 0.75rem 0;}p{color:#94a3b8;font-size:0.95rem;line-height:1.5;margin:0;}" +
                                 ".badge{display:inline-block;margin-top:1.25rem;padding:0.4rem 1rem;background:#064e3b;color:#6ee7b7;border-radius:9999px;font-size:0.8rem;font-weight:bold;}</style></head>" +
-                                "<body><div class='card'><h1>Authentication Successful!</h1><p>Your access token for Archi has been registered successfully.<br><br>You can now close this tab and return to <strong>Archi</strong>.</p><div class='badge'>Active Keycloak Session</div></div></body></html>";
+                                "<body><div class='card'><h1>Authentication Successful!</h1><p>Your access token for Archi has been registered successfully.<br><br>You can now close this tab and return to <strong>Archi</strong> to select your working library.</p><div class='badge'>Active Keycloak Session</div></div></body></html>";
                         } else {
                             htmlBody = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>EasyEA - Error</title>" +
                                 "<style>body{font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#f8fafc;}" +
@@ -257,20 +328,33 @@
                     }
                 } catch(meErr) {}
 
+                // Select working Library
+                var targetLib = selectWorkingLibrary(serverUrl, receivedData.token, config.model_id);
+                if (!targetLib) {
+                    window.alert("Authentication completed, but no library was selected. Default library configuration retained.");
+                    targetLib = { id: config.model_id || "sample-easybank-ea", name: config.library_name || "Default Library", code: config.library_code || "" };
+                }
+
                 config.server_url = serverUrl;
                 config.username = userDisplayName;
                 config.token = receivedData.token;
+                config.model_id = targetLib.id;
+                config.library_id = targetLib.id;
+                config.library_name = targetLib.name;
+                config.library_code = targetLib.code || "";
                 saveConfig(config);
 
                 console.log("✓ Keycloak (IdP) authentication completed successfully!");
                 console.log("✓ Connected user: " + userDisplayName);
-                console.log("✓ Token saved in " + CONFIG_FILE.getAbsolutePath());
+                console.log("✓ Active Working Library: " + config.library_name + (config.library_code ? " [" + config.library_code + "]" : "") + " (" + config.model_id + ")");
+                console.log("✓ Configuration saved in " + CONFIG_FILE.getAbsolutePath());
 
                 window.alert(
-                    "Keycloak (IdP) authentication completed successfully!\n\n" +
-                    "User: " + userDisplayName + "\n" +
-                    "Server: " + serverUrl + "\n\n" +
-                    "You can now use EasyEA_Checkout and EasyEA_Checkin directly from Archi."
+                    "Keycloak (IdP) authentication & library selection completed!\n\n" +
+                    "• User: " + userDisplayName + "\n" +
+                    "• Server: " + serverUrl + "\n" +
+                    "• Active Library: " + config.library_name + (config.library_code ? " [" + config.library_code + "]" : "") + "\n\n" +
+                    "All operations (Check-out, Check-in, Discard, Repository Elements) are now scoped strictly to this library."
                 );
             } else {
                 var errMessage = receivedData.error || "Timeout: no token received from browser within 2 minutes.";
@@ -318,16 +402,35 @@
 
             if (resp.statusCode() === 200) {
                 var loginData = JSON.parse(resp.body());
+                var displayName = (loginData.user && loginData.user.full_name) ? loginData.user.full_name : username;
+
+                // Select working Library
+                var targetLib2 = selectWorkingLibrary(serverUrl, loginData.token, config.model_id);
+                if (!targetLib2) {
+                    window.alert("Authentication completed, but no library was selected. Default library configuration retained.");
+                    targetLib2 = { id: config.model_id || "sample-easybank-ea", name: config.library_name || "Default Library", code: config.library_code || "" };
+                }
+
                 config.server_url = serverUrl;
                 config.username = username;
                 config.token = loginData.token;
+                config.model_id = targetLib2.id;
+                config.library_id = targetLib2.id;
+                config.library_name = targetLib2.name;
+                config.library_code = targetLib2.code || "";
                 saveConfig(config);
 
-                var displayName = (loginData.user && loginData.user.full_name) ? loginData.user.full_name : username;
                 console.log("✓ Connected to EasyEA successfully! User: " + displayName);
-                console.log("✓ Token saved in " + CONFIG_FILE.getAbsolutePath());
+                console.log("✓ Active Working Library: " + config.library_name + (config.library_code ? " [" + config.library_code + "]" : "") + " (" + config.model_id + ")");
+                console.log("✓ Configuration saved in " + CONFIG_FILE.getAbsolutePath());
 
-                window.alert("Connected to EasyEA successfully!\n\nUser: " + displayName + "\nServer: " + serverUrl + "\n\nYou can now use EasyEA_Checkout and EasyEA_Checkin.");
+                window.alert(
+                    "Connected to EasyEA successfully!\n\n" +
+                    "• User: " + displayName + "\n" +
+                    "• Server: " + serverUrl + "\n" +
+                    "• Active Library: " + config.library_name + (config.library_code ? " [" + config.library_code + "]" : "") + "\n\n" +
+                    "All operations (Check-out, Check-in, Discard, Repository Elements) are now scoped strictly to this library."
+                );
             } else {
                 var errText = "Login failed (HTTP " + resp.statusCode() + "):\n" + resp.body();
                 console.error(errText);

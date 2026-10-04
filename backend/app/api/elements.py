@@ -226,11 +226,27 @@ def get_element(element_id: str, db: Session = Depends(get_db)):
             "notes": apm.notes
         } if apm else None,
         "outgoing_relations": [
-            {"id": r.id, "type": r.type, "name": r.name, "target_id": r.target_id, "target_name": r.target_element.name if r.target_element else ""}
+            {
+                "id": r.id,
+                "type": r.type,
+                "name": r.name,
+                "target_id": r.target_id,
+                "target_name": r.target_element.name if r.target_element else "",
+                "target_type": r.target_element.type if r.target_element else "ApplicationComponent",
+                "target_layer": r.target_element.layer if r.target_element else ""
+            }
             for r in e.outgoing_relations
         ],
         "incoming_relations": [
-            {"id": r.id, "type": r.type, "name": r.name, "source_id": r.source_id, "source_name": r.source_element.name if r.source_element else ""}
+            {
+                "id": r.id,
+                "type": r.type,
+                "name": r.name,
+                "source_id": r.source_id,
+                "source_name": r.source_element.name if r.source_element else "",
+                "source_type": r.source_element.type if r.source_element else "ApplicationComponent",
+                "source_layer": r.source_element.layer if r.source_element else ""
+            }
             for r in e.incoming_relations
         ]
     }

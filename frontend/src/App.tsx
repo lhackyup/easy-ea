@@ -9,7 +9,6 @@ import { APMDashboard } from './features/apm/APMDashboard';
 import { OverlapMatrix } from './features/overlap/OverlapMatrix';
 import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
-import { DiagramViewer } from './features/architect/DiagramViewer';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
 import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
 import { SchemaRepository } from './features/schemas/SchemaRepository';
@@ -203,7 +202,6 @@ export function App() {
                       />
                     )}
                     {architectureTab === 'schemas' && <SchemaRepository modelId={selectedModelId} />}
-                    {architectureTab === 'diagrams' && <DiagramViewer modelId={selectedModelId} />}
                     {architectureTab === 'relations' && <RelationsMatrix modelId={selectedModelId} />}
                     {architectureTab === 'saved-views' && (
                       <ArchitectSavedViews
