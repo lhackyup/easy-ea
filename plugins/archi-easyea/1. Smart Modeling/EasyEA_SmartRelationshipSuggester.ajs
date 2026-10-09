@@ -1,0 +1,527 @@
+/**
+ * EasyEA - Smart Relationship Suggester for Archi (jArchi)
+ * 
+ * Intelligent Relationship Accelerator:
+ * 1. 2 Elements Selected: Detects existing repository relationships & suggests ArchiMate metamodel compliant relations.
+ * 2. 1 Element Selected: Discovers existing repository links with other elements already present on the diagram view.
+ * 3. Diagram View Scan (0 or >2 selected): Scans all visible diagram elements, finds unlinked pairs with known EasyEA repository relations, and connects them in 1 click.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Smart Relationship Suggester ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var URLEncoder = Java.type("java.net.URLEncoder");
+    var StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function mapToJArchiRelType(relTypeStr) {
+        if (!relTypeStr) return "association-relationship";
+        var clean = relTypeStr.replace(/^archimate:/i, "").trim();
+        if (!clean.toLowerCase().endsWith("relationship")) {
+            clean += "Relationship";
+        }
+        return clean.replace(/([a-z0-9])([A-Z])/g, '$1-$2').toLowerCase();
+    }
+
+    function cleanArchiType(typeStr) {
+        if (!typeStr) return "ApplicationComponent";
+        var clean = ("" + typeStr).replace(/^archimate:/i, "").replace(/-/g, " ").trim();
+        // Convert camelCase or kebab-case to PascalCase
+        var words = clean.split(/\s+/);
+        var res = "";
+        for (var i = 0; i < words.length; i++) {
+            var w = words[i];
+            if (w.length > 0) {
+                res += w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
+            }
+        }
+        return res;
+    }
+
+    try {
+        var config = loadConfig();
+        if (!config.token) {
+            window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");
+            return;
+        }
+
+        var activeModelId = config.model_id || config.library_id;
+        var activeLibraryName = config.library_name || "Active Library";
+
+        if (typeof model === "undefined" || !model) {
+            window.alert("Please open an ArchiMate model in Archi first.");
+            return;
+        }
+
+        // Active Diagram View
+        var activeView = null;
+        if (typeof selection !== "undefined" && selection && selection.view) {
+            activeView = selection.view;
+        }
+        if (!activeView) {
+            $(model).find("archimate-diagram-model").each(function(v) {
+                if (!activeView) activeView = v;
+            });
+        }
+        if (!activeView) {
+            window.alert("No active ArchiMate diagram view found in current model.");
+            return;
+        }
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        // Collect selected visual element objects
+        var selectedVisuals = [];
+        if (typeof selection !== "undefined" && selection) {
+            $(selection).each(function(item) {
+                if (item && item.concept && typeof item.concept.type !== "undefined") {
+                    // Check if it's an element (not a relationship)
+                    if (item.concept.type.indexOf("relationship") === -1) {
+                        selectedVisuals.push(item);
+                    }
+                }
+            });
+        }
+
+        // =========================================================================
+        // SCENARIO 1: TWO ELEMENTS SELECTED -> DIRECT SMART RELATIONSHIP SUGGESTION
+        // =========================================================================
+        if (selectedVisuals.length === 2) {
+            var vA = selectedVisuals[0];
+            var vB = selectedVisuals[1];
+            var cA = vA.concept;
+            var cB = vB.concept;
+
+            var idA = $(cA).prop("EasyEA_Element_ID") || "";
+            var idB = $(cB).prop("EasyEA_Element_ID") || "";
+
+            var nameA = cA.name || "Element A";
+            var nameB = cB.name || "Element B";
+            var typeA = cleanArchiType(cA.type);
+            var typeB = cleanArchiType(cB.type);
+
+            console.log("Analyzing relationship between '" + nameA + "' (" + typeA + ") and '" + nameB + "' (" + typeB + ")...");
+
+            // Direction selection prompt
+            var dirChoices = [
+                "1. Direct: " + nameA + "  ➔  " + nameB,
+                "2. Reverse: " + nameB + "  ➔  " + nameA,
+                "3. Bidirectional / Association"
+            ];
+            var selDir = window.promptSelection(
+                "Select Relationship Direction:\n\n" +
+                "Source: " + nameA + " (" + typeA + ")\n" +
+                "Target: " + nameB + " (" + typeB + ")",
+                dirChoices
+            );
+
+            if (!selDir) return;
+            selDir = ("" + selDir).trim();
+
+            var srcVisual = vA;
+            var tgtVisual = vB;
+            var srcConcept = cA;
+            var tgtConcept = cB;
+            var srcType = typeA;
+            var tgtType = typeB;
+            var srcId = idA;
+            var tgtId = idB;
+
+            if (selDir.indexOf("2.") === 0) {
+                srcVisual = vB; tgtVisual = vA;
+                srcConcept = cB; tgtConcept = cA;
+                srcType = typeB; tgtType = typeA;
+                srcId = idB; tgtId = idA;
+            }
+
+            // Fetch allowed metamodel types from EasyEA
+            var allowedUrl = config.server_url + "/api/relationships/allowed-types?source_type=" + 
+                URLEncoder.encode(srcType, StandardCharsets.UTF_8) + "&target_type=" + 
+                URLEncoder.encode(tgtType, StandardCharsets.UTF_8);
+
+            var allowedRels = [];
+            try {
+                var reqAllowed = HttpRequest.newBuilder()
+                    .uri(URI.create(allowedUrl))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .header("Authorization", "Bearer " + config.token)
+                    .GET()
+                    .build();
+                var respAllowed = client.send(reqAllowed, HttpResponse.BodyHandlers.ofString());
+                if (respAllowed.statusCode() === 200) {
+                    allowedRels = JSON.parse(respAllowed.body());
+                }
+            } catch(ae) {
+                console.log("Allowed types fetch note: " + ae);
+            }
+
+            // Fetch existing repository relations for srcId/tgtId if elements are in repository
+            var existingRepoRels = [];
+            if (srcId || tgtId) {
+                try {
+                    var qId = srcId || tgtId;
+                    var relUrl = config.server_url + "/api/relationships?model_id=" + (activeModelId || "") + "&element_id=" + qId;
+                    var reqRel = HttpRequest.newBuilder()
+                        .uri(URI.create(relUrl))
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .header("Authorization", "Bearer " + config.token)
+                        .GET()
+                        .build();
+                    var respRel = client.send(reqRel, HttpResponse.BodyHandlers.ofString());
+                    if (respRel.statusCode() === 200) {
+                        var allR = JSON.parse(respRel.body());
+                        for (var ri = 0; ri < allR.length; ri++) {
+                            var r = allR[ri];
+                            if ((r.source_id === srcId && r.target_id === tgtId) ||
+                                (r.source_name === srcConcept.name && r.target_name === tgtConcept.name)) {
+                                existingRepoRels.push(r);
+                            }
+                        }
+                    }
+                } catch(re) {}
+            }
+
+            // Build Options Dialog
+            var optionsList = [];
+            var relDataMap = [];
+
+            // 1. Existing Repository Relationships
+            if (existingRepoRels.length > 0) {
+                for (var er = 0; er < existingRepoRels.length; er++) {
+                    var repoR = existingRepoRels[er];
+                    var rLabel = "⭐ [Existing in EasyEA Repo] " + repoR.type + (repoR.name ? " ('" + repoR.name + "')" : "");
+                    optionsList.push(rLabel);
+                    relDataMap.push({ type: repoR.type, name: repoR.name || "", isRepo: true });
+                }
+            }
+
+            // 2. Metamodel compliant relationship types
+            if (allowedRels.length > 0) {
+                for (var ar = 0; ar < allowedRels.length; ar++) {
+                    var aRel = allowedRels[ar];
+                    var mLabel = "🧠 [Metamodel Best Practice] " + aRel.name + " (" + aRel.type + ")";
+                    optionsList.push(mLabel);
+                    relDataMap.push({ type: aRel.type, name: "", isRepo: false });
+                }
+            } else {
+                // Fallback standard ArchiMate relationships
+                var defaultTypes = [
+                    "ServingRelationship", "RealizationRelationship", "AssignmentRelationship",
+                    "AccessRelationship", "FlowRelationship", "TriggeringRelationship",
+                    "CompositionRelationship", "AggregationRelationship", "AssociationRelationship"
+                ];
+                for (var dt = 0; dt < defaultTypes.length; dt++) {
+                    optionsList.push("🔗 " + defaultTypes[dt]);
+                    relDataMap.push({ type: defaultTypes[dt], name: "", isRepo: false });
+                }
+            }
+
+            var chosenOption = window.promptSelection(
+                "Smart Relationship Suggester\n\n" +
+                "Source: " + srcConcept.name + " (" + srcType + ")\n" +
+                "Target: " + tgtConcept.name + " (" + tgtType + ")\n\n" +
+                "Choose the relationship to create on diagram:",
+                optionsList
+            );
+
+            if (!chosenOption) return;
+            var selIdx = optionsList.indexOf(chosenOption);
+            if (selIdx === -1) {
+                for (var k = 0; k < optionsList.length; k++) {
+                    if (optionsList[k].indexOf(chosenOption) !== -1 || chosenOption.indexOf(optionsList[k]) !== -1) {
+                        selIdx = k;
+                        break;
+                    }
+                }
+            }
+            if (selIdx === -1) selIdx = 0;
+
+            var chosenRelData = relDataMap[selIdx];
+            var jRelType = mapToJArchiRelType(chosenRelData.type);
+
+            // Create relationship in model
+            var newRel = null;
+            try {
+                newRel = model.createRelationship(jRelType, chosenRelData.name, srcConcept, tgtConcept);
+                console.log("✓ Created model relationship: " + jRelType + " between '" + srcConcept.name + "' and '" + tgtConcept.name + "'");
+            } catch(creErr) {
+                console.log("Create relationship fallback: " + creErr);
+                try {
+                    newRel = model.createRelationship("association-relationship", chosenRelData.name, srcConcept, tgtConcept);
+                } catch(creErr2) {}
+            }
+
+            // Draw visual connection on active view
+            var drawnVisualRel = null;
+            if (newRel && activeView && srcVisual && tgtVisual) {
+                try {
+                    drawnVisualRel = activeView.add(newRel, srcVisual, tgtVisual);
+                    console.log("✓ Connected visual relationship on diagram view.");
+                } catch(addVErr) {
+                    console.log("Note on drawing visual relationship: " + addVErr);
+                }
+            }
+
+            // Save model safely
+            try {
+                var rawM = getRawModel(model);
+                if (rawM) {
+                    if (typeof rawM.eResource === "function" && rawM.eResource() !== null) {
+                        try { rawM.eResource().save(null); } catch(erErr) {}
+                    }
+                    try { IEditorModelManager.INSTANCE.saveModel(rawM); } catch(smErr) {}
+                }
+            } catch(sErr) {}
+
+            window.alert(
+                "Relationship Created Successfully!\n\n" +
+                "• Type: " + chosenRelData.type + "\n" +
+                "• Source: " + srcConcept.name + "\n" +
+                "• Target: " + tgtConcept.name + "\n" +
+                "• Status: Added to model & drawn on active view."
+            );
+            return;
+        }
+
+        // =========================================================================
+        // SCENARIO 2: ONE ELEMENT SELECTED OR FULL VIEW SCAN
+        // =========================================================================
+        console.log("Scanning active diagram view for unlinked elements with repository connections...");
+
+        // Map all visual elements on activeView
+        var viewVisualsMap = {}; // name -> visual object
+        var viewConceptsMap = {}; // conceptId / elementId -> visual object
+        var viewElementsList = [];
+
+        $(activeView).children().each(function(v) {
+            if (v && v.concept && typeof v.concept.type !== "undefined" && v.concept.type.indexOf("relationship") === -1) {
+                viewVisualsMap[v.concept.name] = v;
+                var eId = $(v.concept).prop("EasyEA_Element_ID");
+                if (eId) viewConceptsMap[eId] = v;
+                viewConceptsMap[v.concept.id] = v;
+                viewElementsList.push(v);
+            }
+        });
+
+        if (viewElementsList.length < 2) {
+            window.alert(
+                "Smart Relationship Suggester:\n\n" +
+                "Please place at least 2 elements on the diagram view, or select 2 elements to connect them."
+            );
+            return;
+        }
+
+        // Target visual elements to scan
+        var scanTargets = (selectedVisuals.length === 1) ? [selectedVisuals[0]] : viewElementsList;
+
+        var missingConnections = [];
+        var processedPairKeys = {};
+
+        for (var t = 0; t < scanTargets.length; t++) {
+            var targetV = scanTargets[t];
+            var targetC = targetV.concept;
+            var targetElemId = $(targetC).prop("EasyEA_Element_ID") || "";
+
+            if (!targetElemId) continue;
+
+            try {
+                var qUrl = config.server_url + "/api/relationships?model_id=" + (activeModelId || "") + "&element_id=" + targetElemId;
+                var reqQ = HttpRequest.newBuilder()
+                    .uri(URI.create(qUrl))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .header("Authorization", "Bearer " + config.token)
+                    .GET()
+                    .build();
+                var respQ = client.send(reqQ, HttpResponse.BodyHandlers.ofString());
+                if (respQ.statusCode() === 200) {
+                    var relsFound = JSON.parse(respQ.body());
+                    for (var rf = 0; rf < relsFound.length; rf++) {
+                        var rfObj = relsFound[rf];
+                        var otherName = (rfObj.source_name === targetC.name) ? rfObj.target_name : rfObj.source_name;
+                        var otherId = (rfObj.source_id === targetElemId) ? rfObj.target_id : rfObj.source_id;
+
+                        // Check if other element is in active view
+                        var otherVisual = viewVisualsMap[otherName] || (otherId ? viewConceptsMap[otherId] : null);
+                        if (otherVisual && otherVisual !== targetV) {
+                            var isSrcTarget = (rfObj.source_name === targetC.name || rfObj.source_id === targetElemId);
+                            var sV = isSrcTarget ? targetV : otherVisual;
+                            var tV = isSrcTarget ? otherVisual : targetV;
+
+                            var pairKey = sV.concept.name + "==>" + rfObj.type + "==>" + tV.concept.name;
+                            if (processedPairKeys[pairKey]) continue;
+                            processedPairKeys[pairKey] = true;
+
+                            // Check if this relationship is already drawn on the view
+                            var alreadyDrawn = false;
+                            var jRType = mapToJArchiRelType(rfObj.type);
+
+                            $(activeView).find("relationship").each(function(dr) {
+                                if (dr && dr.source && dr.target) {
+                                    if ((dr.source.id === sV.id && dr.target.id === tV.id) ||
+                                        (dr.source.concept && dr.target.concept &&
+                                         dr.source.concept.name === sV.concept.name &&
+                                         dr.target.concept.name === tV.concept.name)) {
+                                        alreadyDrawn = true;
+                                    }
+                                }
+                            });
+
+                            if (!alreadyDrawn) {
+                                missingConnections.push({
+                                    sourceVisual: sV,
+                                    targetVisual: tV,
+                                    sourceName: sV.concept.name,
+                                    targetName: tV.concept.name,
+                                    relType: rfObj.type,
+                                    relName: rfObj.name || "",
+                                    jRelType: jRType
+                                });
+                            }
+                        }
+                    }
+                }
+            } catch(qErr) {
+                console.log("Error querying relationships: " + qErr);
+            }
+        }
+
+        if (missingConnections.length === 0) {
+            window.alert(
+                "Smart Relationship Suggester:\n\n" +
+                "✓ All repository relationships between elements on this diagram are already drawn!\n\n" +
+                "Tip: Select 2 elements to get metamodel-based connection recommendations."
+            );
+            return;
+        }
+
+        // Show discovered missing connections
+        var scanOptions = [
+            "⚡ [Connect All] Draw all " + missingConnections.length + " discovered repository relationship(s)"
+        ];
+        for (var mc = 0; mc < missingConnections.length; mc++) {
+            var item = missingConnections[mc];
+            scanOptions.push((mc + 1) + ". " + item.sourceName + "  ➔  [" + item.relType + "]  ➔  " + item.targetName);
+        }
+
+        var chosenScan = window.promptSelection(
+            "Discovered " + missingConnections.length + " Unlinked Repository Relationship(s):\n\n" +
+            "These elements exist on your diagram and have known links in EasyEA.\n" +
+            "Choose an action:",
+            scanOptions
+        );
+
+        if (!chosenScan) return;
+        chosenScan = ("" + chosenScan).trim();
+
+        var toConnect = [];
+        if (chosenScan.indexOf("⚡") === 0 || chosenScan.indexOf("[Connect All]") !== -1) {
+            toConnect = missingConnections;
+        } else {
+            var selectedNum = parseInt(chosenScan.split(".")[0], 10);
+            if (!isNaN(selectedNum) && selectedNum >= 1 && selectedNum <= missingConnections.length) {
+                toConnect.push(missingConnections[selectedNum - 1]);
+            } else {
+                toConnect = [missingConnections[0]];
+            }
+        }
+
+        var connectedCount = 0;
+        for (var cIdx = 0; cIdx < toConnect.length; cIdx++) {
+            var conn = toConnect[cIdx];
+            var archRel = null;
+
+            // Check if relationship concept already exists in model tree
+            $(conn.sourceVisual.concept).outRels(conn.jRelType).each(function(r) {
+                if (r.target && (r.target.id === conn.targetVisual.concept.id || r.target.name === conn.targetVisual.concept.name)) {
+                    archRel = r;
+                }
+            });
+
+            if (!archRel) {
+                try {
+                    archRel = model.createRelationship(conn.jRelType, conn.relName, conn.sourceVisual.concept, conn.targetVisual.concept);
+                } catch(creErr3) {
+                    try { archRel = model.createRelationship("association-relationship", conn.relName, conn.sourceVisual.concept, conn.targetVisual.concept); } catch(e4) {}
+                }
+            }
+
+            if (archRel && activeView) {
+                try {
+                    activeView.add(archRel, conn.sourceVisual, conn.targetVisual);
+                    connectedCount++;
+                    console.log("✓ Connected: " + conn.sourceName + " -> " + conn.relType + " -> " + conn.targetName);
+                } catch(vAddErr) {
+                    console.log("Note on adding visual link: " + vAddErr);
+                }
+            }
+        }
+
+        // Save model safely
+        try {
+            var rawM2 = getRawModel(model);
+            if (rawM2) {
+                if (typeof rawM2.eResource === "function" && rawM2.eResource() !== null) {
+                    try { rawM2.eResource().save(null); } catch(erErr2) {}
+                }
+                try { IEditorModelManager.INSTANCE.saveModel(rawM2); } catch(smErr2) {}
+            }
+        } catch(sErr2) {}
+
+        window.alert(
+            "Smart Relationship Connections Completed!\n\n" +
+            "• " + connectedCount + " relationship connection(s) drawn automatically on diagram view."
+        );
+
+    } catch (e) {
+        var errStr = "Error during Smart Relationship Suggestion:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

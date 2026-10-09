@@ -273,9 +273,6 @@
             // Close model in Archi
             if (matchedOpenModel) {
                 try {
-                    if (IEditorModelManager.INSTANCE.isModelDirty(matchedOpenModel)) {
-                        try { IEditorModelManager.INSTANCE.saveModel(matchedOpenModel); } catch(sErr) {}
-                    }
                     IEditorModelManager.INSTANCE.closeModel(matchedOpenModel);
                     console.log("✓ Model closed in Archi.");
                 } catch(closeErr) {

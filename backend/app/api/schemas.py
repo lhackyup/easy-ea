@@ -25,6 +25,10 @@ from app.services.drawio_service import (
     parse_drawio_file_to_canonical_model,
     generate_drawio_archimate_library_xml
 )
+from app.services.bpmn_service import (
+    export_schema_to_bpmn_xml,
+    parse_bpmn_file_to_canonical_model
+)
 
 router = APIRouter(prefix="/schemas", tags=["schemas"])
 
@@ -91,6 +95,7 @@ class SchemaMoveRequest(BaseModel):
 class CheckinConfirmRequest(BaseModel):
     file_content: Optional[str] = None
     xml_content: Optional[str] = None
+    raw_xml: Optional[str] = None
     commit_message: Optional[str] = "Aggiornamento schema"
     attribute_resolutions: Optional[List[Dict[str, Any]]] = None
     catalog_removals: Optional[List[Dict[str, Any]]] = None
@@ -251,6 +256,78 @@ def _serialize_schema(s: ArchiSchema) -> Dict[str, Any]:
     }
 
 
+@router.get("/tree")
+def get_schemas_tree(
+    model_id: Optional[str] = Query(None, description="Filter by workspace model_id"),
+    format: Optional[str] = Query(None, description="Filter by format: bpmn, drawio, archi, all"),
+    status: Optional[str] = Query(None, description="Filter by status: available, checked_out"),
+    search: Optional[str] = Query(None, description="Search query string"),
+    db: Session = Depends(get_db)
+):
+    """Unified endpoint to retrieve schemas tree and lists across folders and workspaces."""
+    query = db.query(ArchiSchema)
+    if model_id and model_id != "all":
+        query = query.filter(ArchiSchema.model_id == model_id)
+    if format and format != "all":
+        query = query.filter(ArchiSchema.format == format)
+    if status and status != "all":
+        query = query.filter(ArchiSchema.status == status)
+    if search:
+        term = f"%{search}%"
+        query = query.filter(
+            (ArchiSchema.name.ilike(term)) |
+            (ArchiSchema.documentation.ilike(term)) |
+            (ArchiSchema.viewpoint.ilike(term))
+        )
+
+    schemas = query.order_by(ArchiSchema.name.asc()).all()
+
+    f_query = db.query(SchemaFolder)
+    if model_id and model_id != "all":
+        f_query = f_query.filter(SchemaFolder.model_id == model_id)
+    folders = f_query.order_by(SchemaFolder.order_index.asc(), SchemaFolder.name.asc()).all()
+
+    workspaces = {ws.id: ws.name for ws in db.query(ModelWorkspace).all()}
+
+    serialized_schemas = []
+    for s in schemas:
+        item = _serialize_schema(s)
+        item["workspace_name"] = workspaces.get(s.model_id, s.model_id)
+        serialized_schemas.append(item)
+
+    folder_map = {}
+    for f in folders:
+        folder_map[f.id] = {
+            "id": f.id,
+            "name": f.name,
+            "model_id": f.model_id,
+            "parent_id": f.parent_id,
+            "schemas": [],
+            "children": []
+        }
+
+    root_schemas = []
+    for s in serialized_schemas:
+        if s.get("folder_id") and s["folder_id"] in folder_map:
+            folder_map[s["folder_id"]]["schemas"].append(s)
+        else:
+            root_schemas.append(s)
+
+    root_folders = []
+    for f_id, f_data in folder_map.items():
+        if f_data["parent_id"] and f_data["parent_id"] in folder_map:
+            folder_map[f_data["parent_id"]]["children"].append(f_data)
+        else:
+            root_folders.append(f_data)
+
+    return {
+        "schemas": serialized_schemas,
+        "root_folders": root_folders,
+        "root_schemas": root_schemas,
+        "total_count": len(serialized_schemas)
+    }
+
+
 @router.get("/{model_id}/list")
 def list_schemas(
     model_id: str,
@@ -359,11 +436,20 @@ async def import_schema_file(
         or "<mxfile" in xml_str
         or "<mxGraphModel" in xml_str
     )
+    is_bpmn = (
+        file.filename.lower().endswith(".bpmn")
+        or "<bpmn:" in xml_str
+        or "<bpmn2:" in xml_str
+        or "<definitions" in xml_str
+    )
 
     try:
         if is_drawio:
             parsed = parse_drawio_file_to_canonical_model(xml_str)
             schema_format = "drawio"
+        elif is_bpmn:
+            parsed = parse_bpmn_file_to_canonical_model(xml_str)
+            schema_format = "bpmn"
         else:
             parser = ArchiModelParser(xml_str)
             parsed = parser.parse()
@@ -371,7 +457,7 @@ async def import_schema_file(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Errore di parsing del file di schema: {str(e)}")
 
-    name = schema_name or parsed.get("name") or file.filename.replace(".archimate", "").replace(".drawio", "").replace(".xml", "")
+    name = schema_name or parsed.get("name") or file.filename.replace(".archimate", "").replace(".drawio", "").replace(".bpmn", "").replace(".xml", "")
     views = parsed.get("views", [])
     first_view = views[0] if views else {}
     view_data = first_view.get("view_data", {"nodes": [], "connections": []})
@@ -566,21 +652,28 @@ def checkout_schema(
     db.refresh(schema)
 
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first()
+    is_bpmn = (getattr(schema, "format", "archi") == "bpmn") or (ws and getattr(ws, "modeling_tool", "archi") in ["bpmn", "camunda"])
     is_drawio = (getattr(schema, "format", "archi") == "drawio") or (ws and getattr(ws, "modeling_tool", "archi") == "drawio")
 
     safe_name = schema.name.replace(" ", "_").replace("/", "_")
-    if is_drawio:
+    if is_bpmn:
+        xml_content = export_schema_to_bpmn_xml(schema, db)
+        filename = f"{safe_name}.bpmn"
+        format_type = "bpmn"
+    elif is_drawio:
         xml_content = export_schema_to_drawio_xml(schema, db)
         filename = f"{safe_name}.drawio"
+        format_type = "drawio"
     else:
         xml_content = generate_standalone_archi_xml(schema, db)
         filename = f"{safe_name}.archimate"
+        format_type = "archi"
 
     return {
         "schema": _serialize_schema(schema),
         "filename": filename,
         "xml_content": xml_content,
-        "format": "drawio" if is_drawio else "archi"
+        "format": format_type
     }
 
 
@@ -589,16 +682,21 @@ def download_schema_xml(
     schema_id: str,
     db: Session = Depends(get_db)
 ):
-    """Download schema XML (.archimate or .drawio) without locking."""
+    """Download schema XML (.archimate, .drawio, or .bpmn) without locking."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
 
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first()
+    is_bpmn = (getattr(schema, "format", "archi") == "bpmn") or (ws and getattr(ws, "modeling_tool", "archi") in ["bpmn", "camunda"])
     is_drawio = (getattr(schema, "format", "archi") == "drawio") or (ws and getattr(ws, "modeling_tool", "archi") == "drawio")
     safe_name = schema.name.replace(" ", "_").replace("/", "_")
 
-    if is_drawio:
+    if is_bpmn:
+        xml_content = export_schema_to_bpmn_xml(schema, db)
+        filename = f"{safe_name}.bpmn"
+        media_type = "application/xml"
+    elif is_drawio:
         xml_content = export_schema_to_drawio_xml(schema, db)
         filename = f"{safe_name}.drawio"
         media_type = "application/xml"
@@ -707,14 +805,21 @@ async def checkin_diff(
     content = await file.read()
     xml_str = content.decode("utf-8", errors="ignore")
 
-    is_drawio = (
-        file.filename.lower().endswith(".drawio")
+    is_bpmn = (
+        (file.filename and file.filename.lower().endswith(".bpmn"))
+        or "<bpmn:definitions" in xml_str
+        or "<definitions" in xml_str and "bpmn" in xml_str
+    )
+    is_drawio = not is_bpmn and (
+        (file.filename and file.filename.lower().endswith(".drawio"))
         or "<mxfile" in xml_str
         or "<mxGraphModel" in xml_str
     )
 
     try:
-        if is_drawio:
+        if is_bpmn:
+            parsed = parse_bpmn_file_to_canonical_model(xml_str)
+        elif is_drawio:
             parsed = parse_drawio_file_to_canonical_model(xml_str)
         else:
             parser = ArchiModelParser(xml_str)
@@ -724,7 +829,12 @@ async def checkin_diff(
 
     diff_result = compute_schema_diff(schema, parsed, db)
     diff_result["xml_content"] = xml_str
-    diff_result["format"] = "drawio" if is_drawio else "archi"
+    if is_bpmn:
+        diff_result["format"] = "bpmn"
+    elif is_drawio:
+        diff_result["format"] = "drawio"
+    else:
+        diff_result["format"] = "archi"
     return diff_result
 
 
@@ -751,7 +861,7 @@ def checkin_confirm(
         )
 
     model_id = schema.model_id
-    raw_xml_text = payload.file_content or payload.xml_content
+    raw_xml_text = payload.raw_xml or payload.file_content or payload.xml_content
 
     # If raw XML is provided, parse it and compute diff to ensure all new elements & relationships are captured
     parsed_model = None
@@ -761,6 +871,8 @@ def checkin_confirm(
         try:
             if "<mxfile" in raw_xml_text or "<mxGraphModel" in raw_xml_text:
                 parsed_model = parse_drawio_file_to_canonical_model(raw_xml_text)
+            elif "<bpmn:" in raw_xml_text or "<bpmn2:" in raw_xml_text or "<definitions" in raw_xml_text or schema.format == "bpmn":
+                parsed_model = parse_bpmn_file_to_canonical_model(raw_xml_text)
             else:
                 parser = ArchiModelParser(raw_xml_text)
                 parsed_model = parser.parse()
@@ -836,7 +948,7 @@ def checkin_confirm(
     # 2. Insert new elements confirmed
     if payload.new_elements:
         for ne in payload.new_elements:
-            xml_id = ne.get("xml_id")
+            xml_id = ne.get("xml_id") or ne.get("id")
             el_name = (ne.get("name") or "").strip()
             el_type = ne.get("type") or "ApplicationComponent"
 
@@ -865,16 +977,45 @@ def checkin_confirm(
             if xml_id:
                 xml_to_db_id_map[xml_id] = new_id
 
+    # Flush so all new element IDs exist in DB for relationships
+    db.flush()
+
     # 3. Insert new relationships confirmed
     if payload.new_relationships:
         for nr in payload.new_relationships:
-            src_xml = nr.get("source_xml_id")
-            tgt_xml = nr.get("target_xml_id")
+            src_xml = nr.get("source_xml_id") or nr.get("source_id")
+            tgt_xml = nr.get("target_xml_id") or nr.get("target_id")
             src_id = xml_to_db_id_map.get(src_xml, src_xml)
             tgt_id = xml_to_db_id_map.get(tgt_xml, tgt_xml)
             rel_type = nr.get("type") or "AssociationRelationship"
 
-            if src_id and tgt_id:
+            # Verify that source and target exist
+            src_exists = db.query(ArchimateElement).filter(
+                ArchimateElement.id == src_id,
+                ArchimateElement.model_id == model_id
+            ).first()
+            tgt_exists = db.query(ArchimateElement).filter(
+                ArchimateElement.id == tgt_id,
+                ArchimateElement.model_id == model_id
+            ).first()
+
+            if not src_exists and src_xml:
+                src_exists = db.query(ArchimateElement).filter(
+                    ArchimateElement.name == nr.get("source_name", src_xml),
+                    ArchimateElement.model_id == model_id
+                ).first()
+                if src_exists:
+                    src_id = src_exists.id
+
+            if not tgt_exists and tgt_xml:
+                tgt_exists = db.query(ArchimateElement).filter(
+                    ArchimateElement.name == nr.get("target_name", tgt_xml),
+                    ArchimateElement.model_id == model_id
+                ).first()
+                if tgt_exists:
+                    tgt_id = tgt_exists.id
+
+            if src_exists and tgt_exists:
                 existing_rel = db.query(ArchimateRelationship).filter(
                     ArchimateRelationship.model_id == model_id,
                     ArchimateRelationship.source_id == src_id,

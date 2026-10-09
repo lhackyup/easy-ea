@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { SchemaFolder, ArchiSchema, ArchimateElementItem } from '../../types';
+import { SchemaFolder, ArchiSchema, ArchimateElementItem, ModelWorkspace } from '../../types';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -9,6 +9,7 @@ import { SchemaVersionHistoryModal } from './SchemaVersionHistoryModal';
 import { CreateSchemaModal } from './CreateSchemaModal';
 import { ArchiPluginModal } from './ArchiPluginModal';
 import { DrawioPaletteModal } from './DrawioPaletteModal';
+import { CamundaPluginModal } from './CamundaPluginModal';
 import {
   Folder,
   FolderPlus,
@@ -33,7 +34,8 @@ import {
   CheckCircle2,
   Move,
   Cpu,
-  Palette
+  Palette,
+  Workflow
 } from 'lucide-react';
 
 interface SchemaRepositoryProps {
@@ -47,6 +49,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   const [folders, setFolders] = useState<SchemaFolder[]>([]);
   const [schemas, setSchemas] = useState<ArchiSchema[]>([]);
   const [elements, setElements] = useState<ArchimateElementItem[]>([]);
+  const [modelWorkspace, setModelWorkspace] = useState<ModelWorkspace | null>(null);
   const [selectedFolderId, setSelectedFolderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -56,6 +59,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isPluginModalOpen, setIsPluginModalOpen] = useState(false);
   const [isDrawioPaletteOpen, setIsDrawioPaletteOpen] = useState(false);
+  const [isCamundaModalOpen, setIsCamundaModalOpen] = useState(false);
   const [previewSchema, setPreviewSchema] = useState<ArchiSchema | null>(null);
   const [checkinSchema, setCheckinSchema] = useState<ArchiSchema | null>(null);
   const [historySchema, setHistorySchema] = useState<ArchiSchema | null>(null);
@@ -89,14 +93,18 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   const loadData = async () => {
     setLoading(true);
     try {
-      const [fList, sList, eList] = await Promise.all([
+      const [fList, sList, eList, mDetail] = await Promise.all([
         api.getSchemaFolders(modelId),
         api.getSchemas(modelId),
-        api.getElements(modelId).catch(() => [])
+        api.getElements(modelId).catch(() => []),
+        api.getModelDetail(modelId).catch(() => null)
       ]);
       setFolders(fList);
       setSchemas(sList);
       setElements(eList);
+      if (mDetail) {
+        setModelWorkspace(mDetail);
+      }
     } catch (err: any) {
       console.error(err);
       showToast(err.message || 'Errore nel caricamento dei dati del repository', 'error');
@@ -596,26 +604,38 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <option value="checked_out">🔒 In Check-out</option>
             </select>
 
-            {/* Archi Plugin Button */}
-            <button
-              type="button"
-              onClick={() => setIsPluginModalOpen(true)}
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-slate-300"
-              title="Scarica e configura il plugin per Architool (jArchi)"
-            >
-              <Cpu className="w-4 h-4 text-indigo-400" />
-              <span>Plugin Archi</span>
-            </button>
+            {/* Tool-specific Plugin Button: Archi vs Draw.io */}
+            {modelWorkspace?.modeling_tool === 'drawio' ? (
+              <button
+                type="button"
+                onClick={() => setIsDrawioPaletteOpen(true)}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-amber-200"
+                title="Scarica la Palette ArchiMate 3.x per Draw.io Desktop"
+              >
+                <Palette className="w-4 h-4 text-amber-200" />
+                <span>Palette Draw.io</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsPluginModalOpen(true)}
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-slate-300"
+                title="Scarica e configura il plugin per Architool (jArchi)"
+              >
+                <Cpu className="w-4 h-4 text-indigo-400" />
+                <span>Plugin Archi</span>
+              </button>
+            )}
 
-            {/* Draw.io Palette Button */}
+            {/* Camunda Modeler BPMN 2.0 Plugin Button */}
             <button
               type="button"
-              onClick={() => setIsDrawioPaletteOpen(true)}
-              className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-amber-200"
-              title="Scarica la Palette ArchiMate 3.x per Draw.io Desktop"
+              onClick={() => setIsCamundaModalOpen(true)}
+              className="px-3.5 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-orange-200"
+              title="Scarica e configura il plugin per Camunda Modeler Desktop (BPMN 2.0)"
             >
-              <Palette className="w-4 h-4 text-amber-200" />
-              <span>Palette Draw.io</span>
+              <Workflow className="w-4 h-4 text-orange-200" />
+              <span>Plugin Camunda</span>
             </button>
 
             {/* New Schema Button */}
@@ -903,6 +923,12 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
         <DrawioPaletteModal
           isOpen={isDrawioPaletteOpen}
           onClose={() => setIsDrawioPaletteOpen(false)}
+        />
+      )}
+      {isCamundaModalOpen && (
+        <CamundaPluginModal
+          isOpen={isCamundaModalOpen}
+          onClose={() => setIsCamundaModalOpen(false)}
         />
       )}
     </div>

@@ -1,0 +1,295 @@
+/**
+ * EasyEA - Mass Tagging & Metamodel Batch Property Editor (jArchi)
+ * 
+ * Allows enterprise architects to bulk-edit and tag multiple ArchiMate elements
+ * simultaneously with standardized APM attributes (TIME Quadrant, Lifecycle,
+ * Business Criticality, Ownership, Hosting, Data Classification, SLA, Cost)
+ * and custom metadata tags directly inside Archi.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Batch Property Editor ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var Scanner = Java.type("java.util.Scanner");
+    var IArchimateFactory = Java.type("com.archimatetool.model.IArchimateFactory");
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    function setSafeProperty(targetConcept, key, value) {
+        if (!targetConcept || value === undefined || value === null) return false;
+        var strVal = ("" + value).trim();
+        if (strVal.length === 0) return false;
+
+        var actualConcept = targetConcept.concept ? targetConcept.concept : targetConcept;
+        var raw = getRawModel(actualConcept);
+        if (!raw) raw = actualConcept;
+        if (raw && typeof raw.getConcept === "function") {
+            try { var c = raw.getConcept(); if (c) raw = c; } catch(e) {}
+        }
+
+        var updated = false;
+        try {
+            if (raw && typeof raw.getProperties === "function") {
+                var propsList = raw.getProperties();
+                var existingProp = null;
+                for (var pi = 0; pi < propsList.size(); pi++) {
+                    var p = propsList.get(pi);
+                    if (p && ("" + p.getKey()) === ("" + key)) {
+                        existingProp = p;
+                        break;
+                    }
+                }
+                if (existingProp) {
+                    existingProp.setValue(strVal);
+                    updated = true;
+                } else {
+                    var newP = IArchimateFactory.eINSTANCE.createProperty();
+                    newP.setKey(key);
+                    newP.setValue(strVal);
+                    propsList.add(newP);
+                    updated = true;
+                }
+            }
+        } catch(emfErr) {
+            console.log("Direct EMF Property note: " + emfErr);
+        }
+
+        if (!updated) {
+            try {
+                if (typeof actualConcept.prop === "function") {
+                    actualConcept.prop(key, strVal);
+                    updated = true;
+                }
+            } catch(jErr) {}
+        }
+        return updated;
+    }
+
+    try {
+        var config = loadConfig();
+        if (typeof model === "undefined" || !model) {
+            window.alert("Please open an ArchiMate model in Archi first.");
+            return;
+        }
+
+        // 1. Identify Target Elements
+        var targetElements = [];
+        if (typeof selection !== "undefined" && selection) {
+            $(selection).each(function(item) {
+                var concept = item.concept ? item.concept : item;
+                if (concept && typeof concept.type !== "undefined" && concept.type.indexOf("relationship") === -1) {
+                    targetElements.push(concept);
+                }
+            });
+        }
+
+        // If no selection, prompt for scope
+        if (targetElements.length === 0) {
+            var scopeChoices = [
+                "1. All elements in the active diagram view",
+                "2. All Application Components in model",
+                "3. All Business Processes in model",
+                "4. All Business Services & Application Services in model",
+                "5. All Technology Nodes / Devices in model",
+                "6. All elements across the entire model"
+            ];
+
+            var chosenScope = window.promptSelection(
+                "Batch Property Editor - Select Target Scope:\n\n" +
+                "No elements are currently selected. Choose which elements to bulk-edit:",
+                scopeChoices
+            );
+
+            if (!chosenScope) return;
+            chosenScope = ("" + chosenScope).trim();
+
+            if (chosenScope.indexOf("1.") === 0) {
+                var activeView = null;
+                $(model).find("archimate-diagram-model").each(function(v) {
+                    if (!activeView) activeView = v;
+                });
+                if (activeView) {
+                    $(activeView).find("element").each(function(e) {
+                        targetElements.push(e.concept ? e.concept : e);
+                    });
+                }
+            } else if (chosenScope.indexOf("2.") === 0) {
+                $(model).find("application-component").each(function(e) { targetElements.push(e); });
+            } else if (chosenScope.indexOf("3.") === 0) {
+                $(model).find("business-process").each(function(e) { targetElements.push(e); });
+            } else if (chosenScope.indexOf("4.") === 0) {
+                $(model).find("business-service").each(function(e) { targetElements.push(e); });
+                $(model).find("application-service").each(function(e) { targetElements.push(e); });
+            } else if (chosenScope.indexOf("5.") === 0) {
+                $(model).find("node").each(function(e) { targetElements.push(e); });
+                $(model).find("device").each(function(e) { targetElements.push(e); });
+                $(model).find("system-software").each(function(e) { targetElements.push(e); });
+            } else if (chosenScope.indexOf("6.") === 0) {
+                $(model).find("element").each(function(e) { targetElements.push(e); });
+            }
+        }
+
+        // Deduplicate target elements
+        var uniqueElements = [];
+        var seenIds = {};
+        for (var i = 0; i < targetElements.length; i++) {
+            var el = targetElements[i];
+            if (el && el.id && !seenIds[el.id]) {
+                seenIds[el.id] = true;
+                uniqueElements.push(el);
+            }
+        }
+
+        if (uniqueElements.length === 0) {
+            window.alert("No elements found matching the selected scope.");
+            return;
+        }
+
+        // 2. Select Attribute / Property to Bulk Update
+        var propChoices = [
+            "1. TIME_Quadrant (Tolerate / Invest / Migrate / Eliminate)",
+            "2. Lifecycle_Status (Plan / Develop / Production / Phase-Out / Retired)",
+            "3. Business_Criticality (Mission Critical / High / Medium / Low)",
+            "4. Hosting_Type (AWS / Azure / GCP / On-Premises / Hybrid / SaaS)",
+            "5. Data_Classification (Public / Internal / Confidential / Restricted)",
+            "6. SLA_Level (Gold / Silver / Bronze / Best Effort)",
+            "7. Business_Owner (Organization / Department / Owner)",
+            "8. Technical_Owner (Lead Architect / Team / Engineer)",
+            "9. Annual_Cost_EUR (Annual Run & Licensing Cost)",
+            "10. Custom Property / Tag (Define custom key and value)"
+        ];
+
+        var chosenProp = window.promptSelection(
+            "Batch Property Editor (" + uniqueElements.length + " element(s) selected)\n\n" +
+            "Select the attribute to bulk-assign:",
+            propChoices
+        );
+
+        if (!chosenProp) return;
+        chosenProp = ("" + chosenProp).trim();
+
+        var propKey = "";
+        var propValue = "";
+
+        if (chosenProp.indexOf("1.") === 0) {
+            propKey = "TIME_Quadrant";
+            var timeVals = ["Invest", "Tolerate", "Migrate", "Eliminate"];
+            propValue = window.promptSelection("Select TIME Quadrant value for " + uniqueElements.length + " element(s):", timeVals);
+        } else if (chosenProp.indexOf("2.") === 0) {
+            propKey = "Lifecycle_Status";
+            var lifeVals = ["Production", "Develop", "Plan", "Phase-Out", "Retired"];
+            propValue = window.promptSelection("Select Lifecycle Status for " + uniqueElements.length + " element(s):", lifeVals);
+        } else if (chosenProp.indexOf("3.") === 0) {
+            propKey = "Business_Criticality";
+            var critVals = ["Tier 0 - Mission Critical", "Tier 1 - High", "Tier 2 - Medium", "Tier 3 - Low"];
+            propValue = window.promptSelection("Select Business Criticality for " + uniqueElements.length + " element(s):", critVals);
+        } else if (chosenProp.indexOf("4.") === 0) {
+            propKey = "Hosting_Type";
+            var hostVals = ["Cloud - AWS", "Cloud - Azure", "Cloud - GCP", "On-Premises", "Hybrid", "SaaS"];
+            propValue = window.promptSelection("Select Hosting Type for " + uniqueElements.length + " element(s):", hostVals);
+        } else if (chosenProp.indexOf("5.") === 0) {
+            propKey = "Data_Classification";
+            var dataVals = ["Confidential", "Internal", "Public", "Restricted / GDPR"];
+            propValue = window.promptSelection("Select Data Classification for " + uniqueElements.length + " element(s):", dataVals);
+        } else if (chosenProp.indexOf("6.") === 0) {
+            propKey = "SLA_Level";
+            var slaVals = ["Gold (99.99%)", "Silver (99.9%)", "Bronze (99.0%)", "Best Effort"];
+            propValue = window.promptSelection("Select SLA Level for " + uniqueElements.length + " element(s):", slaVals);
+        } else if (chosenProp.indexOf("7.") === 0) {
+            propKey = "Business_Owner";
+            propValue = window.prompt("Enter Business Owner name or department for " + uniqueElements.length + " element(s):", "Digital Banking Department");
+        } else if (chosenProp.indexOf("8.") === 0) {
+            propKey = "Technical_Owner";
+            propValue = window.prompt("Enter Technical Owner name or team for " + uniqueElements.length + " element(s):", "Core Architecture Team");
+        } else if (chosenProp.indexOf("9.") === 0) {
+            propKey = "Annual_Cost_EUR";
+            propValue = window.prompt("Enter Annual Cost in EUR (e.g. 50000) for " + uniqueElements.length + " element(s):", "50000");
+        } else if (chosenProp.indexOf("10.") === 0) {
+            propKey = window.prompt("Enter Custom Property Key name:", "Environment");
+            if (propKey && propKey.trim().length > 0) {
+                propKey = propKey.trim();
+                propValue = window.prompt("Enter Value for property '" + propKey + "':", "Production");
+            }
+        }
+
+        if (!propKey || propValue === null || propValue === undefined || ("" + propValue).trim().length === 0) {
+            console.log("Batch Property edit cancelled or empty value entered.");
+            return;
+        }
+
+        propKey = ("" + propKey).trim();
+        propValue = ("" + propValue).trim();
+
+        // 3. Apply Batch Update
+        console.log("Applying '" + propKey + " = " + propValue + "' across " + uniqueElements.length + " element(s)...");
+        var appliedCount = 0;
+        for (var u = 0; u < uniqueElements.length; u++) {
+            var elObj = uniqueElements[u];
+            if (setSafeProperty(elObj, propKey, propValue)) {
+                appliedCount++;
+                console.log("✓ [" + (u + 1) + "/" + uniqueElements.length + "] Updated " + elObj.name + ": " + propKey + " = " + propValue);
+            }
+        }
+
+        // 4. Save Model Safely
+        try {
+            var rawM = getRawModel(model);
+            if (rawM) {
+                if (typeof rawM.eResource === "function" && rawM.eResource() !== null) {
+                    try { rawM.eResource().save(null); } catch(erErr) {}
+                }
+                try { IEditorModelManager.INSTANCE.saveModel(rawM); } catch(smErr) {}
+            }
+        } catch(sErr) {}
+
+        window.alert(
+            "Batch Property Update Completed!\n\n" +
+            "• Property: " + propKey + "\n" +
+            "• Value: " + propValue + "\n" +
+            "• Total Elements Updated: " + appliedCount + " of " + uniqueElements.length + "\n\n" +
+            "The updated attributes are visible in the Archi Properties panel and will be synced to EasyEA during check-in."
+        );
+
+    } catch (e) {
+        var errStr = "Error during Batch Property Editing:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

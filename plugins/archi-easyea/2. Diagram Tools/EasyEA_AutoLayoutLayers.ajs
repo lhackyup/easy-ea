@@ -1,0 +1,311 @@
+/**
+ * EasyEA - Auto-Layout & Architectural Layer Organizer (jArchi)
+ * 
+ * Automatically structures and aligns ArchiMate diagram views into standard
+ * layered architecture blueprints (Strategy -> Business -> Application -> Technology -> Implementation),
+ * eliminating visual clutter, resolving overlapping boxes, and normalizing grid dimensions.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Auto-Layout & Layer Organizer ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var Scanner = Java.type("java.util.Scanner");
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    function getRawModel(m) {
+        if (!m) return null;
+        if (typeof m.getEObject === "function") {
+            try { var obj = m.getEObject(); if (obj) return obj; } catch(e) {}
+        }
+        if (m.eObject) return m.eObject;
+        return m;
+    }
+
+    // ArchiMate 3 Architectural Layers Definition
+    var LAYERS = [
+        {
+            id: "strategy",
+            name: "Strategy & Motivation Layer",
+            order: 1,
+            types: [
+                "goal", "outcome", "driver", "assessment", "principle", 
+                "requirement", "constraint", "capability", "value-stream", 
+                "course-of-action", "resource", "meaning", "value", "stakeholder"
+            ]
+        },
+        {
+            id: "business",
+            name: "Business Layer",
+            order: 2,
+            types: [
+                "business-actor", "business-role", "business-collaboration", 
+                "business-interface", "business-process", "business-function", 
+                "business-interaction", "business-event", "business-service", 
+                "business-object", "contract", "representation", "product"
+            ]
+        },
+        {
+            id: "application",
+            name: "Application Layer",
+            order: 3,
+            types: [
+                "application-component", "application-collaboration", 
+                "application-interface", "application-function", 
+                "application-interaction", "application-process", 
+                "application-event", "application-service", "data-object"
+            ]
+        },
+        {
+            id: "technology",
+            name: "Technology & Physical Layer",
+            order: 4,
+            types: [
+                "node", "device", "system-software", "technology-collaboration", 
+                "technology-interface", "technology-function", "technology-process", 
+                "technology-interaction", "technology-event", "technology-service", 
+                "artifact", "communication-network", "path", "equipment", 
+                "facility", "distribution-network", "material"
+            ]
+        },
+        {
+            id: "implementation",
+            name: "Implementation & Migration Layer",
+            order: 5,
+            types: [
+                "work-package", "deliverable", "event", "implementation-event", 
+                "plateau", "gap"
+            ]
+        },
+        {
+            id: "other",
+            name: "Generic & Grouping Layer",
+            order: 6,
+            types: [
+                "grouping", "location", "and-junction", "or-junction"
+            ]
+        }
+    ];
+
+    function getLayerForType(typeStr) {
+        if (!typeStr) return LAYERS[2]; // Default Application
+        var clean = ("" + typeStr).replace(/^archimate:/i, "").trim().toLowerCase();
+        for (var li = 0; li < LAYERS.length; li++) {
+            var l = LAYERS[li];
+            for (var ti = 0; ti < l.types.length; ti++) {
+                if (clean === l.types[ti] || clean.indexOf(l.types[ti]) !== -1) {
+                    return l;
+                }
+            }
+        }
+        return LAYERS[2];
+    }
+
+    try {
+        if (typeof model === "undefined" || !model) {
+            window.alert("Please open an ArchiMate model in Archi first.");
+            return;
+        }
+
+        // Active Diagram View
+        var activeView = null;
+        if (typeof selection !== "undefined" && selection && selection.view) {
+            activeView = selection.view;
+        }
+        if (!activeView) {
+            $(model).find("archimate-diagram-model").each(function(v) {
+                if (!activeView) activeView = v;
+            });
+        }
+        if (!activeView) {
+            window.alert("No active ArchiMate diagram view found in current model.");
+            return;
+        }
+
+        // Collect all top-level visual elements on diagram view
+        var visualElements = [];
+        $(activeView).children().each(function(v) {
+            if (v && v.concept && typeof v.concept.type !== "undefined" && v.concept.type.indexOf("relationship") === -1) {
+                visualElements.push(v);
+            }
+        });
+
+        if (visualElements.length === 0) {
+            window.alert("The active diagram view has no elements to organize.");
+            return;
+        }
+
+        // Layout Mode Choices
+        var modeChoices = [
+            "1. Standard Layered Architecture Blueprint (Strategy ➔ Business ➔ App ➔ Tech)",
+            "2. Tidy & Grid Alignment (Normalize sizes & snap to neat 20px grid)",
+            "3. Compact Matrix Layout (Dense 4-column architectural layout)"
+        ];
+
+        var chosenMode = window.promptSelection(
+            "Auto-Layout & Layer Organizer (" + visualElements.length + " elements detected)\n\n" +
+            "Select the desired layout strategy for view '" + activeView.name + "':",
+            modeChoices
+        );
+
+        if (!chosenMode) return;
+        chosenMode = ("" + chosenMode).trim();
+
+        var ELEMENT_WIDTH = 160;
+        var ELEMENT_HEIGHT = 65;
+        var SPACING_X = 35;
+        var SPACING_Y = 30;
+        var LAYER_PADDING_Y = 60;
+        var START_X = 40;
+        var START_Y = 40;
+        var MAX_COLS = 5;
+
+        // =========================================================================
+        // MODE 1 & 3: LAYERED ARCHITECTURAL BLUEPRINT
+        // =========================================================================
+        if (chosenMode.indexOf("1.") === 0 || chosenMode.indexOf("3.") === 0) {
+            if (chosenMode.indexOf("3.") === 0) {
+                MAX_COLS = 4;
+                SPACING_X = 25;
+                SPACING_Y = 20;
+                LAYER_PADDING_Y = 40;
+            }
+
+            // Group visual elements by Layer
+            var layerGroups = {};
+            for (var lIdx = 0; lIdx < LAYERS.length; lIdx++) {
+                layerGroups[LAYERS[lIdx].id] = [];
+            }
+
+            for (var vi = 0; vi < visualElements.length; vi++) {
+                var vis = visualElements[vi];
+                var lay = getLayerForType(vis.concept.type);
+                layerGroups[lay.id].push(vis);
+            }
+
+            var currentY = START_Y;
+            var repositionedCount = 0;
+            var activeLayersCount = 0;
+
+            for (var lg = 0; lg < LAYERS.length; lg++) {
+                var layerDef = LAYERS[lg];
+                var elementsInLayer = layerGroups[layerDef.id];
+
+                if (elementsInLayer.length === 0) continue;
+                activeLayersCount++;
+
+                console.log("Organizing " + layerDef.name + " (" + elementsInLayer.length + " element(s))...");
+
+                // Sort elements alphabetically within the layer for clean predictability
+                elementsInLayer.sort(function(a, b) {
+                    var nA = (a.concept && a.concept.name) ? a.concept.name.toLowerCase() : "";
+                    var nB = (b.concept && b.concept.name) ? b.concept.name.toLowerCase() : "";
+                    return nA.localeCompare(nB);
+                });
+
+                var row = 0;
+                var col = 0;
+
+                for (var ei = 0; ei < elementsInLayer.length; ei++) {
+                    var elemVis = elementsInLayer[ei];
+
+                    var posX = START_X + col * (ELEMENT_WIDTH + SPACING_X);
+                    var posY = currentY + row * (ELEMENT_HEIGHT + SPACING_Y);
+
+                    elemVis.bounds = {
+                        x: posX,
+                        y: posY,
+                        width: ELEMENT_WIDTH,
+                        height: ELEMENT_HEIGHT
+                    };
+
+                    repositionedCount++;
+                    col++;
+                    if (col >= MAX_COLS) {
+                        col = 0;
+                        row++;
+                    }
+                }
+
+                // Advance currentY for the next architectural layer
+                var layerTotalRows = (col === 0 && row > 0) ? row : (row + 1);
+                var layerHeight = layerTotalRows * (ELEMENT_HEIGHT + SPACING_Y);
+                currentY += layerHeight + LAYER_PADDING_Y;
+            }
+
+            // Save model safely
+            try {
+                var rawM = getRawModel(model);
+                if (rawM) {
+                    if (typeof rawM.eResource === "function" && rawM.eResource() !== null) {
+                        try { rawM.eResource().save(null); } catch(erErr) {}
+                    }
+                    try { IEditorModelManager.INSTANCE.saveModel(rawM); } catch(smErr) {}
+                }
+            } catch(sErr) {}
+
+            window.alert(
+                "Layered Auto-Layout Completed Successfully!\n\n" +
+                "• Layout Mode: Standard Layered Architecture\n" +
+                "• Elements Organized: " + repositionedCount + "\n" +
+                "• Architectural Layers Formatted: " + activeLayersCount + "\n\n" +
+                "Your diagram view '" + activeView.name + "' is now structured into a clean architectural blueprint."
+            );
+            return;
+        }
+
+        // =========================================================================
+        // MODE 2: TIDY & GRID ALIGNMENT
+        // =========================================================================
+        if (chosenMode.indexOf("2.") === 0) {
+            var GRID_SIZE = 20;
+            var alignedCount = 0;
+
+            for (var tg = 0; tg < visualElements.length; tg++) {
+                var tVis = visualElements[tg];
+                var b = tVis.bounds;
+                var curX = (b && typeof b.x === "number") ? b.x : START_X;
+                var curY = (b && typeof b.y === "number") ? b.y : START_Y;
+
+                // Snap to nearest 20px grid
+                var snapX = Math.max(20, Math.round(curX / GRID_SIZE) * GRID_SIZE);
+                var snapY = Math.max(20, Math.round(curY / GRID_SIZE) * GRID_SIZE);
+
+                tVis.bounds = {
+                    x: snapX,
+                    y: snapY,
+                    width: ELEMENT_WIDTH,
+                    height: ELEMENT_HEIGHT
+                };
+                alignedCount++;
+            }
+
+            // Save model safely
+            try {
+                var rawM2 = getRawModel(model);
+                if (rawM2) {
+                    if (typeof rawM2.eResource === "function" && rawM2.eResource() !== null) {
+                        try { rawM2.eResource().save(null); } catch(erErr2) {}
+                    }
+                    try { IEditorModelManager.INSTANCE.saveModel(rawM2); } catch(smErr2) {}
+                }
+            } catch(sErr2) {}
+
+            window.alert(
+                "Tidy Grid Alignment Completed!\n\n" +
+                "• " + alignedCount + " elements snapped to 20px grid and normalized to " + ELEMENT_WIDTH + "x" + ELEMENT_HEIGHT + "px."
+            );
+            return;
+        }
+
+    } catch (e) {
+        var errStr = "Error during Auto-Layout:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

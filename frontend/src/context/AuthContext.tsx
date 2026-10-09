@@ -19,9 +19,9 @@ const TOKEN_KEY = 'easyea_auth_token';
 const USER_KEY = 'easyea_auth_user';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [token, setToken] = useState<string | null>(() => sessionStorage.getItem(TOKEN_KEY));
   const [user, setUser] = useState<AuthUser | null>(() => {
-    const saved = localStorage.getItem(USER_KEY);
+    const saved = sessionStorage.getItem(USER_KEY);
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -37,6 +37,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Validate session and check URL query params for OAuth2 token on mount
   useEffect(() => {
     const initAuth = async () => {
+      // Clean up any legacy tokens stored in localStorage from previous versions
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+
       // 1. Check if OAuth redirect passed ?token=... or ?auth_error=...
       const searchParams = new URLSearchParams(window.location.search);
       const urlToken = searchParams.get('token');
@@ -48,15 +52,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         window.history.replaceState({}, document.title, window.location.pathname);
       }
 
-      const activeToken = urlToken || localStorage.getItem(TOKEN_KEY);
+      const activeToken = urlToken || sessionStorage.getItem(TOKEN_KEY);
 
       if (activeToken) {
         try {
           const freshUser = await api.getCurrentUser(activeToken);
           setToken(activeToken);
           setUser(freshUser);
-          localStorage.setItem(TOKEN_KEY, activeToken);
-          localStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+          sessionStorage.setItem(TOKEN_KEY, activeToken);
+          sessionStorage.setItem(USER_KEY, JSON.stringify(freshUser));
           setAuthError(null);
 
           // Clean URL if token was in query parameters
@@ -65,8 +69,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } catch (err) {
           console.warn('Session verification failed, logging out:', err);
-          localStorage.removeItem(TOKEN_KEY);
-          localStorage.removeItem(USER_KEY);
+          sessionStorage.removeItem(TOKEN_KEY);
+          sessionStorage.removeItem(USER_KEY);
           setToken(null);
           setUser(null);
         }
@@ -81,13 +85,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const data = await api.login({ username, password });
     setToken(data.token);
     setUser(data.user);
-    localStorage.setItem(TOKEN_KEY, data.token);
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setAuthError(null);
   };
 
   const logout = () => {
     api.logout().catch(() => {});
+    sessionStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     setToken(null);

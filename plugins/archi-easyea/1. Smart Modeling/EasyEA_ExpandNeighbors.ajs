@@ -337,22 +337,43 @@
             return;
         }
 
+        var chosenStr = ("" + chosenOption).trim();
         var toExpand = [];
-        if (chosenOption.indexOf("0.") === 0) {
+
+        if (chosenStr.indexOf("0.") === 0 || chosenStr.indexOf("[Expand ALL") !== -1) {
             toExpand = missingList;
         } else {
             for (var cj = 1; cj < choices.length; cj++) {
-                if (choices[cj] === chosenOption) {
+                var prefix = cj + ".";
+                var choiceStr = ("" + choices[cj]).trim();
+                if (chosenStr === choiceStr || chosenStr.indexOf(prefix) === 0 || choiceStr.indexOf(chosenStr) === 0) {
                     toExpand.push(missingList[cj - 1]);
                     break;
                 }
             }
         }
 
-        console.log("Instantiating and laying out " + toExpand.length + " elements...");
+        if (toExpand.length === 0) {
+            console.log("No matching element found to expand for selection: " + chosenStr);
+            window.alert("Unable to match selected neighbor: " + chosenStr);
+            return;
+        }
 
-        var baseX = (primaryVisual && primaryVisual.bounds) ? primaryVisual.bounds.x : 250;
-        var baseY = (primaryVisual && primaryVisual.bounds) ? primaryVisual.bounds.y : 250;
+        console.log("Instantiating and laying out " + toExpand.length + " element(s)...");
+
+        // Ensure primaryVisual is confirmed on targetView
+        var primaryVisualOnView = null;
+        $(targetView).children().each(function(v) {
+            if (v.concept && (v.concept.id === primaryConcept.id || v.concept.name === primaryConcept.name)) {
+                primaryVisualOnView = v;
+            }
+        });
+        if (primaryVisualOnView) {
+            primaryVisual = primaryVisualOnView;
+        }
+
+        var baseX = (primaryVisual && primaryVisual.bounds && !isNaN(primaryVisual.bounds.x)) ? primaryVisual.bounds.x : 250;
+        var baseY = (primaryVisual && primaryVisual.bounds && !isNaN(primaryVisual.bounds.y)) ? primaryVisual.bounds.y : 250;
         var addedNodes = 0;
         var connectedRels = 0;
 
@@ -363,7 +384,10 @@
             // Find or create in model tree
             var conceptObj = null;
             $(model).find("element").each(function(e) {
-                if (e.name === expItem.other_name) conceptObj = e;
+                var eId = $(e).prop("EasyEA_Element_ID");
+                if ((eId && eId === expItem.other_id) || e.name === expItem.other_name) {
+                    conceptObj = e;
+                }
             });
 
             if (!conceptObj) {
@@ -371,6 +395,7 @@
                     conceptObj = model.createElement(jType, expItem.other_name);
                     $(conceptObj).prop("EasyEA_Element_ID", expItem.other_id);
                     if (expItem.other_layer) $(conceptObj).prop("EasyEA_Layer", expItem.other_layer);
+                    console.log("✓ Created element in model tree: " + expItem.other_name + " (" + jType + ")");
                 } catch(ce) {
                     conceptObj = model.createElement("application-component", expItem.other_name);
                 }
@@ -379,44 +404,83 @@
             // Directional positioning: outgoing to the right/bottom, incoming to the left/top
             var angle = 0;
             if (toExpand.length === 1) {
-                angle = expItem.is_source ? 0 : Math.PI; // right for outgoing, left for incoming
+                angle = expItem.is_source ? 0 : Math.PI; // right (0 rad) for outgoing, left (PI rad) for incoming
             } else {
                 angle = (2 * Math.PI * te) / toExpand.length;
             }
 
             var radius = 220;
-            var posX = Math.max(20, Math.round(baseX + Math.cos(angle) * radius));
-            var posY = Math.max(20, Math.round(baseY + Math.sin(angle) * radius));
+            var posX = Math.max(30, Math.round(baseX + Math.cos(angle) * radius));
+            var posY = Math.max(30, Math.round(baseY + Math.sin(angle) * radius));
 
-            var newV = targetView.add(conceptObj, posX, posY, 150, 65);
-            addedNodes++;
+            // Check if visual node is already on the diagram view
+            var newV = null;
+            $(targetView).children().each(function(v) {
+                if (v.concept && (v.concept.id === conceptObj.id || v.concept.name === conceptObj.name)) {
+                    newV = v;
+                }
+            });
+
+            if (!newV) {
+                newV = targetView.add(conceptObj, posX, posY, 150, 65);
+                addedNodes++;
+                console.log("✓ Added visual node for '" + conceptObj.name + "' at (" + posX + ", " + posY + ")");
+            }
 
             // Connect relation
             var jRel = mapToJArchiRelType(expItem.rel_type);
             var src = expItem.is_source ? primaryVisual : newV;
             var tgt = expItem.is_source ? newV : primaryVisual;
 
-            try {
-                if (src && tgt) {
-                    var aRel = model.createRelationship(jRel, expItem.rel_name || "", src.concept, tgt.concept);
-                    targetView.add(aRel, src, tgt);
-                    connectedRels++;
-                    console.log("✓ Connected " + jRel + " between " + src.concept.name + " and " + tgt.concept.name);
+            var archRel = null;
+            // Check if relationship already exists in model
+            if (src && src.concept && tgt && tgt.concept) {
+                $(src.concept).outRels(jRel).each(function(r) {
+                    if (r.target && (r.target.id === tgt.concept.id || r.target.name === tgt.concept.name)) {
+                        archRel = r;
+                    }
+                });
+
+                if (!archRel) {
+                    $(model).find("relationship").each(function(r) {
+                        if (r.source && r.target && r.source.id === src.concept.id && r.target.id === tgt.concept.id && r.type === jRel) {
+                            archRel = r;
+                        }
+                    });
                 }
-            } catch(relErr) {
-                console.log("Note on relation drawing: " + relErr);
+
+                if (!archRel) {
+                    try {
+                        archRel = model.createRelationship(jRel, expItem.rel_name || "", src.concept, tgt.concept);
+                    } catch(crErr) {
+                        console.log("createRelationship note: " + crErr);
+                    }
+                }
+
+                if (archRel) {
+                    try {
+                        targetView.add(archRel, src, tgt);
+                        connectedRels++;
+                        console.log("✓ Connected " + jRel + " between '" + src.concept.name + "' and '" + tgt.concept.name + "'");
+                    } catch(relErr) {
+                        console.log("Note on relation drawing: " + relErr);
+                    }
+                }
             }
         }
 
         // Save model
         try {
             var rawM = getRawModel(model);
-            if (rawM && IEditorModelManager.INSTANCE.isModelDirty(rawM)) {
-                IEditorModelManager.INSTANCE.saveModel(rawM);
+            if (rawM) {
+                if (typeof rawM.eResource === "function" && rawM.eResource() !== null) {
+                    try { rawM.eResource().save(null); } catch(erSaveErr) {}
+                }
+                try { IEditorModelManager.INSTANCE.saveModel(rawM); } catch(imSaveErr) {}
             }
         } catch(se) {}
 
-        console.log("✓ Expand completed successfully: " + addedNodes + " node(s), " + connectedRels + " relation(s).");
+        console.log("✓ Expand completed successfully: " + addedNodes + " new node(s), " + connectedRels + " relation(s).");
         window.alert(
             "Expand Connected Neighbors Successful!\n\n" +
             "• " + addedNodes + " new element(s) placed on diagram.\n" +

@@ -45,7 +45,256 @@
         return config;
     }
 
+    function ensureShutdownHookRegistered() {
+        try {
+            if ("true".equals(System.getProperty("easyea.shutdown.hook.registered"))) {
+                return;
+            }
+
+            var PlatformUI = Java.type("org.eclipse.ui.PlatformUI");
+            var IWorkbenchListener = Java.type("org.eclipse.ui.IWorkbenchListener");
+            var MessageDialog = Java.type("org.eclipse.jface.dialogs.MessageDialog");
+            var Display = Java.type("org.eclipse.swt.widgets.Display");
+
+            var workbench = PlatformUI.getWorkbench();
+            if (!workbench) return;
+
+            var listener = new IWorkbenchListener({
+                preShutdown: function(wb, forced) {
+                    try {
+                        var userHome = System.getProperty("user.home");
+                        var schemasDir = new File(userHome, ".easyea/checked_out");
+                        if (!schemasDir.exists()) return true;
+
+                        var configFile = new File(userHome, ".easyea/config.json");
+                        var cfg = {};
+                        if (configFile.exists()) {
+                            try {
+                                var sc = new Scanner(configFile).useDelimiter("\\A");
+                                var cc = sc.hasNext() ? sc.next() : "{}";
+                                sc.close();
+                                cfg = JSON.parse(cc);
+                            } catch(e) {}
+                        }
+
+                        var checkedOutSchemas = [];
+                        var dirFiles = schemasDir.listFiles();
+                        if (dirFiles) {
+                            for (var i = 0; i < dirFiles.length; i++) {
+                                var f = dirFiles[i];
+                                if (f.getName().endsWith(".meta.json")) {
+                                    try {
+                                        var scanner = new Scanner(f).useDelimiter("\\A");
+                                        var content = scanner.hasNext() ? scanner.next() : "{}";
+                                        scanner.close();
+                                        var p = JSON.parse(content);
+                                        if (p.schema_id) {
+                                            var archFileName = f.getName().substring(0, f.getName().length - ".meta.json".length);
+                                            var archFile = new File(schemasDir, archFileName);
+                                            checkedOutSchemas.push({
+                                                schema_id: p.schema_id,
+                                                model_id: p.model_id || "",
+                                                library_name: p.library_name || "Active Library",
+                                                schema_name: p.schema_name || "Schema",
+                                                version: p.version || "v1.0",
+                                                meta_file: f,
+                                                archimate_file: archFile
+                                            });
+                                        }
+                                    } catch(e) {}
+                                }
+                            }
+                        }
+
+                        if (checkedOutSchemas.length === 0) {
+                            return true;
+                        }
+
+                        var shell = null;
+                        try {
+                            if (wb.getActiveWorkbenchWindow()) {
+                                shell = wb.getActiveWorkbenchWindow().getShell();
+                            }
+                        } catch(e) {}
+                        if (!shell) {
+                            try {
+                                var shells = Display.getDefault().getShells();
+                                if (shells && shells.length > 0) shell = shells[0];
+                            } catch(e2) {}
+                        }
+
+                        var schemaListMsg = "";
+                        for (var s = 0; s < checkedOutSchemas.length; s++) {
+                            schemaListMsg += " • " + checkedOutSchemas[s].schema_name + " [" + checkedOutSchemas[s].library_name + ", " + checkedOutSchemas[s].version + "]\n";
+                        }
+
+                        var dialogMsg = "You currently have " + checkedOutSchemas.length + " active schema checkout(s) with locked status on EasyEA:\n\n" +
+                            schemaListMsg + "\n" +
+                            "What would you like to do before closing Archi?";
+
+                        var btnLabels = Java.to([
+                            "Check-in All",
+                            "Discard Checkout (Release Locks)",
+                            "Keep Checkout & Exit",
+                            "Cancel (Stay in Archi)"
+                        ], "java.lang.String[]");
+
+                        var dialog = new MessageDialog(
+                            shell,
+                            "EasyEA - Active Checkout Guard",
+                            null,
+                            dialogMsg,
+                            MessageDialog.QUESTION,
+                            btnLabels,
+                            0
+                        );
+
+                        var choice = dialog.open();
+
+                        if (choice === 3 || choice < 0) {
+                            console.log("Archi shutdown cancelled by user to continue working on EasyEA models.");
+                            return false;
+                        }
+
+                        if (choice === 2) {
+                            console.log("Exiting Archi while keeping schema locks on EasyEA.");
+                            return true;
+                        }
+
+                        var hClient = HttpClient.newBuilder()
+                            .version(HttpClient.Version.HTTP_1_1)
+                            .build();
+
+                        if (choice === 0) {
+                            for (var ci = 0; ci < checkedOutSchemas.length; ci++) {
+                                var entry = checkedOutSchemas[ci];
+                                try {
+                                    var matchedOpenModel = null;
+                                    try {
+                                        var openModels = IEditorModelManager.INSTANCE.getModels();
+                                        for (var omIdx = 0; omIdx < openModels.size(); omIdx++) {
+                                            var om = openModels.get(omIdx);
+                                            var rawOm = (typeof om.getEObject === "function") ? om.getEObject() : om;
+                                            var fOm = (rawOm && typeof rawOm.getFile === "function") ? rawOm.getFile() : null;
+                                            if (fOm && entry.archimate_file && fOm.getAbsolutePath() === entry.archimate_file.getAbsolutePath()) {
+                                                matchedOpenModel = rawOm;
+                                                try {
+                                                    if (typeof rawOm.eResource === "function" && rawOm.eResource() !== null) {
+                                                        rawOm.eResource().save(null);
+                                                    }
+                                                    IEditorModelManager.INSTANCE.saveModel(rawOm);
+                                                } catch(smErr) {}
+                                                break;
+                                            }
+                                        }
+                                    } catch(omErr) {}
+
+                                    if (entry.archimate_file && entry.archimate_file.exists()) {
+                                        var xmlSc = new Scanner(entry.archimate_file).useDelimiter("\\A");
+                                        var xmlContent = xmlSc.hasNext() ? xmlSc.next() : "";
+                                        xmlSc.close();
+
+                                        if (xmlContent.length > 0 && cfg.token && cfg.server_url) {
+                                            var confirmPayload = JSON.stringify({
+                                                file_content: xmlContent,
+                                                xml_content: xmlContent,
+                                                commit_message: "Auto check-in on Archi close",
+                                                overwrite_attributes: true,
+                                                remove_deleted_from_catalog: false
+                                            });
+
+                                            var req = HttpRequest.newBuilder()
+                                                .uri(URI.create(cfg.server_url + "/api/schemas/" + entry.schema_id + "/checkin-confirm"))
+                                                .version(HttpClient.Version.HTTP_1_1)
+                                                .header("Authorization", "Bearer " + cfg.token)
+                                                .header("Content-Type", "application/json")
+                                                .POST(HttpRequest.BodyPublishers.ofString(confirmPayload))
+                                                .build();
+
+                                            var resp = hClient.send(req, HttpResponse.BodyHandlers.ofString());
+                                            if (resp.statusCode() === 200) {
+                                                try { entry.meta_file.delete(); } catch(e) {}
+                                                try { entry.archimate_file.delete(); } catch(e2) {}
+                                                if (matchedOpenModel) {
+                                                    try { IEditorModelManager.INSTANCE.closeModel(matchedOpenModel); } catch(cmErr) {}
+                                                }
+                                                console.log("✓ Auto check-in completed for schema: " + entry.schema_name);
+                                            } else {
+                                                console.error("Auto check-in error HTTP " + resp.statusCode() + ": " + resp.body());
+                                            }
+                                        }
+                                    }
+                                } catch(chkErr) {
+                                    console.log("Auto check-in error for " + entry.schema_name + ": " + chkErr);
+                                }
+                            }
+                            return true;
+                        }
+
+                        if (choice === 1) {
+                            for (var di = 0; di < checkedOutSchemas.length; di++) {
+                                var discEntry = checkedOutSchemas[di];
+                                try {
+                                    var matchedDiscModel = null;
+                                    try {
+                                        var openModels2 = IEditorModelManager.INSTANCE.getModels();
+                                        for (var omIdx2 = 0; omIdx2 < openModels2.size(); omIdx2++) {
+                                            var om2 = openModels2.get(omIdx2);
+                                            var rawOm2 = (typeof om2.getEObject === "function") ? om2.getEObject() : om2;
+                                            var fOm2 = (rawOm2 && typeof rawOm2.getFile === "function") ? rawOm2.getFile() : null;
+                                            if (fOm2 && discEntry.archimate_file && fOm2.getAbsolutePath() === discEntry.archimate_file.getAbsolutePath()) {
+                                                matchedDiscModel = rawOm2;
+                                                break;
+                                            }
+                                        }
+                                    } catch(omErr2) {}
+
+                                    if (cfg.token && cfg.server_url) {
+                                        var discReq = HttpRequest.newBuilder()
+                                            .uri(URI.create(cfg.server_url + "/api/schemas/" + discEntry.schema_id + "/discard-checkout"))
+                                            .version(HttpClient.Version.HTTP_1_1)
+                                            .header("Authorization", "Bearer " + cfg.token)
+                                            .POST(HttpRequest.BodyPublishers.noBody())
+                                            .build();
+
+                                        var discResp = hClient.send(discReq, HttpResponse.BodyHandlers.ofString());
+                                        if (discResp.statusCode() === 200) {
+                                            try { discEntry.meta_file.delete(); } catch(e) {}
+                                            try { discEntry.archimate_file.delete(); } catch(e2) {}
+                                            if (matchedDiscModel) {
+                                                try { IEditorModelManager.INSTANCE.closeModel(matchedDiscModel); } catch(cmErr2) {}
+                                            }
+                                            console.log("✓ Auto discard-checkout completed for schema: " + discEntry.schema_name);
+                                        } else {
+                                            console.error("Auto discard error HTTP " + discResp.statusCode() + ": " + discResp.body());
+                                        }
+                                    }
+                                } catch(discErr) {
+                                    console.log("Auto discard error for " + discEntry.schema_name + ": " + discErr);
+                                }
+                            }
+                            return true;
+                        }
+
+                        return true;
+                    } catch(hookErr) {
+                        console.log("EasyEA Shutdown Guard error: " + hookErr);
+                        return true;
+                    }
+                },
+                postShutdown: function(wb) {}
+            });
+
+            workbench.addWorkbenchListener(listener);
+            System.setProperty("easyea.shutdown.hook.registered", "true");
+            console.log("✓ EasyEA Shutdown Guard listener registered.");
+        } catch(regErr) {
+            console.log("Note on registering shutdown guard listener: " + regErr);
+        }
+    }
+
     try {
+        ensureShutdownHookRegistered();
         var config = loadConfig();
         if (!config.token) {
             window.alert("Please configure your credentials first by running 'EasyEA_Settings.ajs'.");

@@ -509,30 +509,58 @@
                 var nodeX = Math.max(20, Math.round(baseX + Math.cos(angle) * dist));
                 var nodeY = Math.max(20, Math.round(baseY + Math.sin(angle) * dist));
 
-                var newVisual = targetView.add(newConcept, nodeX, nodeY, 150, 65);
-                addedCount++;
+                var newVisual = null;
+                $(targetView).children().each(function(v) {
+                    if (v.concept && (v.concept.id === newConcept.id || v.concept.name === newConcept.name)) {
+                        newVisual = v;
+                    }
+                });
+
+                if (!newVisual) {
+                    newVisual = targetView.add(newConcept, nodeX, nodeY, 150, 65);
+                    addedCount++;
+                }
 
                 // Draw relationship
                 var jRelType = mapToJArchiRelType(mItem.rel_type);
                 var srcV = mItem.is_source ? selectedVisual : newVisual;
                 var tgtV = mItem.is_source ? newVisual : selectedVisual;
 
-                try {
-                    if (srcV && tgtV) {
-                        var archRel = model.createRelationship(jRelType, mItem.rel_name || "", srcV.concept, tgtV.concept);
-                        targetView.add(archRel, srcV, tgtV);
-                        relConnectedCount++;
+                var archRel = null;
+                if (srcV && srcV.concept && tgtV && tgtV.concept) {
+                    $(srcV.concept).outRels(jRelType).each(function(r) {
+                        if (r.target && (r.target.id === tgtV.concept.id || r.target.name === tgtV.concept.name)) {
+                            archRel = r;
+                        }
+                    });
+
+                    if (!archRel) {
+                        try {
+                            archRel = model.createRelationship(jRelType, mItem.rel_name || "", srcV.concept, tgtV.concept);
+                        } catch(reErr) {
+                            console.log("Note on creating relationship: " + reErr);
+                        }
                     }
-                } catch(reErr) {
-                    console.log("Note on connecting relationship: " + reErr);
+
+                    if (archRel) {
+                        try {
+                            targetView.add(archRel, srcV, tgtV);
+                            relConnectedCount++;
+                        } catch(addRelErr) {
+                            console.log("Note on adding relationship to view: " + addRelErr);
+                        }
+                    }
                 }
             }
 
             // Save model
             try {
                 var rawM = getRawModel(model);
-                if (rawM && IEditorModelManager.INSTANCE.isModelDirty(rawM)) {
-                    IEditorModelManager.INSTANCE.saveModel(rawM);
+                if (rawM) {
+                    if (typeof rawM.eResource === "function" && rawM.eResource() !== null) {
+                        try { rawM.eResource().save(null); } catch(erSaveErr) {}
+                    }
+                    try { IEditorModelManager.INSTANCE.saveModel(rawM); } catch(imSaveErr) {}
                 }
             } catch(se) {}
 
@@ -545,27 +573,91 @@
         // ACTION 3: Sync Properties to Archi Element
         } else if (selAction.indexOf("3.") === 0) {
             try {
-                if (apm.time_quadrant) $(selectedConcept).prop("TIME_Quadrant", apm.time_quadrant);
-                if (apm.lifecycle_status) $(selectedConcept).prop("Lifecycle_Status", apm.lifecycle_status);
-                if (apm.business_criticality) $(selectedConcept).prop("Business_Criticality", apm.business_criticality);
-                if (apm.business_owner) $(selectedConcept).prop("Business_Owner", apm.business_owner);
-                if (apm.technical_owner) $(selectedConcept).prop("Technical_Owner", apm.technical_owner);
-                if (apm.hosting_type) $(selectedConcept).prop("Hosting_Type", apm.hosting_type);
-                if (apm.data_classification) $(selectedConcept).prop("Data_Classification", apm.data_classification);
-                if (apm.sla_level) $(selectedConcept).prop("SLA_Level", apm.sla_level);
-                if (apm.annual_cost !== undefined) $(selectedConcept).prop("Annual_Cost_EUR", "" + apm.annual_cost);
-                $(selectedConcept).prop("EasyEA_Element_ID", elemData.id);
-                $(selectedConcept).prop("EasyEA_Library_Scope", activeLibraryName);
+                var IArchimateFactory = Java.type("com.archimatetool.model.IArchimateFactory");
 
-                var rawM2 = getRawModel(model);
-                if (rawM2 && IEditorModelManager.INSTANCE.isModelDirty(rawM2)) {
-                    IEditorModelManager.INSTANCE.saveModel(rawM2);
+                function setSafeProperty(targetConcept, key, value) {
+                    if (!targetConcept || value === undefined || value === null) return;
+                    var strVal = ("" + value).trim();
+                    if (strVal.length === 0) return;
+
+                    var actualConcept = targetConcept.concept ? targetConcept.concept : targetConcept;
+                    var raw = getRawModel(actualConcept);
+                    if (!raw) raw = actualConcept;
+                    if (raw && typeof raw.getConcept === "function") {
+                        try { var c = raw.getConcept(); if (c) raw = c; } catch(e) {}
+                    }
+
+                    var updated = false;
+
+                    // 1. Primary Direct EMF Property update (no getAdapter, 100% reliable in Eclipse/Archi)
+                    try {
+                        if (raw && typeof raw.getProperties === "function") {
+                            var propsList = raw.getProperties();
+                            var existingProp = null;
+                            for (var pi = 0; pi < propsList.size(); pi++) {
+                                var p = propsList.get(pi);
+                                if (p && ("" + p.getKey()) === ("" + key)) {
+                                    existingProp = p;
+                                    break;
+                                }
+                            }
+                            if (existingProp) {
+                                existingProp.setValue(strVal);
+                                updated = true;
+                            } else {
+                                var newP = IArchimateFactory.eINSTANCE.createProperty();
+                                newP.setKey(key);
+                                newP.setValue(strVal);
+                                propsList.add(newP);
+                                updated = true;
+                            }
+                        }
+                    } catch(emfErr) {
+                        console.log("Direct EMF Property note: " + emfErr);
+                    }
+
+                    // 2. Secondary fallback
+                    if (!updated) {
+                        try {
+                            if (typeof actualConcept.prop === "function") {
+                                actualConcept.prop(key, strVal);
+                            }
+                        } catch(jErr) {}
+                    }
                 }
 
+                setSafeProperty(selectedConcept, "TIME_Quadrant", apm.time_quadrant || props.eea_time_quadrant);
+                setSafeProperty(selectedConcept, "Lifecycle_Status", apm.lifecycle_status || props.eea_lifecycle_status);
+                setSafeProperty(selectedConcept, "Business_Criticality", apm.business_criticality || props.eea_business_criticality);
+                setSafeProperty(selectedConcept, "Business_Owner", apm.business_owner || props.eea_business_owner);
+                setSafeProperty(selectedConcept, "Technical_Owner", apm.technical_owner || props.eea_technical_owner);
+                setSafeProperty(selectedConcept, "Hosting_Type", apm.hosting_type || props.eea_hosting_type);
+                setSafeProperty(selectedConcept, "Data_Classification", apm.data_classification || props.eea_data_classification);
+                setSafeProperty(selectedConcept, "SLA_Level", apm.sla_level || props.eea_sla_level);
+                if (apm.annual_cost !== undefined) {
+                    setSafeProperty(selectedConcept, "Annual_Cost_EUR", "" + apm.annual_cost);
+                }
+                setSafeProperty(selectedConcept, "EasyEA_Element_ID", elemData.id);
+                setSafeProperty(selectedConcept, "EasyEA_Library_Scope", activeLibraryName);
+
+                try {
+                    var rawM2 = getRawModel(model);
+                    if (rawM2) {
+                        if (typeof rawM2.eResource === "function" && rawM2.eResource() !== null) {
+                            try { rawM2.eResource().save(null); } catch(erSaveErr) {}
+                        }
+                        try { IEditorModelManager.INSTANCE.saveModel(rawM2); } catch(imSaveErr) {}
+                    }
+                } catch(saveEx) {}
+
                 console.log("✓ APM & Metamodel properties synced to Archi element: " + selectedConcept.name);
-                window.alert("APM properties successfully synced into Archi element properties for '" + selectedConcept.name + "'!");
+                window.alert(
+                    "APM Properties Synced Successfully!\n\n" +
+                    "Properties for '" + selectedConcept.name + "' have been updated in the Archi Properties tab."
+                );
             } catch(syncErr) {
-                window.alert("Failed to sync properties: " + syncErr);
+                console.error("Failed to sync properties: " + syncErr);
+                window.alert("Failed to sync properties:\n" + syncErr);
             }
         }
 

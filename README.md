@@ -65,10 +65,11 @@ PYTHONPATH=. pytest tests/test_all.py
 
 ## 🔌 Plugin Desktop per Strumenti di Modellazione
 
-EasyEA si integra direttamente con i client desktop degli architetti:
+EasyEA si integra direttamente con i client desktop degli architetti e degli analisti di processo:
 
 - **Archi Tool (jArchi Plugin)**: [`plugins/archi-easyea`](plugins/archi-easyea/README.md) - Check-out/in, Diff visivo e riutilizzo catalogo direttamente dall'editor Archi 5.x.
 - **Draw.io Desktop (JavaScript Plugin)**: [`plugins/drawio-easyea`](plugins/drawio-easyea/README.md) - Menu integrato in Draw.io per Check-out/in con Diff, forme ArchiMate 3.x e sincronizzazione con il catalogo centrale.
+- **Camunda Modeler Desktop (BPMN 2.0 Plugin)**: [`plugins/camunda-easyea`](plugins/camunda-easyea/README.md) - Modellazione processi BPMN 2.0 con Check-out/in, Diff semantico, catalog search e sincronizzazione automatica con il metamodello ArchiMate 3.x.
 
 
 ---

@@ -16,8 +16,7 @@ import {
   Info,
   Check,
   X,
-  Database,
-  Palette
+  Database
 } from 'lucide-react';
 import { api, ImportHistoryItem, ImportPreviewResult } from '../../lib/api';
 import { useLanguage } from '../../context/LanguageContext';
@@ -96,15 +95,6 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
     try {
       setLoading(true);
       setNotification(null);
-
-      // Special handling for .drawio diagrams
-      if (file.name.toLowerCase().endsWith('.drawio')) {
-        const drawioRes = await api.importDrawioFile(modelId, file);
-        setNotification({ type: 'success', message: drawioRes.message || 'Import Draw.io completato con successo!' });
-        await loadHistory();
-        setLoading(false);
-        return;
-      }
 
       const result = await api.uploadImportFile(modelId, file, dryRun, updateExisting, 'Architect');
       setPreviewResult(result);
@@ -241,7 +231,7 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
           <a
             href={api.getImportTemplateUrl(modelId, 'xlsx')}
             className="flex items-center justify-between p-4 rounded-2xl border border-emerald-200/80 bg-emerald-50/40 hover:bg-emerald-50 hover:border-emerald-300 transition group"
@@ -256,22 +246,6 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
               </div>
             </div>
             <Download className="w-4 h-4 text-emerald-600 group-hover:translate-y-0.5 transition" />
-          </a>
-
-          <a
-            href={api.getModelDrawioExportUrl(modelId)}
-            className="flex items-center justify-between p-4 rounded-2xl border border-indigo-200/80 bg-indigo-50/40 hover:bg-indigo-50 hover:border-indigo-300 transition group"
-          >
-            <div className="flex items-center space-x-3">
-              <div className="p-2.5 bg-indigo-600 text-white rounded-xl shadow-sm">
-                <Palette className="w-5 h-5" />
-              </div>
-              <div>
-                <span className="text-xs font-black text-indigo-950 block">Draw.io (.drawio)</span>
-                <span className="text-[11px] text-indigo-700 font-medium">Multi-Page Architecture</span>
-              </div>
-            </div>
-            <Download className="w-4 h-4 text-indigo-600 group-hover:translate-y-0.5 transition" />
           </a>
 
           <a

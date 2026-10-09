@@ -174,6 +174,50 @@ def list_elements(
         })
     return results
 
+@router.get("/search", response_model=List[Dict[str, Any]])
+def search_elements(
+    query: Optional[str] = Query(None, description="Search query string"),
+    model_id: Optional[str] = Query(None, description="Filter by model ID"),
+    layer: Optional[str] = Query(None, description="Filter by layer (e.g. Business, Application, Technology, Strategy)"),
+    type: Optional[str] = Query(None, description="Filter by element type"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db)
+):
+    """Search elements across models or within a model by name, documentation, type, or layer."""
+    db_query = db.query(ArchimateElement)
+    if model_id:
+        db_query = db_query.filter(ArchimateElement.model_id == model_id)
+    if layer and layer.lower() != "all":
+        db_query = db_query.filter(ArchimateElement.layer.ilike(layer))
+    if type and type.lower() != "all":
+        db_query = db_query.filter(ArchimateElement.type.ilike(type))
+    if query:
+        term = f"%{query}%"
+        db_query = db_query.filter(
+            (ArchimateElement.name.ilike(term)) |
+            (ArchimateElement.documentation.ilike(term)) |
+            (ArchimateElement.type.ilike(term)) |
+            (ArchimateElement.id.ilike(term))
+        )
+
+    db_query = db_query.order_by(ArchimateElement.layer.asc(), ArchimateElement.name.asc()).limit(limit)
+    elements = db_query.all()
+
+    results = []
+    for e in elements:
+        apm = e.apm_attributes
+        props = dict(e.properties or {})
+        results.append({
+            "id": e.id,
+            "model_id": e.model_id,
+            "name": e.name,
+            "type": e.type,
+            "layer": e.layer,
+            "documentation": e.documentation,
+            "properties": props
+        })
+    return results
+
 @router.get("/{element_id}")
 def get_element(element_id: str, db: Session = Depends(get_db)):
     """Retrieve details for a specific element including incoming/outgoing relationships."""
