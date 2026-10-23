@@ -28,51 +28,79 @@ class ProcessService:
             outgoing.setdefault(r.source_id, []).append({"target": r.target_id, "type": r.type})
             incoming.setdefault(r.target_id, []).append({"source": r.source_id, "type": r.type})
 
+        # Identify child BPMN steps vs macro enterprise processes
+        child_steps_by_parent: Dict[str, List[ArchimateElement]] = {}
+        step_ids_with_parent: Set[str] = set()
+        for p in processes:
+            props = p.properties if isinstance(p.properties, dict) else {}
+            parent_proc_id = props.get("parent_process_id")
+            if props.get("is_bpmn_step") is True and parent_proc_id and parent_proc_id in all_elements and parent_proc_id != p.id:
+                child_steps_by_parent.setdefault(parent_proc_id, []).append(p)
+                step_ids_with_parent.add(p.id)
+            else:
+                # Also check if a BusinessProcess is composed into another BusinessProcess via CompositionRelationship
+                for inc in incoming.get(p.id, []):
+                    if "Composition" in (inc["type"] or ""):
+                        parent_el = all_elements.get(inc["source"])
+                        if parent_el and parent_el.type == "BusinessProcess" and parent_el.id != p.id and props.get("is_bpmn_step") is True:
+                            child_steps_by_parent.setdefault(parent_el.id, []).append(p)
+                            step_ids_with_parent.add(p.id)
+                            break
+
+        macro_processes = [p for p in processes if p.id not in step_ids_with_parent]
         process_list = []
 
-        for p in processes:
+        for p in macro_processes:
+            # Include both the macro process and its composed BPMN child steps when collecting lineage
+            scope_ids = [p.id] + [s.id for s in child_steps_by_parent.get(p.id, [])]
+
             # 1. Find Actors / Roles (Incoming or Outgoing Assignment)
             actors = []
-            for inc in incoming.get(p.id, []):
-                e = all_elements.get(inc["source"])
-                if e and e.type in ["BusinessActor", "BusinessRole", "BusinessCollaboration"]:
-                    actors.append({"id": e.id, "name": e.name, "type": e.type})
-            for out in outgoing.get(p.id, []):
-                e = all_elements.get(out["target"])
-                if e and e.type in ["BusinessActor", "BusinessRole", "BusinessCollaboration"]:
-                    actors.append({"id": e.id, "name": e.name, "type": e.type})
+            actor_ids_found: Set[str] = set()
+            for sid in scope_ids:
+                for inc in incoming.get(sid, []):
+                    e = all_elements.get(inc["source"])
+                    if e and e.type in ["BusinessActor", "BusinessRole", "BusinessCollaboration"] and e.id not in actor_ids_found:
+                        actor_ids_found.add(e.id)
+                        actors.append({"id": e.id, "name": e.name, "type": e.type})
+                for out in outgoing.get(sid, []):
+                    e = all_elements.get(out["target"])
+                    if e and e.type in ["BusinessActor", "BusinessRole", "BusinessCollaboration"] and e.id not in actor_ids_found:
+                        actor_ids_found.add(e.id)
+                        actors.append({"id": e.id, "name": e.name, "type": e.type})
 
             # 2. Find Supporting Applications (Direct Serving/Realization or via ApplicationService)
             supporting_apps = []
             app_ids_found: Set[str] = set()
 
-            for inc in incoming.get(p.id, []):
-                s_elem = all_elements.get(inc["source"])
-                if s_elem:
-                    if s_elem.type == "ApplicationComponent" and s_elem.id not in app_ids_found:
-                        app_ids_found.add(s_elem.id)
-                        apm = s_elem.apm_attributes
-                        supporting_apps.append({
-                            "id": s_elem.id,
-                            "name": s_elem.name,
-                            "criticality": apm.business_criticality if apm else "Business Operational",
-                            "cost": apm.annual_cost if apm else 0.0,
-                            "time_quadrant": apm.time_quadrant if apm else "Tolerate"
-                        })
-                    elif s_elem.type in ["ApplicationService", "ApplicationFunction"]:
-                        # Look for App Component providing this service/function
-                        for sub_inc in incoming.get(s_elem.id, []):
-                            sub_elem = all_elements.get(sub_inc["source"])
-                            if sub_elem and sub_elem.type == "ApplicationComponent" and sub_elem.id not in app_ids_found:
-                                app_ids_found.add(sub_elem.id)
-                                apm = sub_elem.apm_attributes
-                                supporting_apps.append({
-                                    "id": sub_elem.id,
-                                    "name": sub_elem.name,
-                                    "criticality": apm.business_criticality if apm else "Business Operational",
-                                    "cost": apm.annual_cost if apm else 0.0,
-                                    "time_quadrant": apm.time_quadrant if apm else "Tolerate"
-                                })
+            for sid in scope_ids:
+                for inc in incoming.get(sid, []):
+                    s_elem = all_elements.get(inc["source"])
+                    if s_elem:
+                        if s_elem.type == "ApplicationComponent" and s_elem.id not in app_ids_found:
+                            app_ids_found.add(s_elem.id)
+                            apm = s_elem.apm_attributes
+                            supporting_apps.append({
+                                "id": s_elem.id,
+                                "name": s_elem.name,
+                                "criticality": apm.business_criticality if apm else "Business Operational",
+                                "cost": apm.annual_cost if apm else 0.0,
+                                "time_quadrant": apm.time_quadrant if apm else "Tolerate"
+                            })
+                        elif s_elem.type in ["ApplicationService", "ApplicationFunction"]:
+                            # Look for App Component providing this service/function
+                            for sub_inc in incoming.get(s_elem.id, []):
+                                sub_elem = all_elements.get(sub_inc["source"])
+                                if sub_elem and sub_elem.type == "ApplicationComponent" and sub_elem.id not in app_ids_found:
+                                    app_ids_found.add(sub_elem.id)
+                                    apm = sub_elem.apm_attributes
+                                    supporting_apps.append({
+                                        "id": sub_elem.id,
+                                        "name": sub_elem.name,
+                                        "criticality": apm.business_criticality if apm else "Business Operational",
+                                        "cost": apm.annual_cost if apm else 0.0,
+                                        "time_quadrant": apm.time_quadrant if apm else "Tolerate"
+                                    })
 
             # 3. Find Infrastructure / Technology supporting these applications
             tech_nodes = []
@@ -88,6 +116,16 @@ class ProcessService:
                             "type": t_elem.type
                         })
 
+            child_steps_serialized = [
+                {
+                    "id": s.id,
+                    "name": s.name,
+                    "type": s.type,
+                    "bpmn_tag": (s.properties or {}).get("bpmn_tag", "task") if isinstance(s.properties, dict) else "task"
+                }
+                for s in child_steps_by_parent.get(p.id, [])
+            ]
+
             process_list.append({
                 "id": p.id,
                 "name": p.name,
@@ -96,12 +134,14 @@ class ProcessService:
                 "actors": actors,
                 "supporting_applications": supporting_apps,
                 "infrastructure_nodes": tech_nodes,
+                "process_steps": child_steps_serialized,
+                "steps_count": len(child_steps_serialized),
                 "app_dependency_count": len(supporting_apps),
                 "is_critical": any(a.get("criticality") == "Mission Critical" for a in supporting_apps)
             })
 
         return {
-            "total_processes": len(processes),
+            "total_processes": len(macro_processes),
             "processes": sorted(process_list, key=lambda x: (not x["is_critical"], -x["app_dependency_count"], x["name"]))
         }
 

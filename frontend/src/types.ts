@@ -222,6 +222,8 @@ export interface BusinessProcessItem {
     time_quadrant: string;
   }>;
   infrastructure_nodes: Array<{ id: string; name: string; type: string }>;
+  process_steps?: Array<{ id: string; name: string; type: string; bpmn_tag?: string }>;
+  steps_count?: number;
   app_dependency_count: number;
   is_critical: boolean;
 }

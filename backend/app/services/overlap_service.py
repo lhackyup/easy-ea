@@ -15,11 +15,18 @@ class OverlapService:
             ArchimateElement.type.in_(["Capability", "BusinessFunction", "BusinessService", "ApplicationFunction"])
         ).all()
 
-        # 2. Fetch Applications
-        applications = db.query(ArchimateElement).filter(
+        # 2. Fetch Applications (respecting in_apm_scope != False)
+        all_applications = db.query(ArchimateElement).filter(
             ArchimateElement.model_id == model_id,
             ArchimateElement.type == "ApplicationComponent"
         ).all()
+        applications = [
+            a for a in all_applications
+            if not (
+                (a.apm_attributes and a.apm_attributes.in_apm_scope is False)
+                or (isinstance(a.properties, dict) and str(a.properties.get("eea_in_apm_scope", "true")).lower() == "false")
+            )
+        ]
 
         # 3. Fetch all relationships in this model
         relationships = db.query(ArchimateRelationship).filter(
@@ -78,11 +85,15 @@ class OverlapService:
                 apm = app.apm_attributes
                 cost = apm.annual_cost if apm else 0.0
                 time_q = apm.time_quadrant if apm else "Tolerate"
+                bfit = apm.business_fit if apm and apm.business_fit is not None else 3
+                tfit = apm.technical_fit if apm and apm.technical_fit is not None else 3
                 serving_apps_info.append({
                     "app_id": app.id,
                     "app_name": app.name,
                     "annual_cost": cost,
                     "time_quadrant": time_q,
+                    "business_fit": bfit,
+                    "technical_fit": tfit,
                     "relation_types": rel_types
                 })
 
@@ -90,20 +101,40 @@ class OverlapService:
             is_redundant = app_count > 1
             if is_redundant:
                 total_overlap_count += 1
-                # If redundant, calculate cost of non-invest or lowest fit applications as potential savings
-                sorted_by_cost = sorted(serving_apps_info, key=lambda x: x["annual_cost"], reverse=True)
-                # Keep top 1, sum others as candidate rationalization
-                waste = sum(a["annual_cost"] for a in sorted_by_cost[1:])
+                # Prioritize keeping the strategic target application:
+                # 1. Quadrant priority: Invest (4) > Tolerate (3) > Migrate (2) > Eliminate (1)
+                # 2. Higher combined fit (business_fit + technical_fit)
+                # 3. Lower annual cost (tie-breaker)
+                quadrant_rank = {"Invest": 4, "Tolerate": 3, "Migrate": 2, "Eliminate": 1}
+                sorted_by_target_priority = sorted(
+                    serving_apps_info,
+                    key=lambda x: (
+                        quadrant_rank.get(x["time_quadrant"], 2),
+                        (x.get("business_fit", 3) + x.get("technical_fit", 3)),
+                        -x["annual_cost"]
+                    ),
+                    reverse=True
+                )
+                target_keeper = sorted_by_target_priority[0]
+                candidate_decommissions = sorted_by_target_priority[1:]
+                # Sum the annual cost of non-target redundant applications as potential rationalization savings
+                waste = sum(a["annual_cost"] for a in candidate_decommissions)
                 potential_cost_waste += waste
 
+                decomm_names = ", ".join(f"{a['app_name']} ({a['time_quadrant']})" for a in candidate_decommissions)
                 redundant_clusters.append({
                     "capability_id": cap.id,
                     "capability_name": cap.name,
                     "capability_type": cap.type,
                     "app_count": app_count,
+                    "target_app_id": target_keeper["app_id"],
+                    "target_app_name": target_keeper["app_name"],
                     "potential_savings": waste,
                     "applications": serving_apps_info,
-                    "recommendation": f"Razionalizzare: '{cap.name}' è implementata da {app_count} applicazioni ({', '.join(a['app_name'] for a in serving_apps_info)}). Opportunità di consolidamento su un unico sistema di riferimento."
+                    "recommendation": (
+                        f"Razionalizzare '{cap.name}' consolidando sul sistema target '{target_keeper['app_name']}' "
+                        f"({target_keeper['time_quadrant']}) e dismettendo/migrando: {decomm_names}."
+                    )
                 })
 
             capability_rows.append({

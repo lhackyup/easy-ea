@@ -132,6 +132,56 @@ ARCHIMATE_METAMODEL = [
                     {"name": "name", "label": "Product Name", "data_type": "string", "is_required": True, "description": "Commercial product name"},
                     {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Product composition and target market"}
                 ]
+            },
+            {
+                "type": "BusinessEvent",
+                "name": "Business Event",
+                "description": "An organizational event or state change that triggers or results from business processes (e.g. Loan Application Received, Payment Settled).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Event Name", "data_type": "string", "is_required": True, "description": "Name of the business event"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Trigger conditions and business context"}
+                ]
+            },
+            {
+                "type": "BusinessInterface",
+                "name": "Business Interface",
+                "description": "A channel or point of access where a business service is made available to the environment (e.g. Branch Desk, Call Center, Mobile Banking Channel).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Interface Name", "data_type": "string", "is_required": True, "description": "Name of the business channel or interface"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Channel characteristics and target audience"}
+                ]
+            },
+            {
+                "type": "BusinessCollaboration",
+                "name": "Business Collaboration",
+                "description": "An aggregate of two or more business internal active structure elements working together to perform collective behavior.",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Collaboration Name", "data_type": "string", "is_required": True, "description": "Name of the business collaboration"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Participating roles and collaboration scope"}
+                ]
+            },
+            {
+                "type": "BusinessInteraction",
+                "name": "Business Interaction",
+                "description": "A unit of collective business behavior performed by a collaboration of two or more business roles or actors.",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Interaction Name", "data_type": "string", "is_required": True, "description": "Name of the business interaction"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Collective behavior description"}
+                ]
+            },
+            {
+                "type": "Contract",
+                "name": "Contract",
+                "description": "A formal or informal specification of an agreement between a provider and a consumer that specifies rights and obligations associated with a product.",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Contract Name", "data_type": "string", "is_required": True, "description": "Name of the contract or SLA"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Terms, obligations, and SLA clauses"}
+                ]
             }
         ]
     },
@@ -171,6 +221,46 @@ ARCHIMATE_METAMODEL = [
                     {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
                     {"name": "name", "label": "Application Service Name", "data_type": "string", "is_required": True, "description": "Name of the provided application service"},
                     {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Functional and technical service description"}
+                ]
+            },
+            {
+                "type": "ApplicationFunction",
+                "name": "Application Function",
+                "description": "Automated behavior that an application component can perform (e.g. Interest Calculation, Fraud Scoring, Token Validation).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Application Function Name", "data_type": "string", "is_required": True, "description": "Name of the internal application function"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Functional logic and module scope"}
+                ]
+            },
+            {
+                "type": "ApplicationProcess",
+                "name": "Application Process",
+                "description": "A sequence of automated application behaviors that achieves a specific outcome (e.g. Nightly EOD Batch Settlement, ETL Synchronization).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Application Process Name", "data_type": "string", "is_required": True, "description": "Name of the automated application process"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Execution flow and schedule"}
+                ]
+            },
+            {
+                "type": "ApplicationEvent",
+                "name": "Application Event",
+                "description": "An application state change or message event (e.g. Kafka Transaction Published, Webhook Triggered).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Application Event Name", "data_type": "string", "is_required": True, "description": "Name of the application event"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Topic, payload, and trigger semantics"}
+                ]
+            },
+            {
+                "type": "ApplicationCollaboration",
+                "name": "Application Collaboration",
+                "description": "An aggregate of two or more application components working together to perform collective application behavior.",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Collaboration Name", "data_type": "string", "is_required": True, "description": "Name of the application collaboration"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Participating application components"}
                 ]
             },
             {
@@ -244,6 +334,36 @@ ARCHIMATE_METAMODEL = [
                 ]
             },
             {
+                "type": "TechnologyInterface",
+                "name": "Technology Interface",
+                "description": "A point of access where technology services offered by a node can be accessed (e.g. JDBC Port 5432, HTTPS Load Balancer Endpoint).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Technology Interface Name", "data_type": "string", "is_required": True, "description": "Name of the infrastructure interface"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Protocol, port, and endpoint details"}
+                ]
+            },
+            {
+                "type": "TechnologyFunction",
+                "name": "Technology Function",
+                "description": "A collection of technology behavior that can be performed by a node (e.g. Container Orchestration, Identity Federation, Backup & Replication).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Technology Function Name", "data_type": "string", "is_required": True, "description": "Name of the technology function"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Infrastructure capability description"}
+                ]
+            },
+            {
+                "type": "Path",
+                "name": "Path",
+                "description": "A link between two or more technology nodes through which these nodes can exchange data or material.",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Path Name", "data_type": "string", "is_required": True, "description": "Name of the communication path"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Protocol, encryption, and latency"}
+                ]
+            },
+            {
                 "type": "Artifact",
                 "name": "Artifact",
                 "description": "A physical piece of data or compiled deployable unit (e.g. Docker Image, .jar File, SQL Migration Script).",
@@ -284,6 +404,16 @@ ARCHIMATE_METAMODEL = [
                 ]
             },
             {
+                "type": "Assessment",
+                "name": "Assessment",
+                "description": "The result of an analysis of the state of affairs of the enterprise with respect to some driver (e.g. SWOT Analysis Finding, Legacy Technical Debt Audit).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Assessment Name", "data_type": "string", "is_required": True, "description": "Title of the assessment finding"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Evidence and risk evaluation"}
+                ]
+            },
+            {
                 "type": "Goal",
                 "name": "Goal",
                 "description": "A high-level statement of intent or desired end state that an organization seeks to achieve (e.g. Reduce IT TCO by 25% by 2027).",
@@ -291,6 +421,16 @@ ARCHIMATE_METAMODEL = [
                     {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
                     {"name": "name", "label": "Goal Name", "data_type": "string", "is_required": True, "description": "High-level goal description"},
                     {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Target KPIs and measurement criteria"}
+                ]
+            },
+            {
+                "type": "Outcome",
+                "name": "Outcome",
+                "description": "An end result that has been achieved (e.g. 99.95% Uptime Achieved, Instant Onboarding < 3 mins).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Outcome Name", "data_type": "string", "is_required": True, "description": "Measurable business or technical outcome"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "KPI metrics and verification"}
                 ]
             },
             {
@@ -321,6 +461,16 @@ ARCHIMATE_METAMODEL = [
                     {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
                     {"name": "name", "label": "Constraint Name", "data_type": "string", "is_required": True, "description": "Constraint description"},
                     {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Regulatory clause or budget constraints"}
+                ]
+            },
+            {
+                "type": "Value",
+                "name": "Value",
+                "description": "The relative worth, utility, or importance of a core element or an outcome (e.g. Operational Efficiency, Customer Trust).",
+                "standard_attributes": [
+                    {"name": "id", "label": "Element ID", "data_type": "string", "is_required": True, "description": "Unique ArchiMate identifier"},
+                    {"name": "name", "label": "Value Name", "data_type": "string", "is_required": True, "description": "Description of the delivered value"},
+                    {"name": "documentation", "label": "Documentation", "data_type": "text", "is_required": False, "description": "Stakeholder value proposition"}
                 ]
             }
         ]
@@ -1092,29 +1242,71 @@ ARCHIMATE_RELATIONSHIP_RULES: Dict[str, Dict[str, List[str]]] = {
     "BusinessActor": {
         "BusinessActor": ["Composition", "Aggregation", "Flow", "Specialization", "Association"],
         "BusinessRole": ["Assignment", "Association"],
-        "BusinessProcess": ["Assignment", "Association"],
-        "BusinessFunction": ["Assignment", "Association"],
+        "BusinessCollaboration": ["Aggregation", "Assignment", "Association"],
+        "BusinessInterface": ["Composition", "Assignment", "Serving", "Association"],
+        "BusinessProcess": ["Assignment", "Serving", "Association"],
+        "BusinessFunction": ["Assignment", "Serving", "Association"],
+        "BusinessInteraction": ["Assignment", "Association"],
         "BusinessEvent": ["Triggering", "Association"]
     },
     "BusinessRole": {
         "BusinessRole": ["Composition", "Aggregation", "Specialization", "Association"],
-        "BusinessProcess": ["Assignment", "Association"],
-        "BusinessFunction": ["Assignment", "Association"],
+        "BusinessCollaboration": ["Aggregation", "Association"],
+        "BusinessInterface": ["Composition", "Assignment", "Serving", "Association"],
+        "BusinessProcess": ["Assignment", "Serving", "Association"],
+        "BusinessFunction": ["Assignment", "Serving", "Association"],
+        "BusinessInteraction": ["Assignment", "Association"],
+        "BusinessEvent": ["Triggering", "Association"],
         "BusinessService": ["Serving", "Assignment", "Association"],
         "BusinessActor": ["Assignment", "Association"]
     },
+    "BusinessCollaboration": {
+        "BusinessCollaboration": ["Composition", "Aggregation", "Specialization", "Association"],
+        "BusinessRole": ["Aggregation", "Composition", "Association"],
+        "BusinessActor": ["Aggregation", "Association"],
+        "BusinessInteraction": ["Assignment", "Association"],
+        "BusinessProcess": ["Assignment", "Association"],
+        "BusinessFunction": ["Assignment", "Association"],
+        "BusinessInterface": ["Composition", "Assignment", "Association"]
+    },
+    "BusinessInterface": {
+        "BusinessInterface": ["Composition", "Aggregation", "Specialization", "Association"],
+        "BusinessService": ["Assignment", "Serving", "Association"],
+        "BusinessRole": ["Serving", "Association"],
+        "BusinessActor": ["Serving", "Association"],
+        "BusinessProcess": ["Serving", "Association"]
+    },
     "BusinessProcess": {
         "BusinessProcess": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
+        "BusinessFunction": ["Composition", "Aggregation", "Flow", "Triggering", "Association"],
+        "BusinessInteraction": ["Flow", "Triggering", "Association"],
+        "BusinessEvent": ["Triggering", "Access", "Association"],
         "BusinessObject": ["Access", "Association"],
-        "BusinessService": ["Realization", "Association"],
+        "Contract": ["Access", "Association"],
+        "BusinessService": ["Realization", "Serving", "Association"],
         "Product": ["Realization", "Association"],
-        "ValueStream": ["Realization", "Association"]
+        "ValueStream": ["Realization", "Association"],
+        "Capability": ["Realization", "Association"]
     },
     "BusinessFunction": {
-        "BusinessFunction": ["Composition", "Aggregation", "Specialization", "Association"],
-        "BusinessProcess": ["Realization", "Assignment", "Association"],
+        "BusinessFunction": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
+        "BusinessProcess": ["Realization", "Assignment", "Flow", "Triggering", "Serving", "Association"],
         "BusinessObject": ["Access", "Association"],
-        "BusinessService": ["Realization", "Association"]
+        "BusinessService": ["Realization", "Serving", "Association"],
+        "Capability": ["Realization", "Association"]
+    },
+    "BusinessInteraction": {
+        "BusinessInteraction": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
+        "BusinessProcess": ["Flow", "Triggering", "Association"],
+        "BusinessService": ["Realization", "Association"],
+        "BusinessObject": ["Access", "Association"]
+    },
+    "BusinessEvent": {
+        "BusinessEvent": ["Composition", "Aggregation", "Triggering", "Specialization", "Association"],
+        "BusinessProcess": ["Triggering", "Flow", "Association"],
+        "BusinessFunction": ["Triggering", "Flow", "Association"],
+        "BusinessInteraction": ["Triggering", "Flow", "Association"],
+        "BusinessObject": ["Access", "Association"]
     },
     "BusinessService": {
         "BusinessService": ["Composition", "Aggregation", "Specialization", "Association"],
@@ -1126,37 +1318,82 @@ ARCHIMATE_RELATIONSHIP_RULES: Dict[str, Dict[str, List[str]]] = {
     },
     "BusinessObject": {
         "BusinessObject": ["Composition", "Aggregation", "Specialization", "Association"],
+        "Contract": ["Specialization", "Realization", "Association"],
         "DataObject": ["Realization", "Association"]
+    },
+    "Contract": {
+        "Contract": ["Composition", "Aggregation", "Specialization", "Association"],
+        "BusinessObject": ["Specialization", "Association"],
+        "Product": ["Aggregation", "Composition", "Association"],
+        "BusinessProcess": ["Access", "Association"]
     },
     "Product": {
         "Product": ["Composition", "Aggregation", "Specialization", "Association"],
         "BusinessService": ["Aggregation", "Composition", "Association"],
         "ApplicationService": ["Aggregation", "Composition", "Association"],
-        "BusinessObject": ["Aggregation", "Composition", "Association"]
+        "BusinessObject": ["Aggregation", "Composition", "Association"],
+        "Contract": ["Aggregation", "Composition", "Association"]
     },
     "ApplicationComponent": {
         "ApplicationComponent": ["Composition", "Aggregation", "Flow", "Triggering", "Serving", "Specialization", "Association"],
+        "ApplicationCollaboration": ["Aggregation", "Composition", "Association"],
         "ApplicationInterface": ["Composition", "Assignment", "Realization", "Serving", "Association"],
-        "ApplicationService": ["Realization", "Serving", "Association"],
+        "ApplicationFunction": ["Assignment", "Composition", "Realization", "Serving", "Association"],
+        "ApplicationProcess": ["Assignment", "Realization", "Serving", "Association"],
+        "ApplicationEvent": ["Assignment", "Triggering", "Association"],
+        "ApplicationService": ["Realization", "Serving", "Assignment", "Association"],
         "DataObject": ["Access", "Association"],
         "BusinessProcess": ["Serving", "Realization", "Association"],
         "BusinessFunction": ["Serving", "Realization", "Association"],
         "BusinessRole": ["Serving", "Association"],
         "BusinessActor": ["Serving", "Association"],
-        "Capability": ["Realization", "Association"]
+        "Capability": ["Realization", "Serving", "Association"]
+    },
+    "ApplicationCollaboration": {
+        "ApplicationCollaboration": ["Composition", "Aggregation", "Specialization", "Association"],
+        "ApplicationComponent": ["Aggregation", "Composition", "Association"],
+        "ApplicationProcess": ["Assignment", "Association"],
+        "ApplicationFunction": ["Assignment", "Association"],
+        "ApplicationService": ["Realization", "Association"]
     },
     "ApplicationInterface": {
         "ApplicationInterface": ["Composition", "Aggregation", "Specialization", "Association"],
         "ApplicationService": ["Assignment", "Serving", "Association"],
         "ApplicationComponent": ["Serving", "Association"],
-        "BusinessProcess": ["Serving", "Association"]
+        "BusinessProcess": ["Serving", "Association"],
+        "BusinessRole": ["Serving", "Association"]
+    },
+    "ApplicationFunction": {
+        "ApplicationFunction": ["Composition", "Aggregation", "Flow", "Triggering", "Serving", "Specialization", "Association"],
+        "ApplicationProcess": ["Realization", "Flow", "Triggering", "Serving", "Association"],
+        "ApplicationService": ["Realization", "Serving", "Association"],
+        "DataObject": ["Access", "Association"],
+        "BusinessProcess": ["Serving", "Realization", "Association"],
+        "BusinessFunction": ["Serving", "Realization", "Association"],
+        "Capability": ["Realization", "Serving", "Association"]
+    },
+    "ApplicationProcess": {
+        "ApplicationProcess": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
+        "ApplicationFunction": ["Flow", "Triggering", "Association"],
+        "ApplicationEvent": ["Triggering", "Association"],
+        "ApplicationService": ["Realization", "Serving", "Association"],
+        "DataObject": ["Access", "Association"],
+        "BusinessProcess": ["Serving", "Realization", "Association"]
+    },
+    "ApplicationEvent": {
+        "ApplicationEvent": ["Composition", "Aggregation", "Triggering", "Specialization", "Association"],
+        "ApplicationProcess": ["Triggering", "Flow", "Association"],
+        "ApplicationFunction": ["Triggering", "Flow", "Association"],
+        "DataObject": ["Access", "Association"]
     },
     "ApplicationService": {
-        "ApplicationService": ["Composition", "Aggregation", "Specialization", "Association"],
+        "ApplicationService": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
         "BusinessProcess": ["Serving", "Association"],
         "BusinessFunction": ["Serving", "Association"],
         "BusinessRole": ["Serving", "Association"],
         "ApplicationComponent": ["Serving", "Association"],
+        "ApplicationFunction": ["Serving", "Association"],
+        "ApplicationProcess": ["Serving", "Association"],
         "DataObject": ["Access", "Association"]
     },
     "DataObject": {
@@ -1164,39 +1401,68 @@ ARCHIMATE_RELATIONSHIP_RULES: Dict[str, Dict[str, List[str]]] = {
         "BusinessObject": ["Realization", "Association"]
     },
     "Node": {
-        "Node": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
+        "Node": ["Composition", "Aggregation", "Flow", "Triggering", "Serving", "Specialization", "Association"],
         "Device": ["Composition", "Assignment", "Association"],
         "SystemSoftware": ["Composition", "Assignment", "Association"],
-        "TechnologyService": ["Realization", "Association"],
+        "TechnologyInterface": ["Composition", "Assignment", "Association"],
+        "TechnologyFunction": ["Assignment", "Realization", "Association"],
+        "TechnologyService": ["Realization", "Serving", "Association"],
         "CommunicationNetwork": ["Association"],
+        "Path": ["Association"],
         "Artifact": ["Assignment", "Association"],
-        "ApplicationComponent": ["Assignment", "Serving", "Association"]
+        "ApplicationComponent": ["Assignment", "Serving", "Realization", "Association"]
     },
     "Device": {
         "Device": ["Composition", "Aggregation", "Specialization", "Association"],
         "SystemSoftware": ["Assignment", "Composition", "Association"],
-        "TechnologyService": ["Realization", "Association"],
+        "TechnologyInterface": ["Composition", "Assignment", "Association"],
+        "TechnologyFunction": ["Assignment", "Association"],
+        "TechnologyService": ["Realization", "Serving", "Association"],
         "CommunicationNetwork": ["Association"],
-        "Artifact": ["Assignment", "Association"]
+        "Artifact": ["Assignment", "Association"],
+        "ApplicationComponent": ["Serving", "Assignment", "Association"]
     },
     "SystemSoftware": {
         "SystemSoftware": ["Composition", "Aggregation", "Specialization", "Association"],
-        "TechnologyService": ["Realization", "Association"],
-        "ApplicationComponent": ["Serving", "Realization", "Association"],
+        "TechnologyFunction": ["Assignment", "Realization", "Association"],
+        "TechnologyService": ["Realization", "Serving", "Association"],
+        "ApplicationComponent": ["Serving", "Realization", "Assignment", "Association"],
+        "DataObject": ["Access", "Realization", "Association"],
         "Artifact": ["Assignment", "Association"]
+    },
+    "TechnologyInterface": {
+        "TechnologyInterface": ["Composition", "Aggregation", "Specialization", "Association"],
+        "TechnologyService": ["Assignment", "Serving", "Association"],
+        "Node": ["Serving", "Association"],
+        "ApplicationComponent": ["Serving", "Association"]
+    },
+    "TechnologyFunction": {
+        "TechnologyFunction": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],
+        "TechnologyService": ["Realization", "Serving", "Association"],
+        "Artifact": ["Access", "Association"],
+        "ApplicationComponent": ["Serving", "Association"]
     },
     "CommunicationNetwork": {
         "CommunicationNetwork": ["Composition", "Aggregation", "Specialization", "Association"],
-        "Node": ["Association"],
-        "Device": ["Association"],
+        "Path": ["Realization", "Aggregation", "Association"],
+        "Node": ["Association", "Serving"],
+        "Device": ["Association", "Serving"],
         "TechnologyService": ["Realization", "Association"]
+    },
+    "Path": {
+        "Path": ["Composition", "Aggregation", "Specialization", "Association"],
+        "Node": ["Association", "Serving"],
+        "Device": ["Association", "Serving"],
+        "CommunicationNetwork": ["Realization", "Association"]
     },
     "TechnologyService": {
         "TechnologyService": ["Composition", "Aggregation", "Specialization", "Association"],
-        "ApplicationComponent": ["Serving", "Association"],
+        "ApplicationComponent": ["Serving", "Realization", "Association"],
         "ApplicationService": ["Serving", "Association"],
+        "ApplicationFunction": ["Serving", "Association"],
         "Node": ["Serving", "Association"],
         "SystemSoftware": ["Serving", "Association"],
+        "BusinessProcess": ["Serving", "Association"],
         "DataObject": ["Access", "Association"]
     },
     "Artifact": {
@@ -1207,39 +1473,65 @@ ARCHIMATE_RELATIONSHIP_RULES: Dict[str, Dict[str, List[str]]] = {
     },
     "Stakeholder": {
         "Stakeholder": ["Composition", "Aggregation", "Specialization", "Association"],
-        "Driver": ["Association"],
-        "Goal": ["Association"]
+        "Driver": ["Association", "Influence"],
+        "Assessment": ["Association", "Influence"],
+        "Goal": ["Association", "Influence"],
+        "Outcome": ["Association"],
+        "Value": ["Association"]
     },
     "Driver": {
         "Driver": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
+        "Assessment": ["Influence", "Association"],
         "Goal": ["Influence", "Association"],
         "Stakeholder": ["Association"]
     },
+    "Assessment": {
+        "Assessment": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
+        "Goal": ["Influence", "Association"],
+        "Driver": ["Influence", "Association"],
+        "Requirement": ["Influence", "Association"]
+    },
     "Goal": {
         "Goal": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
+        "Outcome": ["Realization", "Influence", "Association"],
         "Requirement": ["Realization", "Influence", "Association"],
-        "Principle": ["Influence", "Association"]
+        "Principle": ["Influence", "Association"],
+        "Value": ["Influence", "Association"]
+    },
+    "Outcome": {
+        "Outcome": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
+        "Goal": ["Realization", "Influence", "Association"],
+        "Value": ["Influence", "Realization", "Association"]
     },
     "Principle": {
         "Principle": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
         "Requirement": ["Realization", "Influence", "Association"],
-        "Goal": ["Influence", "Association"]
+        "Goal": ["Realization", "Influence", "Association"]
     },
     "Requirement": {
         "Requirement": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
         "Goal": ["Realization", "Influence", "Association"],
+        "Outcome": ["Realization", "Influence", "Association"],
         "Constraint": ["Influence", "Association"],
         "BusinessActor": ["Realization", "Association"],
         "BusinessProcess": ["Realization", "Association"],
         "ApplicationComponent": ["Realization", "Association"],
+        "ApplicationService": ["Realization", "Association"],
         "SystemSoftware": ["Realization", "Association"],
         "Node": ["Realization", "Association"]
     },
     "Constraint": {
         "Constraint": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
         "Requirement": ["Influence", "Association"],
+        "Goal": ["Influence", "Association"],
         "BusinessProcess": ["Realization", "Association"],
         "ApplicationComponent": ["Realization", "Association"]
+    },
+    "Value": {
+        "Value": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
+        "Stakeholder": ["Association"],
+        "Product": ["Association"],
+        "BusinessService": ["Association"]
     },
     "WorkPackage": {
         "WorkPackage": ["Composition", "Aggregation", "Flow", "Triggering", "Specialization", "Association"],

@@ -719,7 +719,8 @@ def parse_drawio_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
             if cell is not None and cell.get("vertex") == "1":
                 cell_id = obj.get("id") or cell.get("id") or str(uuid.uuid4().hex[:8])
                 label = clean_html_label(obj.get("label") or obj.get("name") or "Unnamed")
-                easyea_id = obj.get("easyea_id") or obj.get("id") or f"el-{uuid.uuid4().hex[:8]}"
+                raw_easyea_id = (obj.get("easyea_id") or "").strip()
+                easyea_id = raw_easyea_id or obj.get("id") or f"el-{uuid.uuid4().hex[:8]}"
                 arch_type = obj.get("archimate_type") or "ApplicationComponent"
                 layer = obj.get("layer") or detect_layer(arch_type)
                 doc = clean_html_label(obj.get("documentation") or "")
@@ -733,6 +734,7 @@ def parse_drawio_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
 
                 elem_record = {
                     "id": cell_id,
+                    "easyea_id": raw_easyea_id or None,
                     "name": label,
                     "type": arch_type,
                     "layer": layer,
@@ -744,7 +746,7 @@ def parse_drawio_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
 
                 nodes_list.append({
                     "id": cell_id,
-                    "element_id": easyea_id if easyea_id.startswith("elem-") or easyea_id.startswith("id-") else None,
+                    "element_id": raw_easyea_id if raw_easyea_id else (easyea_id if easyea_id.startswith("elem-") or easyea_id.startswith("id-") else None),
                     "name": label,
                     "type": arch_type,
                     "layer": layer,
@@ -810,6 +812,7 @@ def parse_drawio_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
                 if src_cell and tgt_cell:
                     rel_record = {
                         "id": conn_id,
+                        "relationship_id": (rel_id or "").strip() or None,
                         "source_id": src_cell,
                         "target_id": tgt_cell,
                         "type": rel_type,

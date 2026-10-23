@@ -920,7 +920,11 @@ def checkin_confirm(
                     ArchimateElement.model_id == model_id
                 ).first()
                 if el:
-                    if field == "documentation":
+                    if field == "name" and new_val:
+                        el.name = new_val
+                    elif field == "type" and new_val:
+                        el.type = new_val
+                    elif field == "documentation":
                         el.documentation = new_val
                     elif field == "layer":
                         el.layer = new_val
@@ -935,7 +939,9 @@ def checkin_confirm(
                         ArchimateRelationship.model_id == model_id
                     ).first()
                     if rel:
-                        if field == "documentation":
+                        if field == "type" and new_val:
+                            rel.type = new_val
+                        elif field == "documentation":
                             rel.documentation = new_val
                         elif field == "name":
                             rel.name = new_val

@@ -240,19 +240,21 @@ def parse_bpmn_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
             continue
 
         proc_id = process.attrib.get("id", f"proc_{uuid.uuid4().hex[:6]}")
-        proc_name = process.attrib.get("name")
+        proc_name = (process.attrib.get("name") or "").strip()
+        effective_proc_name = proc_name or main_process_name or f"Business Process ({proc_id})"
         if proc_name:
-            main_process_name = proc_name.strip()
-            # Register main business process element
-            elements.append({
-                "id": proc_id,
-                "name": proc_name.strip(),
-                "type": "BusinessProcess",
-                "layer": "Business",
-                "documentation": "BPMN Process",
-                "properties": {"bpmn_type": "process"}
-            })
-            bpmn_element_to_archimate_id[proc_id] = proc_id
+            main_process_name = proc_name
+
+        # Register main macro business process element
+        elements.append({
+            "id": proc_id,
+            "name": effective_proc_name,
+            "type": "BusinessProcess",
+            "layer": "Business",
+            "documentation": "BPMN Macro Process",
+            "properties": {"bpmn_type": "process", "is_bpmn_step": False}
+        })
+        bpmn_element_to_archimate_id[proc_id] = proc_id
 
         # 2a. Check for Lanes
         for lane_set in process:
@@ -353,15 +355,33 @@ def parse_bpmn_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
                 actual_id = custom_easyea_id or elem_id
                 bpmn_element_to_archimate_id[elem_id] = actual_id
 
+                is_step = arch_type == "BusinessProcess" and tag_name not in ("process", "subProcess", "callActivity", "transaction")
                 elem_dict = {
                     "id": actual_id,
                     "name": elem_name,
                     "type": arch_type,
                     "layer": layer,
                     "documentation": f"BPMN {tag_name}",
-                    "properties": {"bpmn_tag": tag_name, "bpmn_id": elem_id}
+                    "properties": {
+                        "bpmn_tag": tag_name,
+                        "bpmn_id": elem_id,
+                        "is_bpmn_step": is_step,
+                        "parent_process_id": proc_id
+                    }
                 }
                 elements.append(elem_dict)
+
+                # Link operational tasks / sub-processes to parent macro process via CompositionRelationship
+                if arch_type in ("BusinessProcess", "BusinessEvent", "ApplicationService", "ApplicationFunction") and actual_id != proc_id:
+                    rel_comp_id = f"rel_comp_{proc_id}_{actual_id}"
+                    relationships.append({
+                        "id": rel_comp_id,
+                        "name": "contains step",
+                        "type": "CompositionRelationship" if arch_type == "BusinessProcess" else "TriggeringRelationship" if arch_type == "BusinessEvent" else "ServingRelationship",
+                        "source_id": proc_id if arch_type in ("BusinessProcess", "BusinessEvent") else actual_id,
+                        "target_id": actual_id if arch_type in ("BusinessProcess", "BusinessEvent") else proc_id,
+                        "documentation": f"BPMN Process Hierarchy ({tag_name})"
+                    })
 
                 # Visual node coordinates
                 b = bounds_by_bpmn_id.get(elem_id, {"x": 100, "y": 100, "width": 120, "height": 60})

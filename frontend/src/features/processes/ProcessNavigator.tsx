@@ -161,6 +161,30 @@ export const ProcessNavigator: React.FC<ProcessNavigatorProps> = ({ modelId }) =
                 </div>
               </div>
 
+              {/* Composed BPMN Operational Steps (if any) */}
+              {selectedProcess.process_steps && selectedProcess.process_steps.length > 0 && (
+                <div className="p-3.5 bg-amber-50/60 border border-amber-200 rounded-xl space-y-2">
+                  <div className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">
+                    Attività / Task Operativi del Processo ({selectedProcess.process_steps.length})
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedProcess.process_steps.map((step) => (
+                      <span
+                        key={step.id}
+                        className="inline-flex items-center space-x-1.5 px-2.5 py-1 bg-white border border-amber-300 rounded-lg text-xs font-semibold text-slate-800 shadow-xs"
+                      >
+                        <span>{step.name}</span>
+                        {step.bpmn_tag && (
+                          <span className="text-[9px] font-mono text-amber-700 bg-amber-100 px-1.5 py-0.2 rounded">
+                            {step.bpmn_tag}
+                          </span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* End-to-End Lineage Flow */}
               <div className="space-y-4">
                 <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">

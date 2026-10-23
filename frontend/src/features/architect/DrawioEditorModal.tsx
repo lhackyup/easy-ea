@@ -29,11 +29,22 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
   const [diagramName, setDiagramName] = useState<string>(viewDetail?.name || 'Nuova Vista Architetturale');
   const [showDiffModal, setShowDiffModal] = useState(false);
   const [diffResult, setDiffResult] = useState<DrawioParseResult | null>(null);
+  const [relRules, setRelRules] = useState<Record<string, Record<string, string[]>>>({});
+  const [relWarnings, setRelWarnings] = useState<Array<{
+    connId: string;
+    sourceName: string;
+    sourceType: string;
+    targetName: string;
+    targetType: string;
+    requestedType: string;
+    fallbackType: string;
+  }>>([]);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const xmlRef = useRef<string>('');
   const nameRef = useRef<string>(diagramName);
   const isExportingDownloadRef = useRef<boolean>(false);
+  const relRulesRef = useRef<Record<string, Record<string, string[]>>>({});
 
   // Keep refs in sync
   useEffect(() => {
@@ -43,6 +54,24 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
   useEffect(() => {
     xmlRef.current = currentXml;
   }, [currentXml]);
+
+  useEffect(() => {
+    relRulesRef.current = relRules;
+  }, [relRules]);
+
+  // Load ArchiMate relationship rules once when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      api.getMetamodelRelationshipsMatrix()
+        .then((matrix) => {
+          if (matrix && matrix.rules) {
+            setRelRules(matrix.rules);
+            relRulesRef.current = matrix.rules;
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
 
   // Initialize XML string
   useEffect(() => {
@@ -200,7 +229,51 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
     try {
       const parsed = drawioXmlToEasyEA(xmlString, viewDetail);
       setDiffResult(parsed);
-      await executeCommit(parsed, xmlString);
+
+      // Validate connections against ArchiMate metamodel rules
+      const rules = relRulesRef.current;
+      const warnings: Array<{
+        connId: string;
+        sourceName: string;
+        sourceType: string;
+        targetName: string;
+        targetType: string;
+        requestedType: string;
+        fallbackType: string;
+      }> = [];
+
+      if (rules && Object.keys(rules).length > 0) {
+        for (const conn of parsed.connections) {
+          const srcNode = parsed.nodes.find((n) => n.id === conn.sourceNodeId);
+          const tgtNode = parsed.nodes.find((n) => n.id === conn.targetNodeId);
+          if (srcNode && tgtNode) {
+            const cleanRel = (conn.type || 'ServingRelationship').replace('Relationship', '').replace('archimate:', '');
+            if (cleanRel !== 'Association') {
+              const allowedForPair = rules[srcNode.type]?.[tgtNode.type] || [];
+              if (!allowedForPair.includes(cleanRel)) {
+                warnings.push({
+                  connId: conn.id,
+                  sourceName: srcNode.name,
+                  sourceType: srcNode.type,
+                  targetName: tgtNode.name,
+                  targetType: tgtNode.type,
+                  requestedType: conn.type,
+                  fallbackType: 'AssociationRelationship'
+                });
+              }
+            }
+          }
+        }
+      }
+      setRelWarnings(warnings);
+
+      const hasNewConns = parsed.connections.some((c) => !c.relationshipId || c.isNew);
+      if (parsed.addedElements.length > 0 || hasNewConns || warnings.length > 0) {
+        setShowDiffModal(true);
+        setSaving(false);
+      } else {
+        await executeCommit(parsed, xmlString);
+      }
     } catch (err: any) {
       console.error('Error saving draw.io diagram:', err);
       setStatusMessage({ type: 'error', text: `Errore durante il salvataggio: ${err.message}` });
@@ -551,19 +624,47 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
                   </div>
                   {diffResult.connections
                     .filter((c) => !c.relationshipId || c.isNew)
-                    .map((conn, idx) => (
-                      <div
-                        key={idx}
-                        className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
-                      >
-                        <div>
-                          <span className="font-bold text-slate-900">{conn.name || conn.type.replace('Relationship', '')}</span>
-                          <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
-                            {conn.type}
-                          </span>
+                    .map((conn, idx) => {
+                      const srcNode = diffResult.nodes.find((n) => n.id === conn.sourceNodeId);
+                      const tgtNode = diffResult.nodes.find((n) => n.id === conn.targetNodeId);
+                      return (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs"
+                        >
+                          <div>
+                            <span className="font-bold text-slate-900">
+                              {srcNode?.name || conn.sourceNodeId} &rarr; {tgtNode?.name || conn.targetNodeId}
+                            </span>
+                            <span className="ml-2 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800">
+                              {conn.type}
+                            </span>
+                          </div>
                         </div>
+                      );
+                    })}
+                </div>
+              )}
+
+              {relWarnings.length > 0 && (
+                <div className="space-y-2">
+                  <div className="text-[11px] uppercase font-bold text-amber-600 tracking-wider flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    <span>Avvisi Metamodello ArchiMate ({relWarnings.length})</span>
+                  </div>
+                  {relWarnings.map((w, idx) => (
+                    <div
+                      key={idx}
+                      className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-900 space-y-1"
+                    >
+                      <div className="font-bold">
+                        {w.sourceName} ({w.sourceType}) &rarr; {w.targetName} ({w.targetType})
                       </div>
-                    ))}
+                      <div className="text-[11px] text-amber-800">
+                        La relazione <span className="font-mono font-semibold">{w.requestedType}</span> non è ammessa dallo standard ArchiMate 3.x tra questi due tipi e verrà registrata come <span className="font-mono font-semibold">{w.fallbackType}</span>.
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
 

@@ -996,6 +996,147 @@ def test_saved_view_export_and_roundtrip_reimport():
     client.delete(f"/api/saved-views/{view_id}")
 
 
+def test_phase1_quick_wins_id_reconciliation_metamodel_and_overlap():
+    # 1. Verify extended ArchiMate 3.2 metamodel types and relationship rules
+    res_allowed_func = client.get("/api/relationships/allowed-types?source_type=ApplicationComponent&target_type=ApplicationFunction")
+    assert res_allowed_func.status_code == 200
+    allowed_func_types = [t["type"] for t in res_allowed_func.json()]
+    assert "AssignmentRelationship" in allowed_func_types
+    assert "CompositionRelationship" in allowed_func_types
+
+    res_allowed_evt = client.get("/api/relationships/allowed-types?source_type=BusinessEvent&target_type=BusinessProcess")
+    assert res_allowed_evt.status_code == 200
+    allowed_evt_types = [t["type"] for t in res_allowed_evt.json()]
+    assert "TriggeringRelationship" in allowed_evt_types
+
+    # 2. Verify OverlapService target keeper selection (Invest priority) & in_apm_scope filtering
+    res_overlap = client.get("/api/overlap/matrix/sample-easybank-ea")
+    assert res_overlap.status_code == 200
+    overlap_data = res_overlap.json()
+    crm_cluster = next((c for c in overlap_data["redundancy_clusters"] if "Customer" in c["capability_name"]), None)
+    assert crm_cluster is not None
+    assert "target_app_name" in crm_cluster
+    assert crm_cluster["potential_savings"] > 0
+
+    # 3. Verify compute_schema_diff reconciles by easyea_id when name is modified in Draw.io
+    from app.services.drawio_service import parse_drawio_file_to_canonical_model
+    from app.services.schema_diff_service import compute_schema_diff
+    from app.models.archimate import ArchiSchema, ArchimateElement
+
+    db = TestingSessionLocal()
+    try:
+        existing_app = db.query(ArchimateElement).filter(
+            ArchimateElement.model_id == "sample-easybank-ea",
+            ArchimateElement.type == "ApplicationComponent"
+        ).first()
+        assert existing_app is not None
+
+        dummy_schema = ArchiSchema(
+            id="schema-test-id-reconcile",
+            model_id="sample-easybank-ea",
+            name="Test Reconcile View",
+            view_data={"nodes": [{"id": "cell-1", "element_id": existing_app.id}], "connections": []}
+        )
+
+        # Simulate a Draw.io XML where the element kept its easyea_id but its label was renamed
+        renamed_label = f"{existing_app.name} v2.0"
+        drawio_xml = f"""<mxfile>
+          <diagram id="d1" name="Test Reconcile View">
+            <mxGraphModel>
+              <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <object id="cell-1" label="{renamed_label}" easyea_id="{existing_app.id}" archimate_type="{existing_app.type}" layer="{existing_app.layer}">
+                  <mxCell vertex="1" parent="1">
+                    <mxGeometry x="100" y="100" width="160" height="65" as="geometry"/>
+                  </mxCell>
+                </object>
+              </root>
+            </mxGraphModel>
+          </diagram>
+        </mxfile>"""
+
+        parsed = parse_drawio_file_to_canonical_model(drawio_xml)
+        diff = compute_schema_diff(dummy_schema, parsed, db)
+
+        # Must be recognized as 0 new elements, 0 removed elements, and 1 modified element (name change)
+        assert diff["summary"]["new_elements_count"] == 0
+        assert diff["summary"]["removed_elements_count"] == 0
+        assert diff["summary"]["modified_elements_count"] == 1
+        mod_el = diff["modified_elements"][0]
+        assert mod_el["id"] == existing_app.id
+        assert any(c["field"] == "name" and c["new_value"] == renamed_label for c in mod_el["changes"])
+    finally:
+        db.close()
+
+
+def test_phase2_bpmn_hierarchy_and_macro_process_steps():
+    from app.services.bpmn_service import parse_bpmn_file_to_canonical_model
+    from app.services.process_service import ProcessService
+    from app.models.archimate import ArchimateElement, ArchimateRelationship
+
+    bpmn_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs_1">
+      <bpmn:process id="proc_onboarding" name="Digital Customer Onboarding" isExecutable="true">
+        <bpmn:userTask id="task_kyc" name="Verify KYC Documents" />
+        <bpmn:manualTask id="task_sign" name="Collect Digital Signature" />
+      </bpmn:process>
+    </bpmn:definitions>"""
+
+    parsed = parse_bpmn_file_to_canonical_model(bpmn_xml)
+    elems_by_id = {e["id"]: e for e in parsed["elements"]}
+    assert "proc_onboarding" in elems_by_id
+    assert elems_by_id["proc_onboarding"]["properties"]["is_bpmn_step"] is False
+    assert elems_by_id["task_kyc"]["properties"]["is_bpmn_step"] is True
+    assert elems_by_id["task_kyc"]["properties"]["parent_process_id"] == "proc_onboarding"
+
+    # Verify CompositionRelationship generated from macro process to step
+    comp_rels = [
+        r for r in parsed["relationships"]
+        if r["type"] == "CompositionRelationship" and r["source_id"] == "proc_onboarding"
+    ]
+    assert len(comp_rels) == 2
+
+    # Insert into DB and verify ProcessService.get_process_catalog groups steps under macro process
+    db = TestingSessionLocal()
+    try:
+        for e in parsed["elements"]:
+            db.add(ArchimateElement(
+                id=e["id"],
+                model_id="sample-easybank-ea",
+                name=e["name"],
+                type=e["type"],
+                layer=e["layer"],
+                documentation=e["documentation"],
+                properties=e["properties"]
+            ))
+        for r in parsed["relationships"]:
+            db.add(ArchimateRelationship(
+                id=r["id"],
+                model_id="sample-easybank-ea",
+                source_id=r["source_id"],
+                target_id=r["target_id"],
+                type=r["type"],
+                name=r["name"],
+                documentation=r["documentation"]
+            ))
+        db.commit()
+
+        catalog = ProcessService.get_process_catalog(db, "sample-easybank-ea")
+        proc_names = [p["name"] for p in catalog["processes"]]
+        assert "Digital Customer Onboarding" in proc_names
+        # Micro-tasks must be grouped under the parent process, not polluting top-level process list
+        assert "Verify KYC Documents" not in proc_names
+        onb_proc = next(p for p in catalog["processes"] if p["id"] == "proc_onboarding")
+        assert onb_proc["steps_count"] == 2
+        step_names = [s["name"] for s in onb_proc["process_steps"]]
+        assert "Verify KYC Documents" in step_names
+    finally:
+        db.close()
+
+
+
+
 
 
 

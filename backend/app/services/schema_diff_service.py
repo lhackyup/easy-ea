@@ -85,10 +85,20 @@ def compute_schema_diff(
         up_type = up_elem.get("type", "ApplicationComponent")
         up_doc = up_elem.get("documentation", "") or ""
         up_layer = up_elem.get("layer", "Application")
-        up_props = up_elem.get("properties", {}) or {}
+        up_props = dict(up_elem.get("properties", {}) or {})
+        up_easyea_id = (up_elem.get("easyea_id") or up_props.pop("easyea_id", None) or "").strip()
 
-        match_key = (_norm(up_name), up_type)
-        existing_db_elem = db_elem_by_name_type.get(match_key)
+        # 1. Reconcile primarily by catalog ID (easyea_id or XML id matching an existing DB element)
+        existing_db_elem = None
+        if up_easyea_id and up_easyea_id in db_elem_by_id:
+            existing_db_elem = db_elem_by_id[up_easyea_id]
+        elif up_id and up_id in db_elem_by_id:
+            existing_db_elem = db_elem_by_id[up_id]
+
+        # 2. Fallback to (Normalized Name + Type) matching
+        if not existing_db_elem:
+            match_key = (_norm(up_name), up_type)
+            existing_db_elem = db_elem_by_name_type.get(match_key)
 
         if existing_db_elem:
             db_id = existing_db_elem.id
@@ -97,6 +107,22 @@ def compute_schema_diff(
 
             # Check attribute differences
             changes = []
+            if up_name and (existing_db_elem.name or "") != up_name:
+                changes.append({
+                    "field": "name",
+                    "label": "Nome Elemento",
+                    "current_value": existing_db_elem.name or "",
+                    "new_value": up_name,
+                    "overwrite": True
+                })
+            if up_type and (existing_db_elem.type or "") != up_type:
+                changes.append({
+                    "field": "type",
+                    "label": "Tipo ArchiMate",
+                    "current_value": existing_db_elem.type or "",
+                    "new_value": up_type,
+                    "overwrite": True
+                })
             if (existing_db_elem.documentation or "") != up_doc:
                 changes.append({
                     "field": "documentation",
@@ -118,6 +144,8 @@ def compute_schema_diff(
             cur_props = existing_db_elem.properties if isinstance(existing_db_elem.properties, dict) else {}
             all_prop_keys = set(cur_props.keys()).union(set(up_props.keys()))
             for pk in all_prop_keys:
+                if pk in ("easyea_id",):
+                    continue
                 c_val = str(cur_props.get(pk, ""))
                 n_val = str(up_props.get(pk, ""))
                 if c_val != n_val and n_val != "":
@@ -134,8 +162,8 @@ def compute_schema_diff(
                 modified_elements.append({
                     "id": db_id,
                     "xml_id": up_id,
-                    "name": up_name,
-                    "type": up_type,
+                    "name": up_name or existing_db_elem.name,
+                    "type": up_type or existing_db_elem.type,
                     "changes": changes
                 })
         else:
@@ -186,9 +214,15 @@ def compute_schema_diff(
         src_db_id = xml_elem_to_db_elem_id.get(up_src_id)
         tgt_db_id = xml_elem_to_db_elem_id.get(up_tgt_id)
 
-        # Try to find existing DB relationship
+        # Try to find existing DB relationship (first by explicit relationship_id / id, then by endpoints)
+        up_db_rel_id = (up_rel.get("relationship_id") or up_rel_props.get("relationship_id") or up_rel_id or "").strip()
         existing_db_rel = None
-        if src_db_id and tgt_db_id:
+        if up_db_rel_id and up_db_rel_id in db_rel_by_id:
+            candidate_rel = db_rel_by_id[up_db_rel_id]
+            if (not src_db_id or candidate_rel.source_id == src_db_id) and (not tgt_db_id or candidate_rel.target_id == tgt_db_id):
+                existing_db_rel = candidate_rel
+
+        if not existing_db_rel and src_db_id and tgt_db_id:
             existing_db_rel = db_rel_by_endpoints.get((src_db_id, tgt_db_id, up_rel_type))
             if not existing_db_rel:
                 # Also check normalized types
@@ -201,6 +235,16 @@ def compute_schema_diff(
         if existing_db_rel:
             seen_db_rel_ids_in_upload.add(existing_db_rel.id)
             changes = []
+            norm_existing_type = (existing_db_rel.type or "").replace("Relationship", "").replace("archimate:", "")
+            norm_up_type = (up_rel_type or "").replace("Relationship", "").replace("archimate:", "")
+            if norm_up_type and norm_existing_type != norm_up_type:
+                changes.append({
+                    "field": "type",
+                    "label": "Tipo Relazione",
+                    "current_value": existing_db_rel.type or "",
+                    "new_value": up_rel_type,
+                    "overwrite": True
+                })
             if (existing_db_rel.documentation or "") != up_rel_doc:
                 changes.append({
                     "field": "documentation",
