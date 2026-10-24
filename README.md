@@ -84,4 +84,3 @@ EasyEA si integra direttamente con i client desktop degli architetti e degli ana
 - **Google Cloud Run**:
   1. Esegui la build dell'immagine Docker su Artifact Registry: `gcloud builds submit --tag gcr.io/YOUR_PROJECT/easyea .`
   2. Deploya con scaling a zero: `gcloud run deploy easyea --image gcr.io/YOUR_PROJECT/easyea --platform managed --allow-unauthenticated`
-
