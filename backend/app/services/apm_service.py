@@ -43,31 +43,34 @@ class APMService:
 
         for app in apps:
             apm = app.apm_attributes
-            if not apm:
-                # Default mock attributes if not set
-                b_fit = 3
-                t_fit = 3
+            props = app.properties if isinstance(app.properties, dict) else {}
+
+            # Read from package attributes (apm_ / tme_), then legacy eea_, then apm model, then default
+            b_fit = int(props.get("tme_business_fit") or props.get("eea_business_fit") or (apm.business_fit if apm else 3))
+            t_fit = int(props.get("tme_technical_fit") or props.get("eea_technical_fit") or (apm.technical_fit if apm else 3))
+            
+            raw_cost = props.get("apm_annual_cost") or props.get("eea_annual_cost") or (apm.annual_cost if apm else 0.0)
+            try:
+                cost = float(raw_cost)
+            except (ValueError, TypeError):
                 cost = 0.0
-                crit = "Business Operational"
-                l_stat = "Live"
-                time_q = "Tolerate"
-                b_owner = "Unassigned"
-                t_owner = "Unassigned"
-                vendor = "Internal"
-                hosting = "Cloud"
-                in_scope = True
+
+            crit = props.get("apm_business_criticality") or props.get("eea_business_criticality") or (apm.business_criticality if apm else "Business Operational")
+            l_stat = props.get("apm_lifecycle_status") or props.get("eea_lifecycle_status") or (apm.lifecycle_status if apm else "Live")
+            
+            auto_time = calculate_time_quadrant(b_fit, t_fit)
+            time_q = props.get("tme_quadrant") or props.get("eea_time_quadrant") or (apm.time_quadrant if apm else auto_time)
+            
+            b_owner = props.get("apm_business_owner") or props.get("eea_business_owner") or (apm.business_owner if apm else "Unassigned")
+            t_owner = props.get("apm_technical_owner") or props.get("eea_technical_owner") or (apm.technical_owner if apm else "Unassigned")
+            vendor = props.get("apm_vendor") or props.get("eea_vendor") or (apm.vendor if apm else "Internal")
+            hosting = props.get("apm_hosting_type") or props.get("eea_hosting_type") or (apm.hosting_type if apm else "Cloud")
+            
+            raw_in_scope = props.get("apm_in_scope") if "apm_in_scope" in props else props.get("eea_in_apm_scope")
+            if raw_in_scope is not None:
+                in_scope = str(raw_in_scope).lower() in ("true", "1", "yes")
             else:
-                b_fit = apm.business_fit
-                t_fit = apm.technical_fit
-                cost = apm.annual_cost or 0.0
-                crit = apm.business_criticality or "Business Operational"
-                l_stat = apm.lifecycle_status or "Live"
-                time_q = apm.time_quadrant or calculate_time_quadrant(b_fit, t_fit)
-                b_owner = apm.business_owner or "Unassigned"
-                t_owner = apm.technical_owner or "Unassigned"
-                vendor = apm.vendor or "Internal"
-                hosting = apm.hosting_type or "Cloud"
-                in_scope = apm.in_apm_scope if apm.in_apm_scope is not None else True
+                in_scope = apm.in_apm_scope if apm and apm.in_apm_scope is not None else True
 
             if in_scope:
                 in_scope_apps_count += 1
@@ -162,6 +165,30 @@ class APMService:
             if "business_fit" in attributes or "technical_fit" in attributes:
                 if "time_quadrant" not in attributes:
                     apm.time_quadrant = auto_time
+
+        # Also sync to element properties
+        element = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
+        if element:
+            elem_props = dict(element.properties) if isinstance(element.properties, dict) else {}
+            prop_mapping = {
+                "business_fit": "tme_business_fit",
+                "technical_fit": "tme_technical_fit",
+                "time_quadrant": "tme_quadrant",
+                "annual_cost": "apm_annual_cost",
+                "business_criticality": "apm_business_criticality",
+                "lifecycle_status": "apm_lifecycle_status",
+                "business_owner": "apm_business_owner",
+                "technical_owner": "apm_technical_owner",
+                "vendor": "apm_vendor",
+                "hosting_type": "apm_hosting_type",
+                "data_classification": "apm_data_classification",
+                "sla_level": "apm_sla_level",
+                "in_apm_scope": "apm_in_scope"
+            }
+            for attr_key, pkg_prop in prop_mapping.items():
+                if attr_key in attributes:
+                    elem_props[pkg_prop] = attributes[attr_key]
+            element.properties = elem_props
 
         db.commit()
         db.refresh(apm)

@@ -88,3 +88,12 @@ dist-ssr/
 *.sw?
 .DS_Store
 Thumbs.db
+
+# Package binaries
+*.deb
+*.rpm
+*.dmg
+*.pkg
+*.msi
+*.exe
+

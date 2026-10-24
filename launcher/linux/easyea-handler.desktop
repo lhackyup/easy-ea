@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=EasyEA Protocol Handler
+Comment=EasyEA Desktop Protocol Launcher (Archi, Draw.io, Camunda)
+Exec=/home/lucky/Develpment/EasyEA/launcher/linux/easyea-handler.py %u
+Terminal=false
+Type=Application
+MimeType=x-scheme-handler/easyea;
+NoDisplay=true
+Categories=Development;
+StartupNotify=true

@@ -29,7 +29,97 @@ export interface CustomAttributeDefinition {
   default_value?: string;
   is_required: boolean;
   is_system?: boolean;
+  is_package?: boolean;
+  package_id?: string;
+  package_code?: string;
+  package_name?: string;
   created_at?: string;
+}
+
+export interface AttributePackageItem {
+  id: string;
+  package_id: string;
+  name: string;
+  label: string;
+  description?: string;
+  element_type: string;
+  layer: string;
+  data_type: 'string' | 'number' | 'boolean' | 'date' | 'select' | 'text';
+  options?: string[];
+  default_value?: string;
+  is_required: boolean;
+  section: string;
+  sort_order: number;
+  created_at?: string;
+}
+
+export interface AttributePackage {
+  id: string;
+  code: string; // 3-character code e.g. "apm", "tme"
+  name: string;
+  description?: string;
+  icon_color?: string;
+  is_default_active?: boolean;
+  is_system?: boolean;
+  is_active?: boolean | null; // Set when queried in the scope of a library workspace
+  item_count?: number;
+  items?: AttributePackageItem[];
+  created_at?: string;
+}
+
+export interface AttributePackageCreatePayload {
+  code: string;
+  name: string;
+  description?: string;
+  icon_color?: string;
+  is_default_active?: boolean;
+}
+
+export interface AttributePackageUpdatePayload {
+  name?: string;
+  description?: string;
+  icon_color?: string;
+  is_default_active?: boolean;
+}
+
+export interface PackageItemCreatePayload {
+  name: string;
+  label: string;
+  description?: string;
+  element_type?: string;
+  layer?: string;
+  data_type?: string;
+  options?: string[];
+  default_value?: string;
+  is_required?: boolean;
+  section?: string;
+  sort_order?: number;
+}
+
+export interface PackageUsageAuditLibrary {
+  model_id: string;
+  model_code?: string;
+  model_name: string;
+  is_active: boolean;
+  total_elements: number;
+  populated_elements_count: number;
+  populated_elements_sample: Array<{
+    id: string;
+    name: string;
+    type: string;
+    populated_attributes: string[];
+  }>;
+  attribute_counts: Record<string, number>;
+}
+
+export interface PackageUsageAudit {
+  package_id: string;
+  package_code: string;
+  package_name: string;
+  is_system: boolean;
+  total_active_libraries: number;
+  total_populated_elements: number;
+  libraries: PackageUsageAuditLibrary[];
 }
 
 export interface CustomAttributeCreatePayload {
@@ -56,6 +146,52 @@ export interface CustomAttributeUpdatePayload {
   is_required?: boolean;
 }
 
+export interface StereotypeAttributeLink {
+  id: string;
+  stereotype_id: string;
+  attribute_name: string;
+  is_required: boolean;
+  default_value?: string | null;
+  section_override?: string | null;
+  sort_order: number;
+}
+
+export interface ElementStereotype {
+  id: string;
+  model_id?: string | null;
+  base_type: string;
+  name: string;
+  label: string;
+  description?: string | null;
+  icon_color: string;
+  is_system: boolean;
+  attribute_links: StereotypeAttributeLink[];
+  created_at?: string | null;
+}
+
+export interface StereotypeCreatePayload {
+  name: string;
+  label?: string;
+  base_type: string;
+  description?: string;
+  icon_color?: string;
+  model_id?: string | null;
+  attribute_links?: Array<{
+    attribute_name: string;
+    is_required?: boolean;
+    default_value?: string;
+    section_override?: string;
+    sort_order?: number;
+  }>;
+}
+
+export interface StereotypeUpdatePayload {
+  name?: string;
+  label?: string;
+  description?: string;
+  icon_color?: string;
+}
+
 export interface MetamodelElementType {
   type: string;
   name: string;
@@ -64,6 +200,7 @@ export interface MetamodelElementType {
   standard_attributes: MetamodelAttribute[];
   apm_attributes?: MetamodelAttribute[];
   custom_attributes?: CustomAttributeDefinition[];
+  stereotypes?: ElementStereotype[];
 }
 
 export interface MetamodelLayer {
@@ -220,12 +357,16 @@ export interface BusinessProcessItem {
     criticality: string;
     cost: number;
     time_quadrant: string;
+    lifecycle_status?: string;
   }>;
   infrastructure_nodes: Array<{ id: string; name: string; type: string }>;
   process_steps?: Array<{ id: string; name: string; type: string; bpmn_tag?: string }>;
   steps_count?: number;
   app_dependency_count: number;
   is_critical: boolean;
+  risks?: Array<{ severity: string; type: string; message: string }>;
+  has_spof?: boolean;
+  has_lifecycle_risk?: boolean;
 }
 
 export interface ImpactSimulationResult {
@@ -235,14 +376,122 @@ export interface ImpactSimulationResult {
     type: string;
     layer: string;
   };
+  simulation_mode?: 'failure' | 'change';
+  max_hops_configured?: number;
+  blast_radius?: {
+    score: number;
+    severity: 'HIGH' | 'MEDIUM' | 'LOW';
+    max_hop_reached: number;
+    total_impacted_elements: number;
+  };
   impact_summary: {
     total_impacted_processes: number;
     total_impacted_applications: number;
+    total_impacted_infrastructure?: number;
+    total_impacted_data_objects?: number;
     total_impacted_stakeholders: number;
   };
-  impacted_processes: Array<{ id: string; name: string; type: string }>;
-  impacted_applications: Array<{ id: string; name: string; criticality: string }>;
-  impacted_stakeholders: Array<{ id: string; name: string; type: string }>;
+  impacted_processes: Array<{
+    id: string;
+    name: string;
+    type: string;
+    hop_distance?: number;
+    path?: Array<{ id: string; name: string; type: string; rel?: string }>;
+  }>;
+  impacted_applications: Array<{
+    id: string;
+    name: string;
+    criticality: string;
+    time_quadrant?: string;
+    lifecycle_status?: string;
+    hop_distance?: number;
+    path?: Array<{ id: string; name: string; type: string; rel?: string }>;
+  }>;
+  impacted_infrastructure?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    hop_distance?: number;
+    path?: Array<{ id: string; name: string; type: string; rel?: string }>;
+  }>;
+  impacted_data_objects?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    hop_distance?: number;
+    path?: Array<{ id: string; name: string; type: string; rel?: string }>;
+  }>;
+  impacted_stakeholders: Array<{
+    id: string;
+    name: string;
+    type: string;
+    hop_distance?: number;
+    path?: Array<{ id: string; name: string; type: string; rel?: string }>;
+  }>;
+}
+
+export interface ArchitecturalRisksReport {
+  model_id: string;
+  risk_index: number;
+  risk_level: 'CRITICAL' | 'WARNING' | 'HEALTHY';
+  summary: {
+    total_risks: number;
+    spof_count: number;
+    lifecycle_risks_count: number;
+    sla_risks_count: number;
+  };
+  spof_risks: Array<{
+    element_id: string;
+    element_name: string;
+    element_type: string;
+    severity: string;
+    type: string;
+    message: string;
+  }>;
+  lifecycle_risks: Array<{
+    process_id: string;
+    process_name: string;
+    message: string;
+    severity: string;
+  }>;
+  sla_risks: Array<{
+    process_id: string;
+    process_name: string;
+    message: string;
+    severity: string;
+  }>;
+}
+
+export interface PlateauRoadmap {
+  has_explicit_plateaus: boolean;
+  plateaus?: Array<{
+    id: string;
+    name: string;
+    documentation?: string;
+    element_count: number;
+    elements: Array<{ id: string; name: string; type: string; layer: string }>;
+  }>;
+  horizons?: Array<{
+    horizon: string;
+    description: string;
+    app_count: number;
+    applications: Array<{ id: string; name: string; time_quadrant: string; lifecycle_status: string; cost: number }>;
+  }>;
+  work_packages: Array<{ id: string; name: string; doc?: string }>;
+}
+
+export interface DerivedRelationshipItem {
+  id: string;
+  source_id: string;
+  source_name: string;
+  source_type: string;
+  target_id: string;
+  target_name: string;
+  target_type: string;
+  type: string;
+  is_derived: boolean;
+  strength: number;
+  chain: Array<{ source_name: string; rel_type: string; target_name: string }>;
 }
 
 export interface ArchimateElementItem {
@@ -253,6 +502,8 @@ export interface ArchimateElementItem {
   layer: string;
   documentation?: string;
   properties?: Record<string, any>;
+  stereotype_id?: string | null;
+  stereotype?: { id: string; name: string; label: string; icon_color: string } | null;
   incoming_count?: number;
   outgoing_count?: number;
   apm?: Partial<ApplicationInfo>;
@@ -475,7 +726,7 @@ export interface ArchiSchema {
   name: string;
   viewpoint: string;
   documentation: string;
-  format?: 'archi' | 'drawio';
+  format?: 'archi' | 'drawio' | 'bpmn';
   status: 'available' | 'checked_out';
   locked_by_user_id: string | null;
   locked_by_username: string | null;

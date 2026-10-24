@@ -5,8 +5,16 @@ from pydantic import BaseModel
 import uuid
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateRelationship, ArchimateElement
-from app.services.metamodel_service import ARCHIMATE_RELATIONSHIP_RULES, ARCHIMATE_RELATIONSHIP_TYPES
+from app.models.archimate import ArchimateRelationship, ArchimateElement, User
+from app.api.deps import get_current_user, require_library_permission
+from app.services.metamodel_service import (
+    ARCHIMATE_RELATIONSHIP_RULES,
+    ARCHIMATE_RELATIONSHIP_TYPES,
+    get_allowed_rel_names_for_types,
+    is_rel_type_allowed,
+    compute_archimate_derivation,
+    get_plateau_roadmap
+)
 
 router = APIRouter(prefix="/relationships", tags=["ArchiMate Relationships"])
 
@@ -22,31 +30,41 @@ class RelationshipUpdate(BaseModel):
     name: Optional[str] = None
     documentation: Optional[str] = None
 
-def get_allowed_rel_names_for_types(source_type: str, target_type: str) -> List[str]:
-    """Returns list of allowed relationship names (short or full) between two ArchiMate element types."""
-    allowed = []
-    if source_type in ARCHIMATE_RELATIONSHIP_RULES:
-        if target_type in ARCHIMATE_RELATIONSHIP_RULES[source_type]:
-            allowed = list(ARCHIMATE_RELATIONSHIP_RULES[source_type][target_type])
-    
-    # Association is universally valid between any pair of ArchiMate concepts
-    if "Association" not in allowed and "AssociationRelationship" not in allowed:
-        allowed.append("Association")
-        
-    return allowed
+@router.get("/derived", response_model=List[Dict[str, Any]])
+def get_derived_relationships(
+    model_id: str,
+    source_id: Optional[str] = None,
+    target_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Computes derived relationships according to ArchiMate 3.2 §5.7 Derivation Rules.
+    Determines transitive connections through intermediate elements based on weakest-link strength.
+    """
+    elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
+    relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
+    return compute_archimate_derivation(elements, relationships, source_id, target_id)
 
-def is_rel_type_allowed(source_type: str, target_type: str, rel_type: str) -> bool:
-    """Checks if a relationship type (e.g. 'ServingRelationship' or 'Serving') is valid between source and target."""
-    allowed_names = get_allowed_rel_names_for_types(source_type, target_type)
-    # Match both short name ("Serving") and full type ("ServingRelationship")
-    norm_rel = rel_type.replace("Relationship", "")
-    for a in allowed_names:
-        if a == rel_type or a == norm_rel or f"{a}Relationship" == rel_type:
-            return True
-    return False
+@router.get("/plateaus/{model_id}")
+def get_model_plateaus(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns architectural plateaus, migration work packages, and As-Is / To-Be horizons.
+    """
+    elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
+    relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
+    return get_plateau_roadmap(elements, relationships)
 
 @router.get("/allowed-types", response_model=List[Dict[str, Any]])
-def get_allowed_relationship_types(source_type: str, target_type: str):
+def get_allowed_relationship_types(
+    source_type: str,
+    target_type: str,
+    current_user: User = Depends(get_current_user)
+):
     """Returns the list of ArchiMate allowed relationship types for the given source and target element types."""
     allowed_names = get_allowed_rel_names_for_types(source_type, target_type)
     results = []
@@ -67,7 +85,8 @@ def list_relationships(
     model_id: Optional[str] = None,
     element_id: Optional[str] = None,
     type: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """List relationships for a model or element, optionally filtered by relationship type."""
     query = db.query(ArchimateRelationship)
@@ -99,8 +118,14 @@ def list_relationships(
     return results
 
 @router.post("")
-def create_relationship(model_id: str, payload: RelationshipCreate, db: Session = Depends(get_db)):
+def create_relationship(
+    model_id: str,
+    payload: RelationshipCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Creates a relationship between two ArchiMate elements after validating ArchiMate constraints."""
+    require_library_permission(db, current_user, "create_relationship", model_id)
     src = db.query(ArchimateElement).filter(ArchimateElement.id == payload.source_id, ArchimateElement.model_id == model_id).first()
     tgt = db.query(ArchimateElement).filter(ArchimateElement.id == payload.target_id, ArchimateElement.model_id == model_id).first()
     if not src or not tgt:
@@ -144,11 +169,17 @@ def create_relationship(model_id: str, payload: RelationshipCreate, db: Session 
     }
 
 @router.put("/{relationship_id}")
-def update_relationship(relationship_id: str, payload: RelationshipUpdate, db: Session = Depends(get_db)):
+def update_relationship(
+    relationship_id: str,
+    payload: RelationshipUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Updates an existing relationship while validating ArchiMate constraints."""
     rel = db.query(ArchimateRelationship).filter(ArchimateRelationship.id == relationship_id).first()
     if not rel:
         raise HTTPException(status_code=404, detail="Relationship not found")
+    require_library_permission(db, current_user, "write_architecture", rel.model_id)
 
     if payload.type is not None:
         src = rel.source_element
@@ -182,11 +213,16 @@ def update_relationship(relationship_id: str, payload: RelationshipUpdate, db: S
     }
 
 @router.delete("/{relationship_id}")
-def delete_relationship(relationship_id: str, db: Session = Depends(get_db)):
+def delete_relationship(
+    relationship_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Deletes a relationship."""
     rel = db.query(ArchimateRelationship).filter(ArchimateRelationship.id == relationship_id).first()
     if not rel:
         raise HTTPException(status_code=404, detail="Relationship not found")
+    require_library_permission(db, current_user, "delete_relationship", rel.model_id)
     db.delete(rel)
     db.commit()
     return {"message": "Relationship deleted", "id": relationship_id}

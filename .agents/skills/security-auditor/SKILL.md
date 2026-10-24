@@ -17,7 +17,7 @@ Questa skill guida l'agente (o un sub-agente specializzato definito tramite `def
      ```
    - Lo script interroga in tempo reale l'API ufficiale **OSV.dev** (`https://api.osv.dev/v1/querybatch`) e `npm audit` per tutte le dipendenze Python (`backend/requirements.txt` e `backend/venv`) e Node/NPM (`frontend/package-lock.json`), estraendo CVE, GHSA, CVSS e versioni con fix, oltre ad analizzare l'AST degli endpoint FastAPI e i pattern SAST critici.
 2. **Delega al Sub-Agente `security-auditor` (o Ispezione Approfondita Manuale)**:
-   - Usa `define_subagent` per definire l'agente `security-auditor` (un **Principal AppSec Engineer & Penetration Tester**) e invocalo con `invoke_subagent` passandogli i risultati dello scanner oppure verifica manualmente i file critici seguendo [references/security_audit_rubric.md](./references/security_audit_rubric.md).
+   - Usa `define_subagent` per definire l'agente `security-auditor` (un **Principal AppSec Engineer & Penetration Tester**) e invocalo con `invoke_subagent(Model="flash", ...)` specificando il modello **Gemini 3.8 Flash** (`model: flash`), passandogli i risultati dello scanner oppure verifica manualmente i file critici seguendo [references/security_audit_rubric.md](./references/security_audit_rubric.md).
 3. **Analisi di Reachability (Sfruttabilità Reale)**:
    - Non limitarti a elencare l'output grezzo degli scanner: verifica sempre nel codice di EasyEA se una CVE o un finding SAST è **effettivamente raggiungibile e sfruttabile** (es. se una CVE su `python-multipart` o `starlette` impatta gli endpoint `/api/import/*`, `/api/models/upload`, `/api/schemas/*`).
 

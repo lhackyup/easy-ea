@@ -35,7 +35,8 @@ import {
   Move,
   Cpu,
   Palette,
-  Workflow
+  Workflow,
+  ExternalLink
 } from 'lucide-react';
 
 interface SchemaRepositoryProps {
@@ -44,7 +45,7 @@ interface SchemaRepositoryProps {
 
 export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) => {
   const { user } = useAuth();
-  const { t } = useLanguage();
+  const { t, interpolate } = useLanguage();
 
   const [folders, setFolders] = useState<SchemaFolder[]>([]);
   const [schemas, setSchemas] = useState<ArchiSchema[]>([]);
@@ -167,7 +168,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   };
 
   const handleDeleteFolder = async (folderId: string) => {
-    if (!window.confirm('Eliminare questa cartella? Gli schemi interni verranno spostati nella cartella principale.')) {
+    if (!window.confirm(t.schemas.confirmDeleteFolder)) {
       return;
     }
     try {
@@ -204,30 +205,55 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   };
 
   // Schema Actions
-  const handleCheckout = async (schema: ArchiSchema) => {
+  const handleCheckout = async (schema: ArchiSchema, launchApp: boolean = true) => {
     try {
       const res = await api.checkoutSchema(schema.id);
       setSchemas((prev) => prev.map((s) => (s.id === schema.id ? res.schema : s)));
 
-      // Trigger automatic file download of .archimate
-      const blob = new Blob([res.xml_content], { type: 'application/octet-stream' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = res.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      const activeToken = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token') || '';
+      const toolType = schema.format === 'drawio' ? 'drawio' : (schema.format === 'bpmn' ? 'camunda' : 'archi');
 
-      showToast(`Check-out effettuato con successo. Download del file ${res.filename} avviato.`);
+      if (launchApp) {
+        // Construct easyea:// protocol URI
+        const serverOrigin = window.location.origin;
+        const easyeaUri = `easyea://open?tool=${encodeURIComponent(toolType)}&schema_id=${encodeURIComponent(schema.id)}&model_id=${encodeURIComponent(schema.model_id)}&token=${encodeURIComponent(activeToken)}&server=${encodeURIComponent(serverOrigin)}`;
+
+        // Trigger protocol handler to launch desktop application
+        window.location.href = easyeaUri;
+
+        const appLabel = toolType === 'drawio' ? 'Draw.io' : (toolType === 'camunda' ? 'Camunda Modeler' : 'Archi');
+        showToast(`Check-out effettuato! Apertura diretta in ${appLabel} avviata.`);
+      } else {
+        // Trigger automatic manual file download fallback
+        const blob = new Blob([res.xml_content], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = res.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        showToast(`Check-out effettuato con successo. Download del file ${res.filename} avviato.`);
+      }
     } catch (err: any) {
       showToast(err.message || 'Errore durante il check-out.', 'error');
     }
   };
 
+  const handleLaunchAppOnly = (schema: ArchiSchema) => {
+    const activeToken = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token') || '';
+    const toolType = schema.format === 'drawio' ? 'drawio' : (schema.format === 'bpmn' ? 'camunda' : 'archi');
+    const serverOrigin = window.location.origin;
+    const easyeaUri = `easyea://open?tool=${encodeURIComponent(toolType)}&schema_id=${encodeURIComponent(schema.id)}&model_id=${encodeURIComponent(schema.model_id)}&token=${encodeURIComponent(activeToken)}&server=${encodeURIComponent(serverOrigin)}`;
+    window.location.href = easyeaUri;
+    const appLabel = toolType === 'drawio' ? 'Draw.io' : (toolType === 'camunda' ? 'Camunda Modeler' : 'Archi');
+    showToast(`Riapertura di ${schema.name} in ${appLabel}...`);
+  };
+
   const handleDiscardCheckout = async (schema: ArchiSchema) => {
-    if (!window.confirm('Annullare il check-out? Il blocco verrà rilasciato.')) return;
+    if (!window.confirm(t.schemas.confirmCancelCheckout)) return;
     try {
       const res = await api.discardCheckout(schema.id);
       setSchemas((prev) => prev.map((s) => (s.id === schema.id ? res.schema : s)));
@@ -238,7 +264,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   };
 
   const handleForcedUnlock = async (schema: ArchiSchema) => {
-    if (!window.confirm(`Sblocco forzato: vuoi rimuovere il blocco impostato da ${schema.locked_by_username}?`)) return;
+    if (!window.confirm(interpolate(t.schemas.confirmForceUnlock, { user: schema.locked_by_username || '' }))) return;
     try {
       const res = await api.forcedUnlock(schema.id);
       setSchemas((prev) => prev.map((s) => (s.id === schema.id ? res.schema : s)));
@@ -249,7 +275,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   };
 
   const handleDeleteSchema = async (schema: ArchiSchema) => {
-    if (!window.confirm(`Sei sicuro di voler eliminare definitivamente lo schema "${schema.name}"?`)) return;
+    if (!window.confirm(interpolate(t.schemas.confirmDeleteSchema, { name: schema.name }))) return;
     try {
       await api.deleteSchema(schema.id);
       setSchemas((prev) => prev.filter((s) => s.id !== schema.id));
@@ -368,7 +394,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             <div className="hidden group-hover:flex items-center space-x-0.5">
               <button
                 type="button"
-                title="Nuova sottocartella"
+                title={t.schemas.newSubfolderTooltip}
                 onClick={(e) => {
                   e.stopPropagation();
                   setNewSubfolderParentId(folder.id);
@@ -380,7 +406,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               </button>
               <button
                 type="button"
-                title="Rinomina"
+                title={t.common.edit}
                 onClick={(e) => {
                   e.stopPropagation();
                   setEditingFolderId(folder.id);
@@ -392,7 +418,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               </button>
               <button
                 type="button"
-                title="Elimina cartella"
+                title={t.schemas.deleteFolderTooltip}
                 onClick={(e) => {
                   e.stopPropagation();
                   handleDeleteFolder(folder.id);
@@ -466,7 +492,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
           <button
             type="button"
             onClick={() => setNewSubfolderParentId(null)}
-            title="Nuova cartella principale"
+            title={t.schemas.newRootFolderTooltip}
             className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
           >
             <FolderPlus className="w-4 h-4" />
@@ -485,7 +511,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
           >
             <div className="flex items-center space-x-2">
               <FolderOpen className="w-4 h-4 text-indigo-600" />
-              <span>Tutti gli Schemi</span>
+              <span>{t.schemas.allSchemas}</span>
             </div>
             <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 text-slate-600 font-semibold">
               {schemas.length}
@@ -551,7 +577,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
         {/* Bottom hint */}
         <div className="p-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 flex items-center space-x-1.5">
           <Move className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-          <span>Trascina gli schemi sulle cartelle per spostarli</span>
+          <span>{t.schemas.dragSchemasHint}</span>
         </div>
       </div>
 
@@ -565,7 +591,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <ChevronRight className="w-3.5 h-3.5" />
               <span className="font-semibold text-slate-700">
                 {selectedFolderId === null
-                  ? 'Tutti gli Schemi'
+                  ? t.schemas.allSchemas
                   : selectedFolderId === '__root__'
                   ? 'Cartella Principale (Root)'
                   : selectedFolderObj?.name || 'Cartella'}
@@ -573,7 +599,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             </div>
             <h1 className="text-lg font-black text-slate-800 mt-0.5">
               {selectedFolderId === null
-                ? 'Tutti gli Schemi ArchiMate'
+                ? t.schemas.allSchemas
                 : selectedFolderId === '__root__'
                 ? 'Schemi nella Root'
                 : selectedFolderObj?.name}
@@ -586,7 +612,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
-                placeholder="Cerca schemi, autori..."
+                placeholder={t.schemas.searchSchemasPlaceholder}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-9 pr-4 py-1.5 text-xs bg-slate-100 hover:bg-slate-200/60 focus:bg-white border border-transparent focus:border-indigo-500 rounded-xl outline-none w-56 transition"
@@ -599,7 +625,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               onChange={(e: any) => setStatusFilter(e.target.value)}
               className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200/60 border border-slate-200 rounded-xl outline-none text-slate-700 font-semibold"
             >
-              <option value="all">Tutti gli stati</option>
+              <option value="all">{t.schemas.allStatuses}</option>
               <option value="available">🟢 Disponibili</option>
               <option value="checked_out">🔒 In Check-out</option>
             </select>
@@ -609,8 +635,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <button
                 type="button"
                 onClick={() => setIsDrawioPaletteOpen(true)}
-                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-amber-200"
-                title="Scarica la Palette ArchiMate 3.x per Draw.io Desktop"
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-amber-200 cursor-pointer"
+                title={t.schemas.downloadDrawioPaletteTooltip}
               >
                 <Palette className="w-4 h-4 text-amber-200" />
                 <span>Palette Draw.io</span>
@@ -619,8 +645,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <button
                 type="button"
                 onClick={() => setIsPluginModalOpen(true)}
-                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-slate-300"
-                title="Scarica e configura il plugin per Architool (jArchi)"
+                className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-slate-300 cursor-pointer"
+                title={t.schemas.downloadJArchiTooltip}
               >
                 <Cpu className="w-4 h-4 text-indigo-400" />
                 <span>Plugin Archi</span>
@@ -631,8 +657,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             <button
               type="button"
               onClick={() => setIsCamundaModalOpen(true)}
-              className="px-3.5 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-orange-200"
-              title="Scarica e configura il plugin per Camunda Modeler Desktop (BPMN 2.0)"
+              className="px-3.5 py-1.5 bg-orange-700 hover:bg-orange-800 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-orange-200 cursor-pointer"
+              title={t.schemas.downloadCamundaTooltip}
             >
               <Workflow className="w-4 h-4 text-orange-200" />
               <span>Plugin Camunda</span>
@@ -642,10 +668,10 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             <button
               type="button"
               onClick={() => setIsCreateOpen(true)}
-              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200"
+              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Nuovo Schema</span>
+              <span>{t.schemas.newSchemaBtn}</span>
             </button>
           </div>
         </div>
@@ -807,14 +833,25 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                         {!isLocked ? (
                           <button
                             type="button"
-                            onClick={() => handleCheckout(schema)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1 shadow-sm shadow-indigo-200"
+                            onClick={() => handleCheckout(schema, true)}
+                            title={`Effettua il check-out e apri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200"
                           >
                             <Lock className="w-3.5 h-3.5" />
                             <span>Check-out</span>
+                            <ExternalLink className="w-3 h-3 opacity-80" />
                           </button>
                         ) : isLockedByMe ? (
                           <>
+                            <button
+                              type="button"
+                              onClick={() => handleLaunchAppOnly(schema)}
+                              title={`Riapri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center space-x-1"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Apri</span>
+                            </button>
                             <button
                               type="button"
                               onClick={() => setCheckinSchema(schema)}

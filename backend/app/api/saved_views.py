@@ -14,8 +14,10 @@ from app.models.archimate import (
     ArchimateElement,
     ArchimateRelationship,
     CustomAttributeDefinition,
+    User,
     utc_now
 )
+from app.api.deps import get_current_user, require_library_permission
 from app.services.export_service import generate_view_excel, generate_view_csv_zip
 
 router = APIRouter(prefix="/saved-views", tags=["saved-views"])
@@ -49,7 +51,8 @@ class SavedViewUpdate(BaseModel):
 @router.get("")
 def list_saved_views(
     model_id: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Retrieve all saved filter views for a specific model workspace (or all models)."""
     query = db.query(SavedFilterView)
@@ -76,7 +79,8 @@ def list_saved_views(
 @router.get("/{view_id}")
 def get_saved_view(
     view_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Get details of a specific saved view."""
     v = db.query(SavedFilterView).filter(SavedFilterView.id == view_id).first()
@@ -98,9 +102,11 @@ def get_saved_view(
 @router.post("", status_code=201)
 def create_saved_view(
     req: SavedViewCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Create a new saved filter view."""
+    require_library_permission(db, current_user, "write_architecture", req.model_id)
     workspace = db.query(ModelWorkspace).filter(ModelWorkspace.id == req.model_id).first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Model workspace not found")
@@ -138,12 +144,14 @@ def create_saved_view(
 def update_saved_view(
     view_id: str,
     req: SavedViewUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Update an existing saved filter view."""
     v = db.query(SavedFilterView).filter(SavedFilterView.id == view_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Saved view not found")
+    require_library_permission(db, current_user, "write_architecture", v.model_id)
 
     if req.name is not None:
         v.name = req.name.strip()
@@ -178,12 +186,14 @@ def update_saved_view(
 @router.delete("/{view_id}")
 def delete_saved_view(
     view_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Delete a saved filter view."""
     v = db.query(SavedFilterView).filter(SavedFilterView.id == view_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="Saved view not found")
+    require_library_permission(db, current_user, "write_architecture", v.model_id)
     
     db.delete(v)
     db.commit()
@@ -192,12 +202,14 @@ def delete_saved_view(
 @router.post("/{view_id}/duplicate", status_code=201)
 def duplicate_saved_view(
     view_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Duplicate an existing saved filter view."""
     orig = db.query(SavedFilterView).filter(SavedFilterView.id == view_id).first()
     if not orig:
         raise HTTPException(status_code=404, detail="Saved view not found")
+    require_library_permission(db, current_user, "write_architecture", orig.model_id)
     
     dup = SavedFilterView(
         id=f"view_{uuid.uuid4().hex[:12]}",
@@ -409,7 +421,8 @@ def clean_filename(name: str) -> str:
 def export_saved_view(
     view_id: str,
     format: str = Query("xlsx", pattern="^(xlsx|csv)$"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Exports a saved view into an Excel (.xlsx) or CSV package matching the exact import format.
@@ -477,7 +490,8 @@ def export_saved_view(
 @router.post("/export")
 def export_view_or_selection(
     req: ViewExportRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Exports either a specific list of element IDs, a saved view, or an ad-hoc filter configuration.

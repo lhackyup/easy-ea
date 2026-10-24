@@ -24,6 +24,8 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+client = TestClient(app)
+
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
@@ -31,11 +33,13 @@ def setup_db():
     seed_sample_model(db)
     seed_default_custom_attributes(db)
     seed_default_rbac(db)
+    admin_user = db.query(User).filter(User.username == "admin").first() or db.query(User).first()
+    if admin_user:
+        token = create_access_token(admin_user)
+        client.headers.update({"Authorization": f"Bearer {token}"})
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
-
-client = TestClient(app)
 
 @pytest.fixture
 def auth_headers():

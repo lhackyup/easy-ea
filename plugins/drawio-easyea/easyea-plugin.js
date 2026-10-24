@@ -11,8 +11,24 @@
  * Compatible with Draw.io Desktop (Linux, macOS, Windows) and Draw.io Web.
  */
 
-Draw.loadPlugin(function(ui) {
-    'use strict';
+(function() {
+    function registerEasyEAPlugin(initFn) {
+        if (typeof Draw !== 'undefined' && typeof Draw.loadPlugin === 'function') {
+            Draw.loadPlugin(initFn);
+        } else if (typeof App !== 'undefined' && App.DrawPlugins) {
+            App.DrawPlugins.push(initFn);
+        } else {
+            setTimeout(function() { registerEasyEAPlugin(initFn); }, 50);
+        }
+    }
+
+    registerEasyEAPlugin(function(ui) {
+        'use strict';
+
+        if (window.__EASYEA_PLUGIN_INITIALIZED__) {
+            return;
+        }
+        window.__EASYEA_PLUGIN_INITIALIZED__ = true;
 
     // -------------------------------------------------------------
     // Configuration & State Management
@@ -70,17 +86,42 @@ Draw.loadPlugin(function(ui) {
         'AssociationRelationship': 'edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=none;strokeColor=#64748B;strokeWidth=2;'
     };
 
+    function parseJwtPayload(token) {
+        try {
+            if (!token || token.indexOf('.') < 0) return null;
+            var parts = token.split('.');
+            if (parts.length >= 2) {
+                var b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                while (b64.length % 4) b64 += '=';
+                return JSON.parse(decodeURIComponent(escape(atob(b64))));
+            }
+        } catch(e) {}
+        return null;
+    }
+
     function getConfig() {
+        var cfg = { server_url: 'http://localhost:8000', token: '', username: '', full_name: '' };
         try {
             var raw = localStorage.getItem(STORAGE_CONFIG_KEY);
-            if (raw) return JSON.parse(raw);
+            if (raw) cfg = Object.assign(cfg, JSON.parse(raw));
         } catch(e) {}
-        return { server_url: 'http://localhost:8000', token: '', username: '', full_name: '' };
+
+        if (cfg.token && (!cfg.full_name || !cfg.username)) {
+            var claims = parseJwtPayload(cfg.token);
+            if (claims) {
+                cfg.username = cfg.username || claims.username || claims.preferred_username || claims.sub || 'admin';
+                cfg.full_name = cfg.full_name || claims.full_name || claims.name || cfg.username;
+            }
+        }
+        return cfg;
     }
 
     function saveConfig(cfg) {
         try {
             localStorage.setItem(STORAGE_CONFIG_KEY, JSON.stringify(cfg));
+            if (window.electron && typeof window.electron.request === 'function') {
+                window.electron.request({ action: 'easyeaSaveConfig', config: cfg }, function() {});
+            }
         } catch(e) {}
     }
 
@@ -110,6 +151,90 @@ Draw.loadPlugin(function(ui) {
 
     function getRelStyle(relType) {
         return RELATIONSHIP_STYLES[relType] || 'edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#4F46E5;strokeWidth=2;';
+    }
+
+    // -------------------------------------------------------------
+    // Helper: Universal Network Fetch (CORS-immune via Electron IPC)
+    // -------------------------------------------------------------
+    function eaFetch(url, opts) {
+        opts = opts || {};
+        var isFormData = (opts.body && typeof FormData !== 'undefined' && opts.body instanceof FormData);
+        if (!isFormData && window.electron && typeof window.electron.request === 'function') {
+            return new Promise(function(resolve, reject) {
+                var reqBody = null;
+                if (typeof opts.body === 'string') {
+                    reqBody = opts.body;
+                } else if (opts.body) {
+                    reqBody = JSON.stringify(opts.body);
+                }
+
+                window.electron.request({
+                    action: 'easyeaApiFetch',
+                    url: url,
+                    method: opts.method || 'GET',
+                    headers: opts.headers || {},
+                    body: reqBody
+                }, function(res) {
+                    if (res && res.error) {
+                        fetch(url, opts).then(resolve).catch(reject);
+                    } else if (res) {
+                        resolve({
+                            ok: Boolean(res.ok),
+                            status: res.status,
+                            statusText: res.statusText || '',
+                            json: function() { return Promise.resolve(res.data); },
+                            text: function() { return Promise.resolve(typeof res.data === 'string' ? res.data : JSON.stringify(res.data)); }
+                        });
+                    } else {
+                        fetch(url, opts).then(resolve).catch(reject);
+                    }
+                }, function(err) {
+                    fetch(url, opts).then(resolve).catch(reject);
+                });
+            });
+        }
+        return fetch(url, opts);
+    }
+
+    // -------------------------------------------------------------
+    // Helper: HTML Escaping & Safe DOM Rendering (SAST-HIGH-03)
+    // -------------------------------------------------------------
+    function escHtml(val) {
+        if (val === null || val === undefined) return '';
+        return String(val)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function setSafeHtml(container, htmlStr, append) {
+        if (!container) return;
+        if (!append) {
+            while (container.firstChild) {
+                container.removeChild(container.firstChild);
+            }
+        }
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(String(htmlStr || ''), 'text/html');
+        var dangerous = doc.body.querySelectorAll('script, iframe, object, embed');
+        for (var i = 0; i < dangerous.length; i++) {
+            dangerous[i].remove();
+        }
+        var allElems = doc.body.querySelectorAll('*');
+        for (var j = 0; j < allElems.length; j++) {
+            var attrs = allElems[j].attributes;
+            for (var k = attrs.length - 1; k >= 0; k--) {
+                var attrName = attrs[k].name.toLowerCase();
+                if (attrName.indexOf('on') === 0) {
+                    allElems[j].removeAttribute(attrs[k].name);
+                }
+            }
+        }
+        while (doc.body.firstChild) {
+            container.appendChild(doc.body.firstChild);
+        }
     }
 
     // -------------------------------------------------------------
@@ -150,50 +275,103 @@ Draw.loadPlugin(function(ui) {
     // -------------------------------------------------------------
     function showSettingsDialog() {
         var config = getConfig();
-        var container = createModalContainer('⚙️ Configurazione & Accesso EasyEA', 480);
+        var activeSchema = getActiveSchema();
+        var container = createModalContainer('⚙️ Configurazione & Accesso EasyEA', 500);
 
-        var form = document.createElement('div');
-        form.innerHTML = 
-            '<div style="margin-bottom: 14px;">' +
-                '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">URL Server EasyEA:</label>' +
-                '<input type="text" id="easyea_server_url" value="' + (config.server_url || 'http://localhost:8000') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
-            '</div>' +
-            '<div style="margin-bottom: 14px;">' +
-                '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">Username o Email:</label>' +
-                '<input type="text" id="easyea_username" value="' + (config.username || 'admin') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
-            '</div>' +
-            '<div style="margin-bottom: 14px;">' +
-                '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">Password:</label>' +
-                '<input type="password" id="easyea_password" placeholder="Inserisci password..." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
-            '</div>' +
-            '<div id="easyea_status_box" style="padding:10px;border-radius:6px;font-size:12px;margin-bottom:14px;display:' + (config.token ? 'block' : 'none') + ';background:' + (config.token ? '#f0fdf4' : '#f8fafc') + ';border:1px solid ' + (config.token ? '#bbf7d0' : '#e2e8f0') + ';color:' + (config.token ? '#166534' : '#64748b') + ';">' +
-                (config.token ? '🟢 Connesso come <strong>' + (config.full_name || config.username) + '</strong>' : '') +
-            '</div>';
+        var isAuth = Boolean(config.token);
+        var content = document.createElement('div');
+
+        if (isAuth) {
+            setSafeHtml(content,
+                '<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:16px;margin-bottom:16px;">' +
+                    '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
+                        '<span style="font-size:24px;">🟢</span>' +
+                        '<div>' +
+                            '<div style="font-weight:700;color:#166534;font-size:15px;">Autenticato su EasyEA</div>' +
+                            '<div style="font-size:13px;color:#15803d;">Utente: <strong>' + escHtml(config.full_name || config.username) + '</strong> (' + escHtml(config.username) + ')</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="border-top:1px solid #bbf7d0;padding-top:10px;font-size:12px;color:#334155;line-height:1.6;">' +
+                        '<div><strong>Server EasyEA:</strong> ' + escHtml(config.server_url || 'http://localhost:8000') + '</div>' +
+                        '<div><strong>Stato:</strong> Sessione sincronizzata (Web Check-out)</div>' +
+                        (activeSchema ? '<div><strong>Schema Attivo:</strong> ' + escHtml(activeSchema.schema_name) + ' (' + escHtml(activeSchema.version) + ')</div>' : '') +
+                    '</div>' +
+                '</div>' +
+                '<div id="easyea_relogin_section" style="display:none;margin-top:14px;border-top:1px dashed #cbd5e1;padding-top:14px;">' +
+                    '<div style="margin-bottom: 12px;">' +
+                        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">URL Server EasyEA:</label>' +
+                        '<input type="text" id="easyea_server_url" value="' + escHtml(config.server_url || 'http://localhost:8000') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
+                    '</div>' +
+                    '<div style="margin-bottom: 12px;">' +
+                        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">Username o Email:</label>' +
+                        '<input type="text" id="easyea_username" value="' + escHtml(config.username || 'admin') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
+                    '</div>' +
+                    '<div style="margin-bottom: 12px;">' +
+                        '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">Password:</label>' +
+                        '<input type="password" id="easyea_password" placeholder="Inserisci password..." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
+                    '</div>' +
+                    '<div id="easyea_status_box" style="padding:10px;border-radius:6px;font-size:12px;margin-bottom:12px;display:none;"></div>' +
+                '</div>'
+            );
+        } else {
+            setSafeHtml(content,
+                '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin-bottom:14px;font-size:12px;color:#9a3412;">' +
+                    '⚠️ <strong>Non autenticato.</strong> Inserisci le credenziali del server EasyEA per collegare Draw.io.' +
+                '</div>' +
+                '<div style="margin-bottom: 12px;">' +
+                    '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">URL Server EasyEA:</label>' +
+                    '<input type="text" id="easyea_server_url" value="' + escHtml(config.server_url || 'http://localhost:8000') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
+                '</div>' +
+                '<div style="margin-bottom: 12px;">' +
+                    '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">Username o Email:</label>' +
+                    '<input type="text" id="easyea_username" value="' + escHtml(config.username || 'admin') + '" style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
+                '</div>' +
+                '<div style="margin-bottom: 12px;">' +
+                    '<label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;color:#475569;">Password:</label>' +
+                    '<input type="password" id="easyea_password" placeholder="Inserisci password..." style="width:100%;box-sizing:border-box;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
+                '</div>' +
+                '<div id="easyea_status_box" style="padding:10px;border-radius:6px;font-size:12px;margin-bottom:12px;display:none;"></div>'
+            );
+        }
 
         var btnBar = document.createElement('div');
         btnBar.style.display = 'flex';
-        btnBar.style.justifyContent = 'flex-end';
-        btnBar.style.gap = '8px';
+        btnBar.style.justifyContent = 'space-between';
+        btnBar.style.alignItems = 'center';
         btnBar.style.marginTop = '16px';
 
-        var btnCancel = document.createElement('button');
-        btnCancel.innerText = 'Chiudi';
-        btnCancel.style.padding = '8px 14px';
-        btnCancel.style.border = '1px solid #cbd5e1';
-        btnCancel.style.borderRadius = '6px';
-        btnCancel.style.background = '#fff';
-        btnCancel.style.cursor = 'pointer';
-        btnCancel.onclick = function() { ui.hideDialog(); };
+        var leftBtns = document.createElement('div');
+        var rightBtns = document.createElement('div');
+        rightBtns.style.display = 'flex';
+        rightBtns.style.gap = '8px';
+
+        if (isAuth) {
+            var btnToggleRelogin = document.createElement('button');
+            btnToggleRelogin.innerText = '🔄 Cambia Account...';
+            btnToggleRelogin.style.cssText = 'padding:7px 12px;border:1px solid #cbd5e1;border-radius:6px;background:#f8fafc;font-size:12px;cursor:pointer;color:#475569;';
+            btnToggleRelogin.onclick = function() {
+                var sec = document.getElementById('easyea_relogin_section');
+                if (sec) {
+                    sec.style.display = (sec.style.display === 'none') ? 'block' : 'none';
+                    if (sec.style.display === 'block') {
+                        btnLogin.style.display = 'inline-block';
+                    }
+                }
+            };
+            leftBtns.appendChild(btnToggleRelogin);
+        }
+
+        var btnClose = document.createElement('button');
+        btnClose.innerText = isAuth ? 'OK, Chiudi' : 'Annulla';
+        btnClose.style.cssText = 'padding:8px 16px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;font-weight:600;cursor:pointer;color:#334155;';
+        btnClose.onclick = function() { ui.hideDialog(); };
 
         var btnLogin = document.createElement('button');
         btnLogin.innerText = 'Accedi & Salva';
-        btnLogin.style.padding = '8px 16px';
-        btnLogin.style.border = 'none';
-        btnLogin.style.borderRadius = '6px';
-        btnLogin.style.background = '#4f46e5';
-        btnLogin.style.color = '#fff';
-        btnLogin.style.fontWeight = '600';
-        btnLogin.style.cursor = 'pointer';
+        btnLogin.style.cssText = 'padding:8px 18px;border:none;border-radius:6px;background:#4f46e5;color:#fff;font-weight:600;cursor:pointer;';
+        if (isAuth) {
+            btnLogin.style.display = 'none';
+        }
 
         btnLogin.onclick = function() {
             var sUrl = (document.getElementById('easyea_server_url').value || '').trim().replace(/\/+$/, '');
@@ -207,7 +385,7 @@ Draw.loadPlugin(function(ui) {
             btnLogin.disabled = true;
             btnLogin.innerText = 'Accesso in corso...';
 
-            fetch(sUrl + '/api/auth/login', {
+            eaFetch(sUrl + '/api/auth/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ username: uName, password: pWord })
@@ -228,10 +406,13 @@ Draw.loadPlugin(function(ui) {
                 statusBox.style.background = '#f0fdf4';
                 statusBox.style.border = '1px solid #bbf7d0';
                 statusBox.style.color = '#166534';
-                statusBox.innerHTML = '🟢 Connesso con successo come <strong>' + newCfg.full_name + '</strong>!';
+                setSafeHtml(statusBox, '🟢 Connesso con successo come <strong>' + escHtml(newCfg.full_name) + '</strong>!');
                 btnLogin.disabled = false;
                 btnLogin.innerText = 'Accedi & Salva';
-                setTimeout(function() { ui.hideDialog(); }, 1200);
+                setTimeout(function() {
+                    ui.hideDialog();
+                    showSettingsDialog();
+                }, 1000);
             })
             .catch(function(err) {
                 btnLogin.disabled = false;
@@ -240,16 +421,19 @@ Draw.loadPlugin(function(ui) {
                 statusBox.style.background = '#fef2f2';
                 statusBox.style.border = '1px solid #fecaca';
                 statusBox.style.color = '#991b1b';
-                statusBox.innerHTML = '❌ ' + err.message;
+                statusBox.textContent = '❌ ' + err.message;
             });
         };
 
-        btnBar.appendChild(btnCancel);
-        btnBar.appendChild(btnLogin);
-        container.appendChild(form);
+        rightBtns.appendChild(btnClose);
+        rightBtns.appendChild(btnLogin);
+        btnBar.appendChild(leftBtns);
+        btnBar.appendChild(rightBtns);
+
+        container.appendChild(content);
         container.appendChild(btnBar);
 
-        ui.showDialog(container, 480, 360, true, true);
+        ui.showDialog(container, 500, isAuth ? 260 : 360, true, true);
     }
 
     // -------------------------------------------------------------
@@ -265,11 +449,11 @@ Draw.loadPlugin(function(ui) {
 
         var container = createModalContainer('📥 Check-out Schema da EasyEA', 620);
         var content = document.createElement('div');
-        content.innerHTML = '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Caricamento librerie e schemi disponibili...</div>';
+        setSafeHtml(content, '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Caricamento librerie e schemi disponibili...</div>');
         container.appendChild(content);
         ui.showDialog(container, 620, 480, true, true);
 
-        fetch(config.server_url + '/api/models', {
+        eaFetch(config.server_url + '/api/models', {
             headers: { 'Authorization': 'Bearer ' + config.token }
         })
         .then(function(res) {
@@ -278,15 +462,15 @@ Draw.loadPlugin(function(ui) {
         })
         .then(function(models) {
             if (!models || models.length === 0) {
-                content.innerHTML = '<div style="color:#ef4444;font-size:13px;">Nessuna libreria trovata sul repository EasyEA.</div>';
+                setSafeHtml(content, '<div style="color:#ef4444;font-size:13px;">Nessuna libreria trovata sul repository EasyEA.</div>');
                 return;
             }
 
             var modelId = models[0].id;
 
             function loadSchemasForModel(mId) {
-                content.innerHTML = '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Caricamento schemi per la libreria selezionata...</div>';
-                fetch(config.server_url + '/api/schemas/' + mId + '/list', {
+                setSafeHtml(content, '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Caricamento schemi per la libreria selezionata...</div>');
+                eaFetch(config.server_url + '/api/schemas/' + encodeURIComponent(mId) + '/list', {
                     headers: { 'Authorization': 'Bearer ' + config.token }
                 })
                 .then(function(res) { return res.json(); })
@@ -294,7 +478,7 @@ Draw.loadPlugin(function(ui) {
                     renderSchemasList(models, mId, schemas);
                 })
                 .catch(function(err) {
-                    content.innerHTML = '<div style="color:#ef4444;">Errore: ' + err.message + '</div>';
+                    setSafeHtml(content, '<div style="color:#ef4444;">Errore: ' + escHtml(err.message) + '</div>');
                 });
             }
 
@@ -306,7 +490,7 @@ Draw.loadPlugin(function(ui) {
                 
                 for (var mi = 0; mi < modelsList.length; mi++) {
                     var m = modelsList[mi];
-                    html += '<option value="' + m.id + '" ' + (m.id === selectedModelId ? 'selected' : '') + '>' + (m.name || m.id) + ' (' + (m.modeling_tool || 'drawio') + ')</option>';
+                    html += '<option value="' + escHtml(m.id) + '" ' + (m.id === selectedModelId ? 'selected' : '') + '>' + escHtml(m.name || m.id) + ' (' + escHtml(m.modeling_tool || 'drawio') + ')</option>';
                 }
                 html += '</select></div>';
 
@@ -325,17 +509,17 @@ Draw.loadPlugin(function(ui) {
                         var isLocked = s.status === 'checked_out';
                         var isLockedByMe = isLocked && s.locked_by_username === config.username;
                         var badge = isLocked
-                            ? (isLockedByMe ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">🔒 In uso da te</span>' : '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">🔒 ' + (s.locked_by_username || 'In uso') + '</span>')
+                            ? (isLockedByMe ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">🔒 In uso da te</span>' : '<span style="background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">🔒 ' + escHtml(s.locked_by_username || 'In uso') + '</span>')
                             : '<span style="background:#dcfce7;color:#166534;padding:2px 8px;border-radius:9999px;font-size:11px;font-weight:600;">🟢 Disponibile</span>';
 
                         html += '<tr style="border-bottom:1px solid #f1f5f9;">' +
-                            '<td style="padding:10px 12px;font-weight:500;">' + s.name + '</td>' +
-                            '<td style="padding:10px 12px;color:#64748b;">' + s.current_version + '</td>' +
+                            '<td style="padding:10px 12px;font-weight:500;">' + escHtml(s.name) + '</td>' +
+                            '<td style="padding:10px 12px;color:#64748b;">' + escHtml(s.current_version) + '</td>' +
                             '<td style="padding:10px 12px;">' + badge + '</td>' +
                             '<td style="padding:10px 12px;text-align:right;">';
 
                         if (!isLocked || isLockedByMe) {
-                            html += '<button class="btn-checkout" data-id="' + s.id + '" data-name="' + s.name + '" data-version="' + s.current_version + '" data-locked="' + (isLockedByMe ? '1' : '0') + '" style="background:#4f46e5;color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;">' + (isLockedByMe ? 'Riapri' : 'Check-out') + '</button>';
+                            html += '<button class="btn-checkout" data-id="' + escHtml(s.id) + '" data-name="' + escHtml(s.name) + '" data-version="' + escHtml(s.current_version) + '" data-locked="' + (isLockedByMe ? '1' : '0') + '" style="background:#4f46e5;color:#fff;border:none;padding:5px 12px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;">' + (isLockedByMe ? 'Riapri' : 'Check-out') + '</button>';
                         } else {
                             html += '<button disabled style="background:#e2e8f0;color:#94a3b8;border:none;padding:5px 12px;border-radius:5px;font-size:12px;cursor:not-allowed;">Bloccato</button>';
                         }
@@ -345,7 +529,7 @@ Draw.loadPlugin(function(ui) {
                 }
                 html += '</div>';
 
-                content.innerHTML = html;
+                setSafeHtml(content, html);
 
                 document.getElementById('easyea_model_select').onchange = function(e) {
                     loadSchemasForModel(e.target.value);
@@ -367,13 +551,13 @@ Draw.loadPlugin(function(ui) {
             loadSchemasForModel(modelId);
         })
         .catch(function(err) {
-            content.innerHTML = '<div style="color:#ef4444;font-size:13px;">❌ Errore: ' + err.message + '</div>';
+            setSafeHtml(content, '<div style="color:#ef4444;font-size:13px;">❌ Errore: ' + escHtml(err.message) + '</div>');
         });
 
         function performCheckout(schemaId, modelId, schemaName, version, alreadyLocked) {
             var doLockPromise = alreadyLocked 
                 ? Promise.resolve() 
-                : fetch(config.server_url + '/api/schemas/' + schemaId + '/checkout', {
+                : eaFetch(config.server_url + '/api/schemas/' + encodeURIComponent(schemaId) + '/checkout', {
                     method: 'POST',
                     headers: { 'Authorization': 'Bearer ' + config.token }
                 }).then(function(res) {
@@ -382,7 +566,7 @@ Draw.loadPlugin(function(ui) {
 
             doLockPromise
             .then(function() {
-                return fetch(config.server_url + '/api/schemas/' + schemaId + '/download', {
+                return eaFetch(config.server_url + '/api/schemas/' + encodeURIComponent(schemaId) + '/download', {
                     headers: { 'Authorization': 'Bearer ' + config.token }
                 });
             })
@@ -434,7 +618,7 @@ Draw.loadPlugin(function(ui) {
         var targetModelId = activeSchema.model_id || '';
 
         var html = 
-            '<div style="font-size:12px;color:#64748b;margin-bottom:12px;">Schema attivo: <strong>' + activeSchema.schema_name + '</strong></div>' +
+            '<div style="font-size:12px;color:#64748b;margin-bottom:12px;">Schema attivo: <strong>' + escHtml(activeSchema.schema_name) + '</strong></div>' +
             '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
                 '<input type="text" id="easyea_catalog_search" placeholder="Cerca elemento per nome o tipo..." style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:6px;font-size:13px;" />' +
                 '<button id="easyea_btn_do_search" style="padding:8px 14px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Cerca</button>' +
@@ -446,25 +630,25 @@ Draw.loadPlugin(function(ui) {
                 '<button id="easyea_close_add_elem" style="padding:8px 14px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;">Chiudi</button>' +
             '</div>';
 
-        container.innerHTML += html;
+        setSafeHtml(container, html, true);
         ui.showDialog(container, 600, 440, true, true);
 
         document.getElementById('easyea_close_add_elem').onclick = function() { ui.hideDialog(); };
 
         function executeSearch(query) {
             var resBox = document.getElementById('easyea_catalog_results');
-            resBox.innerHTML = '<div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">Ricerca in corso...</div>';
+            setSafeHtml(resBox, '<div style="padding:16px;text-align:center;color:#64748b;font-size:13px;">Ricerca in corso...</div>');
 
             var url = config.server_url + '/api/elements?model_id=' + encodeURIComponent(targetModelId);
             if (query) url += '&search=' + encodeURIComponent(query);
 
-            fetch(url, {
+            eaFetch(url, {
                 headers: { 'Authorization': 'Bearer ' + config.token }
             })
             .then(function(res) { return res.json(); })
             .then(function(elements) {
                 if (!elements || elements.length === 0) {
-                    resBox.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">Nessun elemento trovato nel catalogo.</div>';
+                    setSafeHtml(resBox, '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">Nessun elemento trovato nel catalogo.</div>');
                     return;
                 }
 
@@ -472,32 +656,34 @@ Draw.loadPlugin(function(ui) {
                     '<thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;color:#64748b;font-size:11px;text-transform:uppercase;">' +
                     '<th style="padding:8px 12px;">Nome</th><th style="padding:8px 12px;">Tipo</th><th style="padding:8px 12px;">Layer</th><th style="padding:8px 12px;text-align:right;">Azione</th></tr></thead><tbody>';
 
+                var elemCache = {};
                 for (var ei = 0; ei < elements.length; ei++) {
                     var el = elements[ei];
+                    elemCache[String(ei)] = el;
                     var layer = el.layer || 'Application';
                     var lColors = LAYER_COLORS[layer] || LAYER_COLORS['Application'];
 
                     rHtml += '<tr style="border-bottom:1px solid #f1f5f9;">' +
-                        '<td style="padding:8px 12px;font-weight:500;">' + el.name + '</td>' +
-                        '<td style="padding:8px 12px;color:#64748b;font-size:12px;">' + el.type + '</td>' +
-                        '<td style="padding:8px 12px;"><span style="background:' + lColors.fill + ';color:' + lColors.text + ';border:1px solid ' + lColors.stroke + ';padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;">' + layer + '</span></td>' +
+                        '<td style="padding:8px 12px;font-weight:500;">' + escHtml(el.name) + '</td>' +
+                        '<td style="padding:8px 12px;color:#64748b;font-size:12px;">' + escHtml(el.type) + '</td>' +
+                        '<td style="padding:8px 12px;"><span style="background:' + lColors.fill + ';color:' + lColors.text + ';border:1px solid ' + lColors.stroke + ';padding:2px 6px;border-radius:4px;font-size:11px;font-weight:600;">' + escHtml(layer) + '</span></td>' +
                         '<td style="padding:8px 12px;text-align:right;">' +
-                            '<button class="btn-insert-elem" data-elem=\'' + JSON.stringify(el).replace(/'/g, "&apos;") + '\' style="background:#059669;color:#fff;border:none;padding:4px 10px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;">+ Inserisci</button>' +
+                            '<button class="btn-insert-elem" data-idx="' + ei + '" style="background:#059669;color:#fff;border:none;padding:4px 10px;border-radius:5px;font-size:12px;font-weight:600;cursor:pointer;">+ Inserisci</button>' +
                         '</td></tr>';
                 }
                 rHtml += '</tbody></table>';
-                resBox.innerHTML = rHtml;
+                setSafeHtml(resBox, rHtml);
 
                 var insertButtons = resBox.querySelectorAll('.btn-insert-elem');
                 insertButtons.forEach(function(ib) {
                     ib.onclick = function() {
-                        var elemData = JSON.parse(ib.getAttribute('data-elem'));
-                        insertElementIntoDiagram(elemData);
+                        var elemData = elemCache[ib.getAttribute('data-idx')];
+                        if (elemData) insertElementIntoDiagram(elemData);
                     };
                 });
             })
             .catch(function(err) {
-                resBox.innerHTML = '<div style="padding:16px;color:#ef4444;font-size:13px;">Errore: ' + err.message + '</div>';
+                setSafeHtml(resBox, '<div style="padding:16px;color:#ef4444;font-size:13px;">Errore: ' + escHtml(err.message) + '</div>');
             });
         }
 
@@ -578,16 +764,37 @@ Draw.loadPlugin(function(ui) {
 
         var container = createModalContainer('📤 Check-in Schema: Revisione Modifiche', 680);
         var content = document.createElement('div');
-        content.innerHTML = '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Calcolo delle differenze (Diff) con il repository in corso...</div>';
+        setSafeHtml(content, '<div style="font-size:13px;color:#64748b;margin-bottom:12px;">Calcolo delle differenze (Diff) con il repository in corso...</div>');
         container.appendChild(content);
         ui.showDialog(container, 680, 520, true, true);
 
-        // Send multipart form-data to /api/schemas/{id}/checkin-diff
+        // Send checkin-diff (via Electron IPC to bypass CORS / FormData sandbox restrictions)
+        if (window.electron && typeof window.electron.request === 'function') {
+            window.electron.request({
+                action: 'easyeaCheckinDiff',
+                server_url: config.server_url,
+                schema_id: schemaId,
+                token: config.token,
+                xmlContent: xmlContent
+            }, function(res) {
+                if (res && res.ok) {
+                    renderDiffModal(res.data, xmlContent);
+                } else {
+                    var msg = (res && res.data && res.data.detail) ? res.data.detail : (res && res.error ? res.error : 'Errore calcolo diff');
+                    setSafeHtml(content, '<div style="color:#ef4444;font-size:13px;">❌ Errore durante il calcolo del diff: ' + escHtml(msg) + '</div>');
+                }
+            }, function(err) {
+                setSafeHtml(content, '<div style="color:#ef4444;font-size:13px;">❌ Errore durante il calcolo del diff: ' + escHtml(err ? (err.message || err) : 'Errore sconosciuto') + '</div>');
+            });
+            return;
+        }
+
+        // Web fallback (standard fetch)
         var formData = new FormData();
         var blob = new Blob([xmlContent], { type: 'application/xml' });
         formData.append('file', blob, 'schema.drawio');
 
-        fetch(config.server_url + '/api/schemas/' + schemaId + '/checkin-diff', {
+        fetch(config.server_url + '/api/schemas/' + encodeURIComponent(schemaId) + '/checkin-diff', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + config.token },
             body: formData
@@ -600,7 +807,7 @@ Draw.loadPlugin(function(ui) {
             renderDiffModal(diff, xmlContent);
         })
         .catch(function(err) {
-            content.innerHTML = '<div style="color:#ef4444;font-size:13px;">❌ Errore durante il calcolo del diff: ' + err.message + '</div>';
+            setSafeHtml(content, '<div style="color:#ef4444;font-size:13px;">❌ Errore durante il calcolo del diff: ' + escHtml(err.message) + '</div>');
         });
 
         function renderDiffModal(diff, rawXml) {
@@ -626,22 +833,22 @@ Draw.loadPlugin(function(ui) {
                 html += '<div style="color:#64748b;text-align:center;padding:10px;">Nessuna modifica strutturale rilevata. Verrà aggiornato solo il layout visuale dello schema.</div>';
             } else {
                 if (newElems.length > 0) {
-                    html += '<div style="font-weight:600;color:#16a34a;margin-bottom:4px;">➕ Nuovi Elementi: ' + newElems.map(function(e){ return e.name; }).join(', ') + '</div>';
+                    html += '<div style="font-weight:600;color:#16a34a;margin-bottom:4px;">➕ Nuovi Elementi: ' + newElems.map(function(e){ return escHtml(e.name); }).join(', ') + '</div>';
                 }
                 if (newRels.length > 0) {
-                    html += '<div style="font-weight:600;color:#2563eb;margin-bottom:4px;">➕ Nuove Relazioni: ' + newRels.map(function(r){ return (r.source_name || 'Src') + ' ➔ ' + (r.target_name || 'Tgt'); }).join(', ') + '</div>';
+                    html += '<div style="font-weight:600;color:#2563eb;margin-bottom:4px;">➕ Nuove Relazioni: ' + newRels.map(function(r){ return escHtml(r.source_name || 'Src') + ' ➔ ' + escHtml(r.target_name || 'Tgt'); }).join(', ') + '</div>';
                 }
                 if (modElems.length > 0) {
-                    html += '<div style="font-weight:600;color:#d97706;margin-bottom:4px;">✏️ Elementi Modificati: ' + modElems.map(function(e){ return e.name; }).join(', ') + '</div>';
+                    html += '<div style="font-weight:600;color:#d97706;margin-bottom:4px;">✏️ Elementi Modificati: ' + modElems.map(function(e){ return escHtml(e.name); }).join(', ') + '</div>';
                 }
                 if (modRels.length > 0) {
-                    html += '<div style="font-weight:600;color:#9333ea;margin-bottom:4px;">✏️ Relazioni Modificate: ' + modRels.map(function(r){ return (r.source_name || '') + ' ➔ ' + (r.target_name || ''); }).join(', ') + '</div>';
+                    html += '<div style="font-weight:600;color:#9333ea;margin-bottom:4px;">✏️ Relazioni Modificate: ' + modRels.map(function(r){ return escHtml(r.source_name || '') + ' ➔ ' + escHtml(r.target_name || ''); }).join(', ') + '</div>';
                 }
                 if (remElems.length > 0) {
-                    html += '<div style="font-weight:600;color:#dc2626;margin-bottom:4px;">🗑️ Elementi Rimossi: ' + remElems.map(function(e){ return e.name; }).join(', ') + '</div>';
+                    html += '<div style="font-weight:600;color:#dc2626;margin-bottom:4px;">🗑️ Elementi Rimossi: ' + remElems.map(function(e){ return escHtml(e.name); }).join(', ') + '</div>';
                 }
                 if (remRels.length > 0) {
-                    html += '<div style="font-weight:600;color:#e11d48;margin-bottom:4px;">🗑️ Relazioni Rimosse: ' + remRels.map(function(r){ return (r.source_name || '') + ' ➔ ' + (r.target_name || ''); }).join(', ') + '</div>';
+                    html += '<div style="font-weight:600;color:#e11d48;margin-bottom:4px;">🗑️ Relazioni Rimosse: ' + remRels.map(function(r){ return escHtml(r.source_name || '') + ' ➔ ' + escHtml(r.target_name || ''); }).join(', ') + '</div>';
                 }
             }
             html += '</div>';
@@ -656,7 +863,7 @@ Draw.loadPlugin(function(ui) {
                 '<button id="easyea_confirm_checkin" style="padding:8px 18px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;">Conferma Check-in e Sblocca</button>' +
             '</div>';
 
-            content.innerHTML = html;
+            setSafeHtml(content, html);
 
             document.getElementById('easyea_cancel_checkin').onclick = function() { ui.hideDialog(); };
             
@@ -698,7 +905,7 @@ Draw.loadPlugin(function(ui) {
                     remove_deleted_from_catalog: false
                 };
 
-                fetch(config.server_url + '/api/schemas/' + schemaId + '/checkin-confirm', {
+                eaFetch(config.server_url + '/api/schemas/' + encodeURIComponent(schemaId) + '/checkin-confirm', {
                     method: 'POST',
                     headers: {
                         'Authorization': 'Bearer ' + config.token,
@@ -745,7 +952,7 @@ Draw.loadPlugin(function(ui) {
             return;
         }
 
-        fetch(config.server_url + '/api/schemas/' + activeSchema.schema_id + '/discard-checkout', {
+        eaFetch(config.server_url + '/api/schemas/' + encodeURIComponent(activeSchema.schema_id) + '/discard-checkout', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + config.token }
         })
@@ -767,46 +974,188 @@ Draw.loadPlugin(function(ui) {
         var activeSchema = getActiveSchema();
 
         var container = createModalContainer('ℹ️ EasyEA Draw.io Plugin', 420);
-        container.innerHTML += 
+        setSafeHtml(container,
             '<div style="font-size:13px;line-height:1.6;color:#334155;margin-bottom:16px;">' +
                 '<p><strong>EasyEA Platform Integration</strong> consente la sincronizzazione bidirezionale dei modelli ArchiMate 3.x tra Draw.io Desktop e il catalogo aziendale EasyEA.</p>' +
                 '<div style="background:#f8fafc;border:1px solid #e2e8f0;padding:10px;border-radius:6px;margin-top:10px;font-size:12px;">' +
-                    '<div><strong>Server:</strong> ' + (config.server_url || 'Non configurato') + '</div>' +
-                    '<div><strong>Utente:</strong> ' + (config.full_name || config.username || 'Non autenticato') + '</div>' +
-                    '<div><strong>Schema Attivo:</strong> ' + (activeSchema ? activeSchema.schema_name + ' (' + activeSchema.version + ')' : 'Nessuno (Disponibile)') + '</div>' +
+                    '<div><strong>Server:</strong> ' + escHtml(config.server_url || 'Non configurato') + '</div>' +
+                    '<div><strong>Utente:</strong> ' + escHtml(config.full_name || config.username || 'Non autenticato') + '</div>' +
+                    '<div><strong>Schema Attivo:</strong> ' + (activeSchema ? escHtml(activeSchema.schema_name) + ' (' + escHtml(activeSchema.version) + ')' : 'Nessuno (Disponibile)') + '</div>' +
                 '</div>' +
             '</div>' +
             '<div style="display:flex;justify-content:flex-end;">' +
                 '<button id="easyea_about_close" style="padding:8px 16px;background:#4f46e5;color:#fff;border:none;border-radius:6px;font-weight:600;cursor:pointer;">Chiudi</button>' +
-            '</div>';
+            '</div>',
+            true
+        );
 
         ui.showDialog(container, 420, 260, true, true);
         document.getElementById('easyea_about_close').onclick = function() { ui.hideDialog(); };
     }
 
     // -------------------------------------------------------------
-    // Register Actions & Menus in Draw.io UI
+    // Register Actions & Resources in Draw.io UI
     // -------------------------------------------------------------
-    ui.actions.addAction('easyeaSettings', function() { showSettingsDialog(); });
-    ui.actions.addAction('easyeaCheckout', function() { showCheckoutDialog(); });
-    ui.actions.addAction('easyeaAddElement', function() { showAddElementDialog(); });
-    ui.actions.addAction('easyeaCheckin', function() { showCheckinDialog(); });
-    ui.actions.addAction('easyeaDiscard', function() { showDiscardCheckoutDialog(); });
-    ui.actions.addAction('easyeaAbout', function() { showAboutDialog(); });
+    try {
+        mxResources.parse('easyeaSettings=EasyEA: ⚙️ Impostazioni / Login...');
+        mxResources.parse('easyeaCheckout=EasyEA: 📥 Check-out Schema...');
+        mxResources.parse('easyeaAddElement=EasyEA: 🔍 Inserisci Elemento da Catalogo...');
+        mxResources.parse('easyeaCheckin=EasyEA: 📤 Check-in Schema (Commit & Diff)...');
+        mxResources.parse('easyeaDiscard=EasyEA: ❌ Annulla Check-out (Discard)...');
+        mxResources.parse('easyeaAbout=EasyEA: ℹ️ Informazioni su EasyEA...');
+    } catch(e) {}
 
-    // Add Menu to Menubar
+    ui.actions.addAction('easyeaSettings', function() { checkIncomingExternalSession(function() { showSettingsDialog(); }); });
+    ui.actions.addAction('easyeaCheckout', function() { checkIncomingExternalSession(function() { showCheckoutDialog(); }); });
+    ui.actions.addAction('easyeaAddElement', function() { checkIncomingExternalSession(function() { showAddElementDialog(); }); });
+    ui.actions.addAction('easyeaCheckin', function() { checkIncomingExternalSession(function() { showCheckinDialog(); }); });
+    ui.actions.addAction('easyeaDiscard', function() { checkIncomingExternalSession(function() { showDiscardCheckoutDialog(); }); });
+    ui.actions.addAction('easyeaAbout', function() { checkIncomingExternalSession(function() { showAboutDialog(); }); });
+
+    // -------------------------------------------------------------
+    // Automatic Session Pickup from EasyEA Protocol Handler (easyea://)
+    // -------------------------------------------------------------
+    function checkIncomingExternalSession(cb) {
+        if (window.electron && typeof window.electron.request === 'function') {
+            var currFilePath = null;
+            try {
+                var cur = ui.getCurrentFile();
+                if (cur && cur.fileObject && cur.fileObject.path) {
+                    currFilePath = cur.fileObject.path;
+                }
+            } catch(e) {}
+
+            window.electron.request({ action: 'easyeaGetSession', filePath: currFilePath }, function(data) {
+                if (data) {
+                    if (data.config && data.config.token) {
+                        saveConfig(data.config);
+                    }
+                    if (data.active_schema) {
+                        setActiveSchema(data.active_schema);
+                    }
+                }
+                if (typeof cb === 'function') cb();
+            }, function(err) {
+                if (typeof cb === 'function') cb();
+            });
+            return;
+        }
+
+        try {
+            var electron = window.require ? window.require('electron') : null;
+            var fs = window.require ? window.require('fs') : null;
+            var path = window.require ? window.require('path') : null;
+            var os = window.require ? window.require('os') : null;
+
+            if (fs && path && os) {
+                var home = os.homedir();
+                var candidateSessionFiles = [
+                    path.join(home, '.easyea', 'drawio_active_session.json'),
+                    path.join(home, '.easyea', 'config.json')
+                ];
+
+                for (var ci = 0; ci < candidateSessionFiles.length; ci++) {
+                    var sessionFile = candidateSessionFiles[ci];
+                    if (fs.existsSync(sessionFile)) {
+                        var data = JSON.parse(fs.readFileSync(sessionFile, 'utf8'));
+                        if (data && data.config) {
+                            saveConfig(data.config);
+                        } else if (data && data.token) {
+                            saveConfig(data);
+                        }
+                        if (data && data.active_schema) {
+                            setActiveSchema(data.active_schema);
+                        }
+                        break;
+                    }
+                }
+            }
+        } catch(e) {}
+        if (typeof cb === 'function') cb();
+    }
+
+    // Run check on startup and when window regains focus
+    checkIncomingExternalSession();
+    setTimeout(function() { checkIncomingExternalSession(); }, 400);
+    setTimeout(function() { checkIncomingExternalSession(); }, 1500);
+    window.addEventListener('focus', function() { checkIncomingExternalSession(); });
+
+    // -------------------------------------------------------------
+    // Hook into Extras menu (available in ALL themes & hamburger menu)
+    // -------------------------------------------------------------
+    if (ui.menus && typeof ui.menus.addPluginMenuItems === 'function') {
+        ui.menus.addPluginMenuItems('extras', [
+            '-',
+            'easyeaSettings',
+            'easyeaCheckout',
+            'easyeaAddElement',
+            'easyeaCheckin',
+            'easyeaDiscard',
+            'easyeaAbout'
+        ]);
+    }
+
+    // -------------------------------------------------------------
+    // Add Menu to Menubar (when classic horizontal menubar is active)
+    // -------------------------------------------------------------
     var menuBar = ui.menubar;
-    if (menuBar) {
+    if (menuBar && typeof menuBar.addMenu === 'function') {
         menuBar.addMenu('EasyEA', function(menu, parent) {
-            ui.menus.addMenuItem(menu, 'easyeaSettings', parent).firstChild.nextSibling.innerHTML = '⚙️ Impostazioni / Login...';
+            ui.menus.addMenuItem(menu, 'easyeaSettings', parent);
             menu.addSeparator(parent);
-            ui.menus.addMenuItem(menu, 'easyeaCheckout', parent).firstChild.nextSibling.innerHTML = '📥 Check-out Schema...';
-            ui.menus.addMenuItem(menu, 'easyeaAddElement', parent).firstChild.nextSibling.innerHTML = '🔍 Inserisci Elemento da Catalogo...';
-            ui.menus.addMenuItem(menu, 'easyeaCheckin', parent).firstChild.nextSibling.innerHTML = '📤 Check-in Schema (Commit & Diff)...';
-            ui.menus.addMenuItem(menu, 'easyeaDiscard', parent).firstChild.nextSibling.innerHTML = '❌ Annulla Check-out (Discard)...';
+            ui.menus.addMenuItem(menu, 'easyeaCheckout', parent);
+            ui.menus.addMenuItem(menu, 'easyeaAddElement', parent);
+            ui.menus.addMenuItem(menu, 'easyeaCheckin', parent);
+            ui.menus.addMenuItem(menu, 'easyeaDiscard', parent);
             menu.addSeparator(parent);
-            ui.menus.addMenuItem(menu, 'easyeaAbout', parent).firstChild.nextSibling.innerHTML = 'ℹ️ Informazioni su EasyEA';
+            ui.menus.addMenuItem(menu, 'easyeaAbout', parent);
         });
     }
 
+    // -------------------------------------------------------------
+    // Prominent "EasyEA ▾" Button on top header / button container
+    // Works in all modern themes (Simple, Atlas, Minimal, Classic)
+    // -------------------------------------------------------------
+    function installTopHeaderButton() {
+        if (document.getElementById('easyea-header-button')) return;
+        var container = ui.buttonContainer || document.querySelector('.geMenubarContainer') || document.body;
+        if (!container) return;
+
+        var btn = document.createElement('div');
+        btn.id = 'easyea-header-button';
+        btn.className = 'geBtn';
+        btn.style.cssText = 'display:inline-flex;align-items:center;cursor:pointer;padding:4px 10px;margin-right:8px;font-weight:700;font-size:12px;background:#4f46e5;color:#ffffff;border-radius:4px;border:none;box-shadow:0 1px 3px rgba(0,0,0,0.15);user-select:none;vertical-align:middle;';
+        btn.innerHTML = '<span style="margin-right:6px;font-size:13px;">🏛️</span><span>EasyEA</span><span style="margin-left:5px;font-size:9px;opacity:0.8;">▼</span>';
+
+        btn.addEventListener('click', function(evt) {
+            checkIncomingExternalSession(function() {
+                var rect = btn.getBoundingClientRect();
+                if (typeof ui.showPopupMenu === 'function') {
+                    ui.showPopupMenu(function(menu, parent) {
+                        ui.menus.addMenuItem(menu, 'easyeaSettings', parent);
+                        menu.addSeparator(parent);
+                        ui.menus.addMenuItem(menu, 'easyeaCheckout', parent);
+                        ui.menus.addMenuItem(menu, 'easyeaAddElement', parent);
+                        ui.menus.addMenuItem(menu, 'easyeaCheckin', parent);
+                        ui.menus.addMenuItem(menu, 'easyeaDiscard', parent);
+                        menu.addSeparator(parent);
+                        ui.menus.addMenuItem(menu, 'easyeaAbout', parent);
+                    }, rect.left, rect.bottom + 4, evt);
+                }
+            });
+        });
+
+        if (ui.buttonContainer && ui.buttonContainer.firstChild) {
+            ui.buttonContainer.insertBefore(btn, ui.buttonContainer.firstChild);
+        } else if (container.firstChild) {
+            container.insertBefore(btn, container.firstChild);
+        } else {
+            container.appendChild(btn);
+        }
+    }
+
+    setTimeout(installTopHeaderButton, 100);
+    setTimeout(installTopHeaderButton, 1000);
+    setTimeout(installTopHeaderButton, 3000);
 });
+})();

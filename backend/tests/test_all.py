@@ -12,8 +12,11 @@ from app.parsers.archi_parser import ArchiModelParser, detect_layer
 from app.services.apm_service import calculate_time_quadrant, APMService
 from app.services.overlap_service import OverlapService
 from app.services.sample_data import seed_sample_model
-from app.services.metamodel_service import seed_default_custom_attributes
+from app.services.metamodel_service import seed_default_custom_attributes, compute_archimate_derivation, get_plateau_roadmap
 from app.services.rbac_service import seed_default_rbac
+from app.services.auth_service import create_access_token
+from app.services.process_service import ProcessService
+from app.models.archimate import User, ModelWorkspace, ArchimateElement, ArchimateRelationship, ApplicationBusinessAttributes
 
 # Test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -29,6 +32,8 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+client = TestClient(app)
+
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
@@ -36,11 +41,13 @@ def setup_db():
     seed_sample_model(db)
     seed_default_custom_attributes(db)
     seed_default_rbac(db)
+    admin_user = db.query(User).filter(User.username == "admin").first() or db.query(User).first()
+    if admin_user:
+        token = create_access_token(admin_user)
+        client.headers.update({"Authorization": f"Bearer {token}"})
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
-
-client = TestClient(app)
 
 def test_time_quadrant_logic():
     assert calculate_time_quadrant(5, 5) == "Invest"
@@ -235,8 +242,8 @@ def test_custom_attribute_sections_and_updates():
     assert matched is not None
     assert matched["section"] == "InfoSec & Governance"
 
-def test_easy_ea_extension_attributes_management():
-    # 1. Metamodel query should contain eea_ attributes under custom_attributes with is_system=True
+def test_attribute_packages_and_extension_management():
+    # 1. Metamodel query should contain apm_ and tme_ package attributes under custom_attributes with is_package=True
     res = client.get("/api/metamodel/types")
     assert res.status_code == 200
     layers = res.json()
@@ -250,30 +257,83 @@ def test_easy_ea_extension_attributes_management():
     assert "documentation" in std_names
     assert "in_apm_scope" not in std_names
     
-    # Custom attributes should contain eea_ attributes with is_system=True
+    # Custom attributes should contain apm_ and tme_ package attributes
     custom_attrs = app_comp.get("custom_attributes", [])
-    eea_annual_cost = next((a for a in custom_attrs if a["name"] == "eea_annual_cost"), None)
-    assert eea_annual_cost is not None
-    assert eea_annual_cost["is_system"] is True
-    assert eea_annual_cost["section"] == "APM & Business Portfolio"
-    
-    # 2. Reassigning section for eea_annual_cost to "Financial Governance" should succeed
-    cost_id = eea_annual_cost["id"]
-    res_update = client.put(f"/api/metamodel/attributes/{cost_id}", json={
-        "section": "Financial Governance",
-        "label": "Annual Cost / TCO (€) Updated"
+    apm_annual_cost = next((a for a in custom_attrs if a["name"] == "apm_annual_cost"), None)
+    assert apm_annual_cost is not None
+    assert apm_annual_cost["is_system"] is True
+    assert apm_annual_cost["is_package"] is True
+    assert apm_annual_cost["package_code"] == "APM"
+
+    tme_fit = next((a for a in custom_attrs if a["name"] == "tme_business_fit"), None)
+    assert tme_fit is not None
+    assert tme_fit["package_code"] == "TME"
+
+    # 2. Query packages endpoint
+    res_pkgs = client.get("/api/metamodel/packages")
+    assert res_pkgs.status_code == 200
+    pkgs = res_pkgs.json()
+    pkg_codes = [p["code"] for p in pkgs]
+    assert "apm" in pkg_codes
+    assert "tme" in pkg_codes
+
+    # 3. Create a custom attribute package with 3-character code
+    res_create = client.post("/api/metamodel/packages", json={
+        "code": "sec",
+        "name": "Security & Resilience",
+        "description": "Security posture and compliance metrics",
+        "icon_color": "rose",
+        "is_default_active": False
     })
-    assert res_update.status_code == 200
-    updated_cost = res_update.json()
-    assert updated_cost["section"] == "Financial Governance"
-    assert updated_cost["label"] == "Annual Cost / TCO (€) Updated"
-    assert updated_cost["is_system"] is True
-    assert updated_cost["name"] == "eea_annual_cost" # technical name preserved
-    
-    # 3. Attempting to delete eea_ system attribute should fail with 400
-    res_del = client.delete(f"/api/metamodel/attributes/{cost_id}")
-    assert res_del.status_code == 400
-    assert "cannot be deleted" in res_del.json()["detail"].lower()
+    assert res_create.status_code == 200
+    sec_pkg = res_create.json()
+    assert sec_pkg["code"] == "sec"
+
+    # Enforce 3-character code: code with 2 or 4 chars must fail
+    res_fail = client.post("/api/metamodel/packages", json={
+        "code": "failcode",
+        "name": "Invalid"
+    })
+    assert res_fail.status_code == 400
+
+    # Add item to package - must enforce 3-character prefix
+    res_item = client.post(f"/api/metamodel/packages/{sec_pkg['id']}/items", json={
+        "name": "sec_compliance_tier",
+        "label": "Security Compliance Tier",
+        "element_type": "ApplicationComponent",
+        "layer": "Application",
+        "data_type": "string"
+    })
+    assert res_item.status_code == 200
+    assert res_item.json()["name"] == "sec_compliance_tier"
+
+    # 4. Strict deactivation guard:
+    # Populating an element with an attribute of the package and then attempting deactivation must be blocked
+    model_id = "sample-easybank-ea"
+    # First activate sec package on sample-easybank-ea
+    res_act = client.post(f"/api/metamodel/libraries/{model_id}/packages/{sec_pkg['id']}/toggle", json={"active": True})
+    assert res_act.status_code == 200
+    assert res_act.json()["is_active"] is True
+
+    # Find an element in sample-easybank-ea and populate sec_compliance_tier
+    res_elems = client.get(f"/api/elements?model_id={model_id}")
+    elem = res_elems.json()[0]
+    res_edit = client.put(f"/api/elements/{elem['id']}", json={
+        "name": elem["name"],
+        "properties": {**(elem.get("properties") or {}), "sec_compliance_tier": "Level 3"}
+    })
+    assert res_edit.status_code == 200
+
+    # Attempting to deactivate sec package must be blocked with 409
+    res_deact_blocked = client.post(f"/api/metamodel/libraries/{model_id}/packages/{sec_pkg['id']}/toggle", json={"active": False})
+    assert res_deact_blocked.status_code == 409
+    assert res_deact_blocked.json()["detail"]["error"] == "package_deactivation_blocked"
+
+    # Check audit usage endpoint
+    res_audit = client.get(f"/api/metamodel/packages/{sec_pkg['id']}/usage")
+    assert res_audit.status_code == 200
+    audit_data = res_audit.json()
+    assert audit_data["total_populated_elements"] >= 1
 
 def test_rbac_global_vs_library_scoped_permissions():
     # 1. Check roles metadata
@@ -1135,11 +1195,797 @@ def test_phase2_bpmn_hierarchy_and_macro_process_steps():
         db.close()
 
 
+def test_sast_crit_01_authentication_and_rbac_enforcement():
+    """Verify SAST-CRIT-01: unauthenticated requests get 401, non-admin users get 403 on admin/unassigned libraries, and client_secret is masked."""
+    anon_client = TestClient(app)
+
+    # 1. Unauthenticated requests to protected endpoints must return 401
+    for path in ["/api/models", "/api/auth/admin/config", "/api/rbac/users", "/api/elements", "/api/views", "/api/apm/portfolio/sample-easybank-ea"]:
+        res = anon_client.get(path)
+        assert res.status_code == 401, f"Expected 401 for unauthenticated GET {path}, got {res.status_code}"
+
+    # 2. Public auth endpoints remain accessible without token
+    res_oidc = anon_client.get("/api/auth/oidc/config")
+    assert res_oidc.status_code == 200
+
+    # 3. Admin creates a second library where marco_arch has NO assignment
+    res_lib = client.post("/api/models", json={"name": "Restricted Library", "code": "REST"})
+    assert res_lib.status_code == 200
+    restricted_model_id = res_lib.json()["id"]
+
+    # 4. Non-admin architect user (marco_arch is assigned only to sample-easybank-ea as architect)
+    db = TestingSessionLocal()
+    try:
+        marco = db.query(User).filter(User.username == "marco_arch").first()
+        assert marco is not None
+        marco_token = create_access_token(marco)
+    finally:
+        db.close()
+
+    marco_client = TestClient(app)
+    marco_client.headers.update({"Authorization": f"Bearer {marco_token}"})
+
+    # Non-admin blocked from admin endpoints (403)
+    assert marco_client.get("/api/auth/admin/config").status_code == 403
+    assert marco_client.post("/api/rbac/assignments", json={
+        "user_id": marco.id,
+        "role_id": "role-sys-admin",
+        "model_id": None
+    }).status_code == 403
+
+    # Non-admin blocked from deleting a model workspace (requires admin)
+    assert marco_client.delete("/api/models/sample-easybank-ea").status_code == 403
+
+    # Non-admin allowed to create elements in assigned library (sample-easybank-ea)
+    res_allowed = marco_client.post(
+        "/api/elements?model_id=sample-easybank-ea",
+        json={"name": "Marco App", "type": "ApplicationComponent", "layer": "Application"}
+    )
+    assert res_allowed.status_code == 200
+
+    # Non-admin blocked from creating elements in unassigned library (restricted_model_id)
+    res_forbidden = marco_client.post(
+        f"/api/elements?model_id={restricted_model_id}",
+        json={"name": "Unauthorized App", "type": "ApplicationComponent", "layer": "Application"}
+    )
+    assert res_forbidden.status_code == 403
+
+    # 5. Admin config masks OIDC client_secret and preserves it when masked placeholder is sent back
+    res_put_cfg = client.put("/api/auth/admin/config", json={
+        "auth_mode": "hybrid",
+        "provider_name": "Keycloak",
+        "issuer_url": "https://sso.example.com/realms/easyea",
+        "client_id": "easyea-web",
+        "client_secret": "super-secret-oidc-key",
+        "redirect_uri": "http://localhost:5173/auth/callback",
+        "scopes": "openid profile email",
+        "auto_provision_users": True,
+        "default_role_name": "viewer"
+    })
+    assert res_put_cfg.status_code == 200
+    assert res_put_cfg.json()["config"]["client_secret"] == "********"
+    assert client.get("/api/auth/admin/config").json()["client_secret"] == "********"
+
+    # Sending back "********" must preserve the real secret in DB
+    res_put_masked = client.put("/api/auth/admin/config", json={
+        "auth_mode": "hybrid",
+        "provider_name": "Keycloak Updated",
+        "issuer_url": "https://sso.example.com/realms/easyea",
+        "client_id": "easyea-web",
+        "client_secret": "********",
+        "redirect_uri": "http://localhost:5173/auth/callback",
+        "scopes": "openid profile email",
+        "auto_provision_users": True,
+        "default_role_name": "viewer"
+    })
+    assert res_put_masked.status_code == 200
+    from app.services.auth_service import get_system_auth_settings
+    db = TestingSessionLocal()
+    try:
+        settings_db = get_system_auth_settings(db)
+        assert settings_db.client_secret == "super-secret-oidc-key"
+        assert settings_db.provider_name == "Keycloak Updated"
+    finally:
+        db.close()
 
 
+def test_sast_crit_02_no_hardcoded_jwt_secret_and_safe_user_passwords(monkeypatch):
+    """Verify SAST-CRIT-02: no hardcoded JWT SECRET_KEY, no predictable fallback user passwords, and PBKDF2 600k iterations."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+    from app.core.config import settings as app_settings, _resolve_secret_key
+    from app.services.auth_service import hash_password, verify_password
+
+    # 1. Active SECRET_KEY is not the old hardcoded string and has strong entropy
+    assert app_settings.SECRET_KEY != "easyea-production-secret-key-2026-auth-session"
+    assert len(app_settings.SECRET_KEY) >= 32
+
+    # 2. Forging a token with the legacy hardcoded key must fail with 401
+    header_b64 = base64.urlsafe_b64encode(json.dumps({"alg": "HS256", "typ": "JWT"}).encode()).decode().rstrip("=")
+    payload_b64 = base64.urlsafe_b64encode(json.dumps({
+        "sub": "usr-sysadmin-00",
+        "username": "sys_admin",
+        "email": "sys_admin@easyea.local",
+        "exp": int(time.time()) + 3600,
+        "iat": int(time.time())
+    }).encode()).decode().rstrip("=")
+    signing_input = f"{header_b64}.{payload_b64}".encode()
+    forged_sig = base64.urlsafe_b64encode(
+        hmac.new(b"easyea-production-secret-key-2026-auth-session", signing_input, hashlib.sha256).digest()
+    ).decode().rstrip("=")
+    forged_token = f"{header_b64}.{payload_b64}.{forged_sig}"
+
+    anon_client = TestClient(app)
+    res_forged = anon_client.get("/api/models", headers={"Authorization": f"Bearer {forged_token}"})
+    assert res_forged.status_code == 401
+
+    # 3. Production mode rejects missing or weak EASYEA_SECRET_KEY
+    monkeypatch.setenv("EASYEA_ENV", "production")
+    monkeypatch.delenv("EASYEA_SECRET_KEY", raising=False)
+    with pytest.raises(RuntimeError):
+        _resolve_secret_key()
+
+    monkeypatch.setenv("EASYEA_SECRET_KEY", "easyea-production-secret-key-2026-auth-session")
+    with pytest.raises(RuntimeError):
+        _resolve_secret_key()
+
+    # 4. Creating a user without a password must NOT assign the predictable 'EasyEA2026!' password
+    res_new_user = client.post("/api/rbac/users", json={
+        "email": "nopass.user@easybank.it",
+        "full_name": "No Password User",
+        "username": "nopass_user"
+    })
+    assert res_new_user.status_code == 200
+    res_login_default = anon_client.post("/api/auth/login", json={
+        "username": "nopass_user",
+        "password": "EasyEA2026!"
+    })
+    assert res_login_default.status_code == 401
+
+    # 5. Password hashing uses 600,000 PBKDF2 iterations and remains backward-compatible with legacy 100k hashes
+    new_hash = hash_password("StrongPass#2026")
+    assert new_hash.startswith("pbkdf2_sha256$600000$")
+    assert verify_password("StrongPass#2026", new_hash) is True
+    assert verify_password("WrongPass", new_hash) is False
 
 
+def test_sast_crit_03_oidc_open_redirect_state_signature_jws_and_email_verified():
+    """Verify SAST-CRIT-03: OIDC return_to allowlist, HMAC-signed state, JWS verification, and verified-email account linking."""
+    import base64
+    import hashlib
+    import hmac
+    import json
+    import time
+    from app.services.auth_service import (
+        create_oidc_state,
+        verify_oidc_state,
+        _verify_and_decode_oidc_jwt,
+        provision_or_sync_oidc_user,
+    )
 
+    anon_client = TestClient(app)
+
+    # 1. Open Redirect blocked on /api/auth/oidc/login
+    res_evil = anon_client.get(
+        "/api/auth/oidc/login?return_to=https://evil-attacker.com/steal",
+        follow_redirects=False,
+    )
+    assert res_evil.status_code == 400
+
+    # Allowed frontend origin and Archi RFC 8252 loopback callback succeed
+    res_valid = anon_client.get(
+        "/api/auth/oidc/login?return_to=http://localhost:5173",
+        follow_redirects=False,
+    )
+    assert res_valid.status_code == 302
+
+    res_loopback = anon_client.get(
+        "/api/auth/oidc/login?return_to=http://127.0.0.1:8765/callback",
+        follow_redirects=False,
+    )
+    assert res_loopback.status_code == 302
+
+    # 2. Unsigned or tampered OIDC state rejected on /api/auth/oidc/callback
+    forged_state = base64.urlsafe_b64encode(
+        json.dumps({"return_to": "https://evil-attacker.com", "nonce": "123"}).encode()
+    ).decode().rstrip("=")
+    res_cb_json = anon_client.get(
+        f"/api/auth/oidc/callback?code=dummy&state={forged_state}&format=json"
+    )
+    assert res_cb_json.status_code == 400
+
+    res_cb_redirect = anon_client.get(
+        f"/api/auth/oidc/callback?code=dummy&state={forged_state}",
+        follow_redirects=False,
+    )
+    assert res_cb_redirect.status_code == 302
+    assert "evil-attacker.com" not in res_cb_redirect.headers.get("location", "")
+    assert "auth_error=" in res_cb_redirect.headers.get("location", "")
+
+    # Valid signed state verifies cleanly, tampered signature raises ValueError
+    valid_state = create_oidc_state("http://localhost:5173")
+    verified_state = verify_oidc_state(valid_state)
+    assert verified_state["return_to"] == "http://localhost:5173"
+    with pytest.raises(ValueError):
+        verify_oidc_state(valid_state + "tampered")
+
+    # 3. OIDC JWT signature & claims verification (_verify_and_decode_oidc_jwt)
+    issuer = "http://localhost:18000/realms/dev-realm"
+    client_id = "easyea-client"
+    secret = "test-oidc-client-secret-key"
+    discovery = {"issuer": issuer}
+
+    def _make_jwt(header_dict, payload_dict, key_str=secret):
+        h_b64 = base64.urlsafe_b64encode(json.dumps(header_dict).encode()).decode().rstrip("=")
+        p_b64 = base64.urlsafe_b64encode(json.dumps(payload_dict).encode()).decode().rstrip("=")
+        if header_dict.get("alg") == "none":
+            return f"{h_b64}.{p_b64}."
+        sig = hmac.new(key_str.encode(), f"{h_b64}.{p_b64}".encode(), hashlib.sha256).digest()
+        s_b64 = base64.urlsafe_b64encode(sig).decode().rstrip("=")
+        return f"{h_b64}.{p_b64}.{s_b64}"
+
+    now = int(time.time())
+    valid_claims = {
+        "sub": "oidc-sub-123",
+        "iss": issuer,
+        "aud": client_id,
+        "exp": now + 600,
+        "iat": now,
+    }
+    valid_jwt = _make_jwt({"alg": "HS256", "typ": "JWT"}, valid_claims)
+    decoded = _verify_and_decode_oidc_jwt(valid_jwt, issuer, client_id, secret, discovery)
+    assert decoded["sub"] == "oidc-sub-123"
+
+    # Reject alg=none
+    with pytest.raises(ValueError):
+        _verify_and_decode_oidc_jwt(_make_jwt({"alg": "none"}, valid_claims), issuer, client_id, secret, discovery)
+
+    # Reject wrong signature
+    with pytest.raises(ValueError):
+        _verify_and_decode_oidc_jwt(_make_jwt({"alg": "HS256"}, valid_claims, key_str="wrong-key"), issuer, client_id, secret, discovery)
+
+    # Reject expired token
+    with pytest.raises(ValueError):
+        _verify_and_decode_oidc_jwt(
+            _make_jwt({"alg": "HS256"}, {**valid_claims, "exp": now - 3600}),
+            issuer, client_id, secret, discovery,
+        )
+
+    # Reject wrong issuer
+    with pytest.raises(ValueError):
+        _verify_and_decode_oidc_jwt(
+            _make_jwt({"alg": "HS256"}, {**valid_claims, "iss": "https://evil-idp.example.com"}),
+            issuer, client_id, secret, discovery,
+        )
+
+    # Reject wrong audience
+    with pytest.raises(ValueError):
+        _verify_and_decode_oidc_jwt(
+            _make_jwt({"alg": "HS256"}, {**valid_claims, "aud": "other-client"}),
+            issuer, client_id, secret, discovery,
+        )
+
+    # 4. Prevent Pre-Auth Account Takeover via unverified email linking
+    db = TestingSessionLocal()
+    try:
+        # Attempt to link to existing local user 'marco.arch@easybank.it' WITHOUT email_verified=True
+        with pytest.raises(ValueError, match="Account linking denied"):
+            provision_or_sync_oidc_user(db, {
+                "sub": "attacker-oidc-sub-999",
+                "email": "marco.arch@easybank.it",
+                "email_verified": False,
+                "name": "Attacker Marco",
+            })
+
+        # Attempt to link to built-in sys_admin is always denied even with email_verified=True
+        with pytest.raises(ValueError, match="Account linking denied"):
+            provision_or_sync_oidc_user(db, {
+                "sub": "attacker-oidc-sub-000",
+                "email": "sys_admin@easyea.local",
+                "email_verified": True,
+                "name": "Attacker Admin",
+            })
+
+        # Legitimate linking to existing local user succeeds when email_verified=True
+        linked_user = provision_or_sync_oidc_user(db, {
+            "sub": "verified-marco-oidc-sub",
+            "email": "marco.arch@easybank.it",
+            "email_verified": True,
+            "name": "Marco Bianchi (Verified SSO)",
+        })
+        assert linked_user.external_id == "verified-marco-oidc-sub"
+
+        # Subsequent attempt by a DIFFERENT sub to hijack the already-linked email is denied
+        with pytest.raises(ValueError, match="Account linking denied"):
+            provision_or_sync_oidc_user(db, {
+                "sub": "second-attacker-sub",
+                "email": "marco.arch@easybank.it",
+                "email_verified": True,
+                "name": "Second Attacker",
+            })
+    finally:
+        db.close()
+
+
+def test_sast_high_01_ssrf_protection_in_test_idp_connection_and_config(monkeypatch):
+    """Verify SAST-HIGH-01: SSRF blocked on cloud metadata, internal ports/IPs, non-HTTP schemes, and no response body leak."""
+    import app.services.auth_service as auth_svc
+
+    ssrf_payloads = [
+        "http://169.254.169.254/latest/meta-data",
+        "http://metadata.google.internal/computeMetadata/v1",
+        "http://127.0.0.1:8000/api/models",
+        "http://localhost:5432",
+        "http://127.0.0.1:6379",
+        "http://10.0.0.1:8080/realms/internal",
+        "http://192.168.1.10/admin",
+        "http://172.16.0.5:8080",
+        "file:///etc/passwd",
+        "gopher://127.0.0.1:6379/_INFO",
+        "https://sso.example.com/realms/easyea#fragment",
+        "https://sso.example.com/realms/easyea?query=1",
+        "https://user:pass@sso.example.com/realms/easyea",
+    ]
+
+    for bad_url in ssrf_payloads:
+        res = client.post("/api/auth/admin/test-connection", json={"issuer_url": bad_url})
+        assert res.status_code == 200
+        body = res.json()
+        assert body["success"] is False, f"Expected SSRF payload {bad_url} to be blocked"
+
+    # Saving an SSRF issuer_url via PUT /api/auth/admin/config must fail with 400
+    res_put_ssrf = client.put("/api/auth/admin/config", json={
+        "issuer_url": "http://169.254.169.254/latest/meta-data"
+    })
+    assert res_put_ssrf.status_code == 400
+
+    # Verify non-200 HTTP response from an external host does NOT leak resp.text in error message
+    class DummyResp:
+        status_code = 404
+        text = "SENSITIVE_INTERNAL_SECRET_BODY_CONTENT_12345"
+        def json(self):
+            return {}
+
+    monkeypatch.setattr(auth_svc, "_make_oidc_request", lambda method, url, **kw: DummyResp())
+    monkeypatch.setattr(auth_svc, "validate_oidc_issuer_url", lambda url, resolve_dns=False: "https://sso.example.com/realms/easyea")
+
+    res_no_leak = client.post(
+        "/api/auth/admin/test-connection",
+        json={"issuer_url": "https://sso.example.com/realms/easyea"}
+    )
+    assert res_no_leak.status_code == 200
+    data_no_leak = res_no_leak.json()
+    assert data_no_leak["success"] is False
+    assert "SENSITIVE_INTERNAL_SECRET_BODY_CONTENT_12345" not in data_no_leak["message"]
+
+
+def test_sast_high_02_to_06_xml_bomb_cors_and_upload_limits(monkeypatch):
+    """Verify SAST-HIGH-02 (defusedxml Billion Laughs / XXE block), SAST-HIGH-05 (no wildcard CORS), and SAST-HIGH-06 (upload size & zip bomb guards)."""
+    import io
+    import zipfile
+    from defusedxml.common import EntitiesForbidden, DTDForbidden
+    from app.parsers.archi_parser import ArchiModelParser
+    from app.services.bpmn_service import parse_bpmn_file_to_canonical_model
+    from app.services.drawio_service import parse_drawio_file_to_canonical_model
+    from app.core.config import settings
+    import app.api.deps as api_deps
+
+    # 1. SAST-HIGH-02: Billion Laughs / DTD / XXE payloads must be rejected by defusedxml across all parsers
+    xml_bomb = """<?xml version="1.0"?>
+<!DOCTYPE lolz [
+  <!ENTITY lol "lol">
+  <!ENTITY lol1 "&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;&lol;">
+  <!ENTITY lol2 "&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;&lol1;">
+]>
+<archimate:model xmlns:archimate="http://www.archimatetool.com/archimate" name="&lol2;" id="m1"/>"""
+
+    with pytest.raises((EntitiesForbidden, DTDForbidden, Exception)):
+        ArchiModelParser(xml_bomb).parse()
+
+    with pytest.raises((EntitiesForbidden, DTDForbidden, Exception)):
+        parse_bpmn_file_to_canonical_model(xml_bomb)
+
+    with pytest.raises((EntitiesForbidden, DTDForbidden, Exception)):
+        parse_drawio_file_to_canonical_model(xml_bomb)
+
+    # Uploading XML bomb via /api/models/upload-archi must fail cleanly with 400
+    res_bomb = client.post(
+        "/api/models/upload-archi",
+        files={"file": ("bomb.archimate", xml_bomb.encode("utf-8"), "application/xml")},
+    )
+    assert res_bomb.status_code == 400
+
+    # 2. SAST-HIGH-05: CORS_ORIGINS must never contain wildcard '*'
+    assert "*" not in settings.CORS_ORIGINS
+    assert all(origin.startswith(("http://", "https://", "null", "file:")) for origin in settings.CORS_ORIGINS)
+
+    # 3. SAST-HIGH-06: Oversized upload rejected with 413 Payload Too Large
+    monkeypatch.setattr(api_deps.settings, "MAX_UPLOAD_BYTES", 1024)  # 1 KB limit for test
+    oversized_payload = b"A" * 2048
+    res_large = client.post(
+        "/api/import/upload",
+        data={"model_id": "sample-easybank-ea", "dry_run": "true"},
+        files={"file": ("huge.csv", oversized_payload, "text/csv")},
+    )
+    assert res_large.status_code == 413
+
+    # 4. SAST-HIGH-06: Zip Bomb (high compression ratio / uncompressed size limit) rejected with 413
+    monkeypatch.setattr(api_deps.settings, "MAX_UPLOAD_BYTES", 15 * 1024 * 1024)
+    monkeypatch.setattr(api_deps.settings, "MAX_UNCOMPRESSED_ZIP_BYTES", 4096)  # 4 KB uncompressed limit for test
+    zip_buf = io.BytesIO()
+    with zipfile.ZipFile(zip_buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("elements.csv", "id,name,type\n" + ("elem-1,App,ApplicationComponent\n" * 500))
+    zip_buf.seek(0)
+
+    res_zip_bomb = client.post(
+        "/api/import/upload",
+        data={"model_id": "sample-easybank-ea", "dry_run": "true"},
+        files={"file": ("bomb.zip", zip_buf.getvalue(), "application/zip")},
+    )
+    assert res_zip_bomb.status_code == 413
+
+    # 5. SAST-HIGH-06: Zip-Slip path traversal inside archive rejected with 400
+    monkeypatch.setattr(api_deps.settings, "MAX_UNCOMPRESSED_ZIP_BYTES", 50 * 1024 * 1024)
+    slip_buf = io.BytesIO()
+    with zipfile.ZipFile(slip_buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("../../etc/passwd.csv", "id,name,type\n1,A,ApplicationComponent\n")
+    slip_buf.seek(0)
+
+    res_slip = client.post(
+        "/api/import/upload",
+        data={"model_id": "sample-easybank-ea", "dry_run": "true"},
+        files={"file": ("slip.zip", slip_buf.getvalue(), "application/zip")},
+    )
+    assert res_slip.status_code == 400
+
+
+def test_sast_med_01_to_03_rate_limiting_and_formula_injection_and_archi_settings():
+    """Verify SAST-MED-01 (Archi loopback binding, anti-CSRF, reflected XSS, chmod 0600), SAST-MED-02 (login rate limiter & PBKDF2), and SAST-MED-03 (CSV/XLSX DDE formula injection sanitization)."""
+    import os
+    import io
+    import zipfile
+    import openpyxl
+    from app.services.auth_service import login_rate_limiter, PBKDF2_ITERATIONS, hash_password, verify_password
+    from app.services.export_service import sanitize_formula_injection, generate_view_excel, generate_view_csv_zip
+    from app.models.archimate import ArchimateElement, ModelWorkspace
+
+    # 1. SAST-MED-02: PBKDF2 600,000 iterations & password hashing
+    assert PBKDF2_ITERATIONS == 600_000
+    pwd = "SecuredPassword2026!"
+    hashed = hash_password(pwd)
+    assert hashed.startswith("pbkdf2_sha256$600000$")
+    assert verify_password(pwd, hashed) is True
+    assert verify_password("WrongPassword!", hashed) is False
+
+    # 2. SAST-MED-02: Sliding-window login rate limiting (max 5 failed attempts -> 429)
+    login_rate_limiter.reset()
+    test_user = "rate_limit_test_user"
+    for i in range(5):
+        res_fail = client.post("/api/auth/login", json={
+            "username": test_user,
+            "password": "WrongPassword!"
+        })
+        assert res_fail.status_code == 401
+
+    # 6th attempt with same user/IP must trigger HTTP 429 Too Many Requests
+    res_blocked = client.post("/api/auth/login", json={
+        "username": test_user,
+        "password": "WrongPassword!"
+    })
+    assert res_blocked.status_code == 429
+    assert "Retry-After" in res_blocked.headers
+    assert int(res_blocked.headers["Retry-After"]) > 0
+    assert "Troppi tentativi" in res_blocked.json()["detail"]
+
+    # Success with different user resets their rate limiter
+    res_admin = client.post("/api/auth/login", json={
+        "username": "sys_admin",
+        "password": "AdminEasyEA2026!"
+    })
+    assert res_admin.status_code == 200
+
+    login_rate_limiter.reset()
+
+    # 3. SAST-MED-03: Formula injection (DDE / CSV Injection / CWE-1236) sanitization
+    assert sanitize_formula_injection("=cmd|'/C calc'!A0") == "'=cmd|'/C calc'!A0"
+    assert sanitize_formula_injection("+123456") == "'+123456"
+    assert sanitize_formula_injection("-5+5") == "'-5+5"
+    assert sanitize_formula_injection("@SUM(A1:A10)") == "'@SUM(A1:A10)"
+    assert sanitize_formula_injection("\tcalc") == "'\tcalc"
+    assert sanitize_formula_injection("\rcmd") == "'\rcmd"
+    assert sanitize_formula_injection("  =2+2") == "'  =2+2"
+    assert sanitize_formula_injection("Normal Element Name") == "Normal Element Name"
+    assert sanitize_formula_injection(12345) == 12345
+    assert sanitize_formula_injection(None) is None
+
+    # Verify Excel and CSV export sanitize dangerous element names
+    fake_ws = ModelWorkspace(id="ws-sec-test", name="Security Test Workspace")
+    fake_el = ArchimateElement(
+        id="el-inj-1",
+        name="=cmd|'/C calc'!A0",
+        type="ApplicationComponent",
+        layer="Application",
+        documentation="@SUM(1+1)"
+    )
+
+    # Excel export check
+    excel_stream = generate_view_excel(fake_ws, [fake_el], [], [])
+    wb = openpyxl.load_workbook(excel_stream, data_only=False)
+    ws = wb["Elements"]
+    assert ws.cell(row=2, column=2).value == "'=cmd|'/C calc'!A0"
+    assert ws.cell(row=2, column=5).value == "'@SUM(1+1)"
+
+    # CSV Zip export check
+    zip_stream = generate_view_csv_zip(fake_ws, [fake_el], [], [])
+    with zipfile.ZipFile(zip_stream, "r") as zf:
+        csv_text = zf.read("elements.csv").decode("utf-8-sig")
+        assert "'=cmd|'/C calc'!A0" in csv_text
+        assert "'@SUM(1+1)" in csv_text
+
+    # 4. SAST-MED-01: Archi plugin security hardening checks
+    plugin_path = os.path.join(os.path.dirname(__file__), "../../plugins/archi-easyea/EasyEA_Settings.ajs")
+    assert os.path.exists(plugin_path)
+    with open(plugin_path, "r", encoding="utf-8") as f:
+        plugin_code = f.read()
+
+    # Loopback binding
+    assert 'InetAddress.getByName("127.0.0.1")' in plugin_code
+    assert 'new ServerSocket(p, 1, loopback)' in plugin_code
+    # Anti-CSRF client_state
+    assert "expectedClientState" in plugin_code
+    assert "receivedClientState !== expectedClientState" in plugin_code
+    # HTML escaping for Reflected XSS
+    assert "escapeHtml" in plugin_code
+    assert "escapeHtml(receivedError" in plugin_code
+    # POSIX 0600 permissions
+    assert "setReadable(false, false)" in plugin_code
+    assert "setReadable(true, true)" in plugin_code
+    assert "setWritable(true, true)" in plugin_code
+
+
+def test_phase3_semantic_impact_spof_and_archimate_derivation():
+    """
+    Tests Phase 3 capabilities:
+    1. Multi-hop semantic impact analysis (failure vs change modes with hop distances and critical paths).
+    2. Model-wide architectural risk and SPOF detection.
+    3. ArchiMate 3.2 §5.7 Derivation Engine (weakest link rule).
+    4. Plateau and transition roadmap endpoints.
+    """
+    db = TestingSessionLocal()
+    try:
+        model_id = "ws-phase3-ea"
+        ws = ModelWorkspace(id=model_id, name="Phase 3 EA Test Workspace")
+        db.add(ws)
+        db.commit()
+
+        # Create elements across ArchiMate layers:
+        # Tech: Node1 (Server)
+        node1 = ArchimateElement(
+            id="p3-node-1",
+            model_id=model_id,
+            name="Primary Core DB Server",
+            type="Node",
+            layer="Technology"
+        )
+        # Application: App1 (Core CRM) & App2 (Billing Engine in Migrate/Phase-out)
+        app1 = ArchimateElement(
+            id="p3-app-1",
+            model_id=model_id,
+            name="Core CRM Engine",
+            type="ApplicationComponent",
+            layer="Application",
+            properties={"eea_lifecycle_status": "Live"}
+        )
+        app2 = ArchimateElement(
+            id="p3-app-2",
+            model_id=model_id,
+            name="Legacy Billing Tool",
+            type="ApplicationComponent",
+            layer="Application",
+            properties={"eea_lifecycle_status": "Phase-out"}
+        )
+        # Business: Process1 (Mission Critical Checkout)
+        proc1 = ArchimateElement(
+            id="p3-proc-1",
+            model_id=model_id,
+            name="Customer Onboarding Process",
+            type="BusinessProcess",
+            layer="Business"
+        )
+        # Data: DataObject1
+        data1 = ArchimateElement(
+            id="p3-data-1",
+            model_id=model_id,
+            name="Customer Master Record",
+            type="DataObject",
+            layer="Business"
+        )
+
+        db.add_all([node1, app1, app2, proc1, data1])
+        db.commit()
+
+        # APM Attributes: App1 is Mission Critical; App2 is Eliminate
+        apm1 = ApplicationBusinessAttributes(
+            element_id=app1.id,
+            business_criticality="Mission Critical",
+            time_quadrant="Invest",
+            annual_cost=120000.0
+        )
+        apm2 = ApplicationBusinessAttributes(
+            element_id=app2.id,
+            business_criticality="Business Operational",
+            time_quadrant="Eliminate",
+            annual_cost=45000.0
+        )
+        db.add_all([apm1, apm2])
+        db.commit()
+
+        # Relationships:
+        # Node1 --Serving--> App1
+        rel1 = ArchimateRelationship(
+            id="p3-rel-1",
+            model_id=model_id,
+            source_id=node1.id,
+            target_id=app1.id,
+            type="ServingRelationship"
+        )
+        # App1 --Serving--> Proc1
+        rel2 = ArchimateRelationship(
+            id="p3-rel-2",
+            model_id=model_id,
+            source_id=app1.id,
+            target_id=proc1.id,
+            type="ServingRelationship"
+        )
+        # App2 --Serving--> Proc1 (Proc1 uses an app in Eliminate/Phase-out!)
+        rel3 = ArchimateRelationship(
+            id="p3-rel-3",
+            model_id=model_id,
+            source_id=app2.id,
+            target_id=proc1.id,
+            type="ServingRelationship"
+        )
+        # App1 --Access--> Data1
+        rel4 = ArchimateRelationship(
+            id="p3-rel-4",
+            model_id=model_id,
+            source_id=app1.id,
+            target_id=data1.id,
+            type="AccessRelationship"
+        )
+
+        db.add_all([rel1, rel2, rel3, rel4])
+        db.commit()
+
+        # 1. Multi-Hop Impact Simulation from Node1 in 'failure' mode
+        impact_fail = ProcessService.simulate_impact(db, model_id, node1.id, mode="failure")
+        assert impact_fail["source_element"]["id"] == node1.id
+        assert impact_fail["simulation_mode"] == "failure"
+        assert impact_fail["blast_radius"]["total_impacted_elements"] >= 2
+        
+        # Verify hop distances: App1 should be Hop 1, Proc1 should be Hop 2
+        app_entry = next((a for a in impact_fail["impacted_applications"] if a["id"] == app1.id), None)
+        assert app_entry is not None
+        assert app_entry["hop_distance"] == 1
+
+        proc_entry = next((p for p in impact_fail["impacted_processes"] if p["id"] == proc1.id), None)
+        assert proc_entry is not None
+        assert proc_entry["hop_distance"] == 2
+        # Verify critical path sequence
+        assert len(proc_entry["path"]) == 3
+        assert proc_entry["path"][0]["id"] == node1.id
+        assert proc_entry["path"][1]["id"] == app1.id
+        assert proc_entry["path"][2]["id"] == proc1.id
+
+        # In failure mode, Access to Data1 should NOT be in failure path
+        assert len(impact_fail["impacted_data_objects"]) == 0
+
+        # Now test 'change' mode from App1: Data1 should be impacted via Access
+        impact_change = ProcessService.simulate_impact(db, model_id, app1.id, mode="change")
+        assert len(impact_change["impacted_data_objects"]) >= 1
+        assert impact_change["impacted_data_objects"][0]["id"] == data1.id
+
+        # 2. Architectural Risk & SPOF Audit
+        risks = ProcessService.detect_architectural_risks(db, model_id)
+        assert risks["model_id"] == model_id
+        assert risks["summary"]["total_risks"] >= 1
+        # Check lifecycle risk detection (App2 in Eliminate/Phase-out supporting Proc1)
+        assert any(r["severity"] == "HIGH" for r in risks["lifecycle_risks"])
+
+        # Also verify catalog incorporates process risk diagnostics
+        catalog = ProcessService.get_process_catalog(db, model_id)
+        p1_cat = next((p for p in catalog["processes"] if p["id"] == proc1.id), None)
+        assert p1_cat is not None
+        assert p1_cat["is_critical"] is True
+        assert p1_cat["has_lifecycle_risk"] is True
+
+        # 3. ArchiMate Derivation Engine (§5.7)
+        # Node1 --Serving (6)--> App1 --Serving (6)--> Proc1
+        # Between Node (Technology) and BusinessProcess (Business), ArchiMate metamodel allows Association
+        derived = compute_archimate_derivation(
+            [node1, app1, app2, proc1, data1],
+            [rel1, rel2, rel3, rel4],
+            source_id=node1.id,
+            target_id=proc1.id
+        )
+        assert len(derived) == 1
+        assert derived[0]["source_id"] == node1.id
+        assert derived[0]["target_id"] == proc1.id
+        assert derived[0]["type"] == "AssociationRelationship"
+        assert derived[0]["is_derived"] is True
+        assert len(derived[0]["chain"]) == 2
+
+        # Now test a chain where Serving is directly permitted:
+        # AppService1 --Serving (6)--> App1 --Serving (6)--> Proc1
+        app_srv = ArchimateElement(
+            id="p3-srv-1",
+            model_id=model_id,
+            name="Customer Account Service",
+            type="ApplicationService",
+            layer="Application"
+        )
+        rel_srv = ArchimateRelationship(
+            id="p3-rel-srv-1",
+            model_id=model_id,
+            source_id=app_srv.id,
+            target_id=app1.id,
+            type="ServingRelationship"
+        )
+        derived_srv = compute_archimate_derivation(
+            [app_srv, app1, proc1],
+            [rel_srv, rel2],
+            source_id=app_srv.id,
+            target_id=proc1.id
+        )
+        assert len(derived_srv) == 1
+        assert derived_srv[0]["type"] == "ServingRelationship"
+
+        # 4. Plateau Roadmap
+        plateau_data = get_plateau_roadmap(
+            [node1, app1, app2, proc1, data1],
+            [rel1, rel2, rel3, rel4]
+        )
+        assert "horizons" in plateau_data
+        assert len(plateau_data["horizons"]) == 3
+
+    finally:
+        db.close()
+
+
+def test_sast_low_01_security_headers_and_docker_non_root():
+    """Verify SAST-LOW-01 (OWASP HTTP security headers on all responses) and SCA-CONTAINER-ROOT (non-root Dockerfile)."""
+    import os
+
+    # 1. SAST-LOW-01: Verify HTTP Security Headers in FastAPI response
+    res = client.get("/health")
+    assert res.status_code == 200
+    headers = res.headers
+    assert headers.get("X-Content-Type-Options") == "nosniff"
+    assert headers.get("X-Frame-Options") == "SAMEORIGIN"
+    assert headers.get("Referrer-Policy") == "strict-origin-when-cross-origin"
+    assert "camera=()" in headers.get("Permissions-Policy", "")
+    assert "frame-ancestors 'self'" in headers.get("Content-Security-Policy", "")
+    assert headers.get("X-XSS-Protection") == "1; mode=block"
+
+    # Also test an API endpoint with security headers
+    res_api = client.get("/api/auth/oidc/config")
+    assert res_api.status_code == 200
+    assert res_api.headers.get("X-Content-Type-Options") == "nosniff"
+    assert res_api.headers.get("X-Frame-Options") == "SAMEORIGIN"
+
+    # 2. SCA-CONTAINER-ROOT: Verify Dockerfile creates and switches to non-root user
+    dockerfile_path = os.path.join(os.path.dirname(__file__), "../../Dockerfile")
+    assert os.path.exists(dockerfile_path)
+    with open(dockerfile_path, "r", encoding="utf-8") as f:
+        dockerfile_content = f.read()
+
+    assert "groupadd" in dockerfile_content
+    assert "useradd" in dockerfile_content
+    assert "USER easyea" in dockerfile_content
+    assert "chown -R easyea:easyea" in dockerfile_content
 
 
 

@@ -20,7 +20,14 @@ from app.models.archimate import (
     ArchimateRelationship,
     ApplicationBusinessAttributes,
     CustomAttributeDefinition,
-    ImportHistory
+    ImportHistory,
+    User
+)
+from app.api.deps import (
+    get_current_user,
+    require_library_permission,
+    read_upload_bounded,
+    validate_zip_archive_safety,
 )
 from app.services.metamodel_service import (
     ARCHIMATE_METAMODEL,
@@ -99,7 +106,8 @@ def cast_value(raw_val: Any, data_type: str) -> Any:
 def download_import_template(
     model_id: Optional[str] = None,
     format: str = "xlsx",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Generates a dynamic Excel or CSV template populated with all ArchiMate types, 
@@ -351,18 +359,20 @@ async def upload_import_file(
     dry_run: bool = Form(False),
     update_existing: bool = Form(True),
     user_name: Optional[str] = Form("Architect"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Parses and imports ArchiMate elements and relationships from Excel (.xlsx) or CSV files.
     Supports dry_run preview, strict ArchiMate 3.x metamodel validation, dynamic attribute assignment, 
     and persistent history logging.
     """
+    require_library_permission(db, current_user, "import_model_file", model_id)
     workspace = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not workspace:
         raise HTTPException(status_code=404, detail=f"Model workspace '{model_id}' not found.")
 
-    contents = await file.read()
+    contents = await read_upload_bounded(file)
     filename = file.filename or "unknown_import"
     lower_filename = filename.lower()
     file_size = len(contents)
@@ -395,6 +405,7 @@ async def upload_import_file(
     # 1. PARSING
     # =========================================================================
     if file_format == "xlsx":
+        validate_zip_archive_safety(contents)
         try:
             wb = openpyxl.load_workbook(io.BytesIO(contents), data_only=True)
         except Exception as e:
@@ -463,6 +474,7 @@ async def upload_import_file(
                     parsed_elements.append({"row_num": r_idx, "data": r})
 
     elif file_format == "zip":
+        validate_zip_archive_safety(contents)
         try:
             with zipfile.ZipFile(io.BytesIO(contents)) as z:
                 for name in z.namelist():
@@ -479,6 +491,8 @@ async def upload_import_file(
                         else:
                             for r_idx, r in enumerate(reader, start=2):
                                 parsed_elements.append({"row_num": r_idx, "data": r, "file": name})
+        except HTTPException:
+            raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid ZIP archive: {str(e)}")
 
@@ -817,7 +831,11 @@ async def upload_import_file(
 
 
 @router.get("/history", response_model=List[Dict[str, Any]])
-def list_import_history(model_id: Optional[str] = None, db: Session = Depends(get_db)):
+def list_import_history(
+    model_id: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Retrieves all past import logs, ordered chronologically descending."""
     query = db.query(ImportHistory)
     if model_id:
@@ -845,7 +863,11 @@ def list_import_history(model_id: Optional[str] = None, db: Session = Depends(ge
 
 
 @router.get("/history/{history_id}")
-def get_import_history_detail(history_id: str, db: Session = Depends(get_db)):
+def get_import_history_detail(
+    history_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Retrieves full detailed log for a specific past import execution."""
     record = db.query(ImportHistory).filter(ImportHistory.id == history_id).first()
     if not record:
@@ -870,11 +892,16 @@ def get_import_history_detail(history_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/history/{history_id}")
-def delete_import_history(history_id: str, db: Session = Depends(get_db)):
+def delete_import_history(
+    history_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Deletes an import history entry."""
     record = db.query(ImportHistory).filter(ImportHistory.id == history_id).first()
     if not record:
         raise HTTPException(status_code=404, detail=f"Import history record '{history_id}' not found.")
+    require_library_permission(db, current_user, "write_architecture", record.model_id)
     
     db.delete(record)
     db.commit()
@@ -882,7 +909,11 @@ def delete_import_history(history_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/drawio/export")
-def export_model_drawio(model_id: str, db: Session = Depends(get_db)):
+def export_model_drawio(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Exports all views of a model into a multi-diagram .drawio XML package."""
     workspace = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not workspace:
@@ -901,17 +932,19 @@ def export_model_drawio(model_id: str, db: Session = Depends(get_db)):
 async def import_drawio_file_endpoint(
     model_id: str,
     file: UploadFile = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """
     Uploads and imports a .drawio diagram file, extracting elements,
     relationships, and diagram views into the model.
     """
+    require_library_permission(db, current_user, "import_model_file", model_id)
     workspace = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not workspace:
         raise HTTPException(status_code=404, detail="Model Workspace not found")
 
-    content_bytes = await file.read()
+    content_bytes = await read_upload_bounded(file)
     try:
         xml_str = content_bytes.decode("utf-8")
     except Exception:

@@ -17,6 +17,11 @@ from app.models.archimate import (
     SystemAuthSettings
 )
 from app.parsers.archi_parser import ArchiModelParser, detect_layer
+from app.api.deps import (
+    get_current_user,
+    require_library_permission,
+    read_upload_bounded,
+)
 from app.services.auth_service import get_user_from_token, get_system_auth_settings
 from app.services.schema_export_service import generate_standalone_archi_xml
 from app.services.schema_diff_service import compute_schema_diff
@@ -110,7 +115,11 @@ class CheckinConfirmRequest(BaseModel):
 # ============================================================================
 
 @router.get("/{model_id}/folders")
-def get_folders(model_id: str, db: Session = Depends(get_db)):
+def get_folders(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Returns all folders for the specified workspace."""
     folders = db.query(SchemaFolder).filter(
         SchemaFolder.model_id == model_id
@@ -136,11 +145,11 @@ def get_folders(model_id: str, db: Session = Depends(get_db)):
 def create_folder(
     model_id: str,
     payload: FolderCreateRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Create a new folder or subfolder."""
-    _require_user(authorization, db)
+    require_library_permission(db, user, "edit_diagram", model_id)
     
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not ws:
@@ -179,14 +188,14 @@ def create_folder(
 def update_folder(
     folder_id: str,
     payload: FolderUpdateRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Update or rename a folder."""
-    _require_user(authorization, db)
     folder = db.query(SchemaFolder).filter(SchemaFolder.id == folder_id).first()
     if not folder:
         raise HTTPException(status_code=404, detail="Cartella non trovata.")
+    require_library_permission(db, user, "edit_diagram", folder.model_id)
 
     if payload.name is not None:
         folder.name = payload.name.strip() or folder.name
@@ -205,14 +214,14 @@ def update_folder(
 @router.delete("/folders/{folder_id}")
 def delete_folder(
     folder_id: str,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Delete a folder. Subfolders and schemas are cascaded or moved to parent."""
-    _require_user(authorization, db)
     folder = db.query(SchemaFolder).filter(SchemaFolder.id == folder_id).first()
     if not folder:
         raise HTTPException(status_code=404, detail="Cartella non trovata.")
+    require_library_permission(db, user, "edit_diagram", folder.model_id)
 
     # Reassign schemas inside this folder to root or parent
     db.query(ArchiSchema).filter(ArchiSchema.folder_id == folder.id).update(
@@ -262,7 +271,8 @@ def get_schemas_tree(
     format: Optional[str] = Query(None, description="Filter by format: bpmn, drawio, archi, all"),
     status: Optional[str] = Query(None, description="Filter by status: available, checked_out"),
     search: Optional[str] = Query(None, description="Search query string"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Unified endpoint to retrieve schemas tree and lists across folders and workspaces."""
     query = db.query(ArchiSchema)
@@ -333,7 +343,8 @@ def list_schemas(
     model_id: str,
     folder_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """List schemas for a workspace with optional filters."""
     q = db.query(ArchiSchema).filter(ArchiSchema.model_id == model_id)
@@ -350,7 +361,11 @@ def list_schemas(
 
 
 @router.get("/{schema_id}/detail")
-def get_schema_detail(schema_id: str, db: Session = Depends(get_db)):
+def get_schema_detail(
+    schema_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Retrieve full schema detail including visual view_data."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
@@ -365,11 +380,11 @@ def get_schema_detail(schema_id: str, db: Session = Depends(get_db)):
 def create_schema(
     model_id: str,
     payload: SchemaCreateRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Create a new schema manually or blank."""
-    user = _require_user(authorization, db)
+    require_library_permission(db, user, "edit_diagram", model_id)
     
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not ws:
@@ -419,16 +434,16 @@ async def import_schema_file(
     file: UploadFile = File(...),
     folder_id: Optional[str] = Form(None),
     schema_name: Optional[str] = Form(None),
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Imports an .archimate, .drawio, or Open Exchange XML file into a new schema."""
-    user = _require_user(authorization, db)
+    require_library_permission(db, user, "import_model_file", model_id)
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not ws:
         raise HTTPException(status_code=404, detail="Workspace non trovato.")
 
-    content = await file.read()
+    content = await read_upload_bounded(file)
     xml_str = content.decode("utf-8", errors="ignore")
 
     is_drawio = (
@@ -546,14 +561,14 @@ async def import_schema_file(
 def update_schema(
     schema_id: str,
     payload: SchemaUpdateRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Update schema name, documentation, or viewpoint."""
-    _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if payload.name is not None:
         schema.name = payload.name.strip() or schema.name
@@ -573,14 +588,14 @@ def update_schema(
 def move_schema(
     schema_id: str,
     payload: SchemaMoveRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Move schema to a different folder (Drag & Drop support)."""
-    _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     schema.folder_id = payload.folder_id if payload.folder_id and payload.folder_id != "__root__" else None
     db.commit()
@@ -591,14 +606,14 @@ def move_schema(
 @router.delete("/{schema_id}")
 def delete_schema(
     schema_id: str,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Delete a schema from the repository."""
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if schema.status == "checked_out" and schema.locked_by_user_id != user.id and not _is_admin_or_lead(user, schema.model_id):
         raise HTTPException(status_code=403, detail="Non puoi eliminare uno schema attualmente in checkout da un altro architetto.")
@@ -613,7 +628,9 @@ def delete_schema(
 # ============================================================================
 
 @router.get("/drawio/palette")
-def download_drawio_palette():
+def download_drawio_palette(
+    current_user: User = Depends(get_current_user)
+):
     """Generates and downloads the ArchiMate 3.x Draw.io custom palette (.xml)."""
     palette_xml = generate_drawio_archimate_library_xml()
     return Response(
@@ -626,16 +643,16 @@ def download_drawio_palette():
 @router.post("/{schema_id}/checkout")
 def checkout_schema(
     schema_id: str,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """
     Locks the schema for the current user and returns the standalone XML (.archimate or .drawio).
     """
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if schema.status == "checked_out" and schema.locked_by_user_id != user.id:
         raise HTTPException(
@@ -680,7 +697,8 @@ def checkout_schema(
 @router.get("/{schema_id}/download")
 def download_schema_xml(
     schema_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Download schema XML (.archimate, .drawio, or .bpmn) without locking."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
@@ -715,16 +733,16 @@ def download_schema_xml(
 @router.post("/{schema_id}/discard-checkout")
 def discard_checkout(
     schema_id: str,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """
     Discards the current checkout and releases the lock without changes.
     """
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if schema.status != "checked_out":
         return {"success": True, "message": "Lo schema non era in stato di checkout.", "schema": _serialize_schema(schema)}
@@ -749,13 +767,12 @@ def discard_checkout(
 @router.post("/{schema_id}/forced-unlock")
 def forced_unlock(
     schema_id: str,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """
     Forced unlock reserved for Admin / Lead Architect.
     """
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
@@ -784,16 +801,16 @@ def forced_unlock(
 async def checkin_diff(
     schema_id: str,
     file: UploadFile = File(...),
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """
     Uploads modified .archimate or .drawio file and calculates the Diff against EasyEA DB.
     """
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     # Must be locked by current user or user is admin
     if schema.status == "checked_out" and schema.locked_by_user_id != user.id and not _is_admin_or_lead(user, schema.model_id):
@@ -802,7 +819,7 @@ async def checkin_diff(
             detail=f"Lo schema è bloccato da {schema.locked_by_username}. Non puoi eseguire il check-in."
         )
 
-    content = await file.read()
+    content = await read_upload_bounded(file)
     xml_str = content.decode("utf-8", errors="ignore")
 
     is_bpmn = (
@@ -842,17 +859,17 @@ async def checkin_diff(
 def checkin_confirm(
     schema_id: str,
     payload: CheckinConfirmRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """
     Confirms Check-in: applies resolutions, creates new version snapshot,
     enforces retention of max N versions, and releases lock.
     """
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if schema.status == "checked_out" and schema.locked_by_user_id != user.id and not _is_admin_or_lead(user, schema.model_id):
         raise HTTPException(
@@ -862,6 +879,12 @@ def checkin_confirm(
 
     model_id = schema.model_id
     raw_xml_text = payload.raw_xml or payload.file_content or payload.xml_content
+
+    if len(raw_xml_text or "") > 15 * 1024 * 1024:
+        raise HTTPException(
+            status_code=413,
+            detail="Uploaded XML content exceeds maximum allowed size (15 MB).",
+        )
 
     # If raw XML is provided, parse it and compute diff to ensure all new elements & relationships are captured
     parsed_model = None
@@ -1144,7 +1167,11 @@ def checkin_confirm(
 # ============================================================================
 
 @router.get("/{schema_id}/versions")
-def get_version_history(schema_id: str, db: Session = Depends(get_db)):
+def get_version_history(
+    schema_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Retrieve version history list for a schema."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
@@ -1170,7 +1197,12 @@ def get_version_history(schema_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{schema_id}/versions/{version_id}/download")
-def download_version_xml(schema_id: str, version_id: str, db: Session = Depends(get_db)):
+def download_version_xml(
+    schema_id: str,
+    version_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Download the Archi XML content of a past version snapshot."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
@@ -1202,14 +1234,14 @@ def download_version_xml(schema_id: str, version_id: str, db: Session = Depends(
 def rollback_to_version(
     schema_id: str,
     version_id: str,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user)
 ):
     """Rollbacks schema to a previous version snapshot, creating a new history entry."""
-    user = _require_user(authorization, db)
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
+    require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if schema.status == "checked_out" and schema.locked_by_user_id != user.id and not _is_admin_or_lead(user, schema.model_id):
         raise HTTPException(status_code=403, detail="Non puoi effettuare il rollback di uno schema attualmente in checkout da un altro utente.")

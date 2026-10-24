@@ -369,10 +369,10 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
         <div>
           <button
             onClick={handleOpenDrawioCreate}
-            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md"
+            className="inline-flex items-center space-x-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-md cursor-pointer"
           >
             <PlusCircle className="w-4 h-4" />
-            <span>Crea Nuova Vista con Draw.io</span>
+            <span>{t.schemas.createWithDrawio}</span>
           </button>
         </div>
 
@@ -437,21 +437,21 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
 
           <button
             onClick={handleOpenDrawioCreate}
-            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200"
-            title="Crea una nuova vista con l'editor Draw.io"
+            className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200 cursor-pointer"
+            title={t.schemas.createWithDrawioTooltip}
           >
             <PlusCircle className="w-4 h-4 text-indigo-600" />
-            <span>Nuova Vista Draw.io</span>
+            <span>{t.schemas.newDrawioView}</span>
           </button>
 
           {currentView && (
             <button
               onClick={handleOpenDrawioEdit}
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm hover:shadow-indigo-600/30"
-              title="Modifica il diagramma corrente nell'editor Draw.io integrato"
+              className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm hover:shadow-indigo-600/30 cursor-pointer"
+              title={t.schemas.editInDrawioTooltip}
             >
               <Palette className="w-4 h-4" />
-              <span>Modifica in Draw.io</span>
+              <span>{t.schemas.editInDrawio}</span>
             </button>
           )}
         </div>

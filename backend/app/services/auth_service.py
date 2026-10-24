@@ -1,22 +1,28 @@
+import ipaddress
 import os
+import socket
 import time
 import json
 import base64
 import hmac
 import hashlib
 import secrets
+import threading
 import uuid
 import urllib.parse
-from typing import Optional, Dict, Any, List, Set
+from collections import defaultdict
+from typing import Optional, Dict, Any, List, Set, Tuple
+from fastapi import HTTPException
 import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.archimate import User, UserRoleAssignment, SystemAuthSettings
 
-# In-memory cache for OIDC Discovery metadata
+# In-memory cache for OIDC Discovery metadata and JWKS
 _OIDC_DISCOVERY_CACHE: Dict[str, Any] = {}
 _OIDC_DISCOVERY_EXPIRY: float = 0
+_OIDC_JWKS_CACHE: Dict[str, Tuple[float, List[Dict[str, Any]]]] = {}
 
 
 DEFAULT_ROLE_MAPPINGS = [
@@ -101,8 +107,127 @@ def get_system_auth_settings(db: Session) -> SystemAuthSettings:
     return auth_cfg
 
 
+_FORBIDDEN_SSRF_PORTS = {
+    21, 22, 23, 25, 53, 111, 135, 137, 139, 389, 445, 1433, 1521,
+    2049, 2375, 2376, 3306, 3389, 5432, 5433, 5672, 6379, 8000,
+    9042, 9200, 9300, 11211, 27017,
+}
+
+_FORBIDDEN_SSRF_HOSTNAMES = {
+    "metadata.google.internal",
+    "metadata",
+    "instance-data",
+    "169.254.169.254",
+    "0.0.0.0",
+}
+
+
+def _get_allowed_internal_idp_netlocs() -> Set[str]:
+    """Return explicitly permitted local/internal IdP host:port netlocs for development or configured SSO."""
+    allowed = {
+        "localhost:18000",
+        "127.0.0.1:18000",
+        "host.docker.internal:18000",
+        "shared-keycloak:8080",
+    }
+    try:
+        cfg_parsed = urllib.parse.urlparse(settings.OIDC_ISSUER_URL or "")
+        if cfg_parsed.netloc:
+            allowed.add(cfg_parsed.netloc.lower())
+    except Exception:
+        pass
+    extra = os.getenv("EASYEA_ALLOWED_IDP_HOSTS", "")
+    for item in extra.split(","):
+        if item.strip():
+            allowed.add(item.strip().lower())
+    return allowed
+
+
+def _is_forbidden_ip(ip_str: str) -> bool:
+    """Return True if an IP address is loopback, private, link-local, multicast, unspecified, or reserved."""
+    try:
+        ip_obj = ipaddress.ip_address(ip_str)
+        return (
+            ip_obj.is_loopback
+            or ip_obj.is_private
+            or ip_obj.is_link_local
+            or ip_obj.is_multicast
+            or ip_obj.is_unspecified
+            or ip_obj.is_reserved
+        )
+    except ValueError:
+        return True
+
+
+def validate_oidc_issuer_url(url: str, resolve_dns: bool = False) -> str:
+    """
+    Validate an OIDC Issuer or endpoint URL against Server-Side Request Forgery (`CWE-918`).
+    Blocks non-HTTP(S) schemes, query/fragment path truncation, cloud metadata endpoints,
+    internal infrastructure ports, and private/loopback IPs unless explicitly in the allowed IdP netloc list.
+    """
+    if not url or not isinstance(url, str):
+        raise ValueError("URL IdP mancante o non valido.")
+
+    clean = url.strip().rstrip("/")
+    if "\\" in clean or "\r" in clean or "\n" in clean:
+        raise ValueError("Caratteri non consentiti nell'URL dell'IdP.")
+
+    parsed = urllib.parse.urlparse(clean)
+    if parsed.scheme.lower() not in ("http", "https"):
+        raise ValueError("Lo schema dell'URL IdP deve essere 'http' o 'https'.")
+    if not parsed.hostname or not parsed.netloc:
+        raise ValueError("Hostname mancante nell'URL dell'IdP.")
+    if parsed.username or parsed.password:
+        raise ValueError("Credenziali incorporate non consentite nell'URL dell'IdP.")
+    if parsed.query or parsed.fragment or parsed.params:
+        raise ValueError("Query string o frammenti ('?', '#') non consentiti nell'URL dell'IdP.")
+
+    hostname = parsed.hostname.lower().strip("[]")
+    port = parsed.port or (443 if parsed.scheme.lower() == "https" else 80)
+    netloc_lower = parsed.netloc.lower()
+
+    if hostname in _FORBIDDEN_SSRF_HOSTNAMES:
+        raise ValueError(f"SSRF Protection: accesso all'host '{hostname}' bloccato.")
+
+    if port in _FORBIDDEN_SSRF_PORTS:
+        raise ValueError(f"SSRF Protection: porta interna {port} non consentita per un Identity Provider.")
+
+    allowed_internal_netlocs = _get_allowed_internal_idp_netlocs()
+    is_allowed_internal = netloc_lower in allowed_internal_netlocs
+
+    # Check if hostname is an IP literal
+    try:
+        ip_obj = ipaddress.ip_address(hostname)
+        if ip_obj.is_link_local or ip_obj.is_multicast or ip_obj.is_unspecified:
+            raise ValueError(f"SSRF Protection: indirizzo IP '{hostname}' non consentito.")
+        if _is_forbidden_ip(hostname) and not is_allowed_internal:
+            raise ValueError(f"SSRF Protection: accesso a indirizzo IP privato o di loopback '{hostname}' negato.")
+    except ValueError as ip_err:
+        if "SSRF Protection" in str(ip_err):
+            raise
+        # Hostname is a domain name: block localhost/internal names unless in allowed_internal_netlocs
+        if hostname in ("localhost", "host.docker.internal", "shared-keycloak") and not is_allowed_internal:
+            raise ValueError(f"SSRF Protection: accesso a '{netloc_lower}' negato.")
+
+    if resolve_dns and not is_allowed_internal:
+        try:
+            addr_infos = socket.getaddrinfo(hostname, port, proto=socket.IPPROTO_TCP)
+            for info in addr_infos:
+                resolved_ip = info[4][0]
+                if _is_forbidden_ip(resolved_ip):
+                    raise ValueError(
+                        f"SSRF Protection: l'host '{hostname}' risolve verso un indirizzo interno/privato ({resolved_ip})."
+                    )
+        except ValueError:
+            raise
+        except socket.gaierror:
+            pass
+
+    return clean
+
+
 def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemAuthSettings:
-    """Update auth configuration in database with validation against lockout."""
+    """Update auth configuration in database with validation against lockout and SSRF."""
     auth_cfg = get_system_auth_settings(db)
 
     # Validate against lockout: cannot disable both local login and IdP login
@@ -112,6 +237,9 @@ def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemA
     if not allow_local and not allow_idp:
         raise ValueError("Impossibile disabilitare contemporaneamente sia il login locale che il login IdP.")
 
+    if "issuer_url" in updates and updates["issuer_url"]:
+        updates["issuer_url"] = validate_oidc_issuer_url(updates["issuer_url"], resolve_dns=False)
+
     for field in [
         "allow_local_login", "allow_idp_login", "provider_name",
         "issuer_url", "client_id", "client_secret", "scopes",
@@ -119,6 +247,8 @@ def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemA
         "max_schema_versions"
     ]:
         if field in updates:
+            if field == "client_secret" and updates[field] == "********":
+                continue
             setattr(auth_cfg, field, updates[field])
 
     db.commit()
@@ -133,18 +263,23 @@ def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemA
 
 
 def test_idp_connection(issuer_url: str) -> Dict[str, Any]:
-    """Test connection and discovery metadata resolution against an IdP URL."""
-    clean_issuer = issuer_url.strip().rstrip('/')
-    discovery_url = f"{clean_issuer}/.well-known/openid-configuration"
-
+    """Test connection and discovery metadata resolution against an IdP URL with SSRF protection."""
     try:
+        clean_issuer = validate_oidc_issuer_url(issuer_url, resolve_dns=True)
+        discovery_url = f"{clean_issuer}/.well-known/openid-configuration"
+
         resp = _make_oidc_request("GET", discovery_url)
         if resp.status_code != 200:
             return {
                 "success": False,
-                "message": f"IdP ha risposto con codice HTTP {resp.status_code}: {resp.text[:200]}"
+                "message": f"IdP ha risposto con codice HTTP {resp.status_code}."
             }
         data = resp.json()
+        if not isinstance(data, dict) or not data.get("issuer") or not data.get("authorization_endpoint"):
+            return {
+                "success": False,
+                "message": "La risposta ricevuta non è un documento OpenID Connect Discovery valido."
+            }
         return {
             "success": True,
             "message": "Connessione all'Identity Provider riuscita!",
@@ -154,6 +289,11 @@ def test_idp_connection(issuer_url: str) -> Dict[str, Any]:
             "userinfo_endpoint": data.get("userinfo_endpoint"),
             "end_session_endpoint": data.get("end_session_endpoint")
         }
+    except ValueError as val_err:
+        return {
+            "success": False,
+            "message": str(val_err)
+        }
     except Exception as exc:
         return {
             "success": False,
@@ -161,33 +301,105 @@ def test_idp_connection(issuer_url: str) -> Dict[str, Any]:
         }
 
 
+PBKDF2_ITERATIONS = 600_000
+
+
 def hash_password(password: str) -> str:
-    """Generate salted PBKDF2-HMAC-SHA256 hash."""
+    """Generate salted PBKDF2-HMAC-SHA256 hash using OWASP-recommended 600,000 iterations."""
     salt = secrets.token_hex(16)
     key = hashlib.pbkdf2_hmac(
         'sha256',
         password.encode('utf-8'),
         salt.encode('utf-8'),
-        100000
+        PBKDF2_ITERATIONS
     )
-    return f"{salt}${key.hex()}"
+    return f"pbkdf2_sha256${PBKDF2_ITERATIONS}${salt}${key.hex()}"
 
 
 def verify_password(password: str, hashed_value: str) -> bool:
-    """Verify plain password against stored salt$hash."""
+    """Verify plain password against stored pbkdf2_sha256$iterations$salt$hash or legacy salt$hash."""
     if not hashed_value or "$" not in hashed_value:
         return False
     try:
-        salt, stored_hash = hashed_value.split("$", 1)
+        parts = hashed_value.split("$")
+        if len(parts) == 4 and parts[0] == "pbkdf2_sha256":
+            iterations = int(parts[1])
+            salt = parts[2]
+            stored_hash = parts[3]
+        elif len(parts) == 2:
+            iterations = 100_000
+            salt, stored_hash = parts
+        else:
+            return False
+
         key = hashlib.pbkdf2_hmac(
             'sha256',
             password.encode('utf-8'),
             salt.encode('utf-8'),
-            100000
+            iterations
         )
         return hmac.compare_digest(key.hex(), stored_hash)
     except Exception:
         return False
+
+
+class LoginRateLimiter:
+    """
+    Sliding-window in-memory rate limiter for failed login attempts (CWE-307 / SAST-MED-02).
+    Limits failed login attempts per key (typically client_ip:username) to max_attempts
+    within window_seconds (default: 5 failed attempts in 300 seconds / 5 minutes).
+    """
+    def __init__(self, max_attempts: int = 5, window_seconds: int = 300):
+        self.max_attempts = max_attempts
+        self.window_seconds = window_seconds
+        self._lock = threading.Lock()
+        self._failed_attempts: Dict[str, List[float]] = defaultdict(list)
+
+    def _prune(self, now: float, key: str) -> List[float]:
+        threshold = now - self.window_seconds
+        valid = [t for t in self._failed_attempts[key] if t > threshold]
+        if valid:
+            self._failed_attempts[key] = valid
+        else:
+            self._failed_attempts.pop(key, None)
+        return valid
+
+    def check_rate_limit(self, key: str) -> None:
+        """
+        Check if the key has exceeded max failed attempts in the window.
+        Raises HTTPException(429) with Retry-After header if blocked.
+        """
+        now = time.time()
+        with self._lock:
+            valid_attempts = self._prune(now, key)
+            if len(valid_attempts) >= self.max_attempts:
+                oldest_attempt = min(valid_attempts)
+                retry_after = max(1, int(self.window_seconds - (now - oldest_attempt)))
+                raise HTTPException(
+                    status_code=429,
+                    detail=f"Troppi tentativi di accesso falliti. Riprova tra {retry_after} secondi.",
+                    headers={"Retry-After": str(retry_after)}
+                )
+
+    def record_failure(self, key: str) -> None:
+        """Record a failed login attempt for the key."""
+        now = time.time()
+        with self._lock:
+            self._prune(now, key)
+            self._failed_attempts[key].append(now)
+
+    def record_success(self, key: str) -> None:
+        """Clear failed login attempts for the key upon successful authentication."""
+        with self._lock:
+            self._failed_attempts.pop(key, None)
+
+    def reset(self) -> None:
+        """Reset all rate limiter state (useful for test isolation)."""
+        with self._lock:
+            self._failed_attempts.clear()
+
+
+login_rate_limiter = LoginRateLimiter()
 
 
 def _base64url_encode(data: bytes) -> str:
@@ -282,30 +494,27 @@ def get_user_from_token(db: Session, token: str) -> Optional[User]:
 
 def _make_oidc_request(method: str, url: str, **kwargs) -> httpx.Response:
     """
-    Executes an HTTP request to the OIDC IdP, with automatic fallback for Docker container environments
-    if localhost/127.0.0.1 cannot be reached directly.
+    Executes an SSRF-validated HTTP request to the OIDC IdP (with redirects disabled),
+    including automatic fallback strictly for the configured local Keycloak dev port (18000).
     """
+    validate_oidc_issuer_url(url.split("?")[0], resolve_dns=True)
+
     candidate_urls = [url]
     parsed = urllib.parse.urlparse(url)
     hostname = parsed.hostname or ""
     port = parsed.port
 
-    if hostname in ("localhost", "127.0.0.1"):
-        if port in (18000, 15173):
-            candidate_urls.append(url.replace(f"{hostname}:{port}", f"host.docker.internal:{port}"))
-            candidate_urls.append(url.replace(f"{hostname}:{port}", "shared-keycloak:8080"))
-            candidate_urls.append(url.replace(f"{hostname}:{port}", f"172.17.0.1:{port}"))
-        else:
-            candidate_urls.append(url.replace(hostname, "host.docker.internal"))
-            candidate_urls.append(url.replace(hostname, "shared-keycloak"))
-    elif hostname == "host.docker.internal":
+    if hostname in ("localhost", "127.0.0.1") and port == 18000:
+        candidate_urls.append(url.replace(f"{hostname}:{port}", f"host.docker.internal:{port}"))
+        candidate_urls.append(url.replace(f"{hostname}:{port}", "shared-keycloak:8080"))
+    elif hostname == "host.docker.internal" and port == 18000:
         candidate_urls.append(url.replace("host.docker.internal:18000", "shared-keycloak:8080"))
         candidate_urls.append(url.replace("host.docker.internal", "localhost"))
 
     last_exc = None
     for target_url in candidate_urls:
         try:
-            with httpx.Client(timeout=8.0) as client:
+            with httpx.Client(timeout=8.0, follow_redirects=False) as client:
                 resp = client.request(method, target_url, **kwargs)
                 return resp
         except (httpx.ConnectError, httpx.ConnectTimeout) as exc:
@@ -346,6 +555,268 @@ def get_oidc_discovery(issuer_url: Optional[str] = None) -> Dict[str, Any]:
         }
 
 
+def _extract_origin(url_str: str) -> Optional[str]:
+    try:
+        parsed = urllib.parse.urlparse(url_str.strip())
+        if parsed.scheme in ("http", "https") and parsed.netloc and not parsed.username and not parsed.password:
+            return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+    except Exception:
+        pass
+    return None
+
+
+def validate_oidc_return_to(
+    candidate_url: Optional[str],
+    base_url: Optional[str] = None,
+    strict: bool = False,
+) -> str:
+    """
+    Validate OIDC post-login redirect target (`return_to`) against an explicit allowlist of origins
+    to prevent Open Redirect & JWT token exfiltration (`CWE-601`).
+    """
+    default_target = settings.OIDC_FRONTEND_REDIRECT_URL.strip().rstrip("/")
+    if not candidate_url or not candidate_url.strip():
+        return default_target
+
+    raw = candidate_url.strip()
+    if "\\" in raw or "\r" in raw or "\n" in raw:
+        if strict:
+            raise ValueError("Invalid characters in return_to redirect URL.")
+        return default_target
+
+    parsed = urllib.parse.urlparse(raw)
+    if parsed.scheme.lower() not in ("http", "https") or not parsed.netloc or parsed.username or parsed.password:
+        if strict:
+            raise ValueError(f"Invalid or disallowed redirect URL scheme/netloc: '{raw}'")
+        return default_target
+
+    candidate_origin = f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+
+    allowed_origins: Set[str] = set()
+    for src in [settings.OIDC_FRONTEND_REDIRECT_URL, base_url or ""]:
+        orig = _extract_origin(src)
+        if orig:
+            allowed_origins.add(orig)
+    for item in (settings.OIDC_ALLOWED_RETURN_ORIGINS or "").split(","):
+        orig = _extract_origin(item)
+        if orig:
+            allowed_origins.add(orig)
+
+    # RFC 8252 loopback redirect for Archi desktop plugin (ports 8765..8775 on 127.0.0.1 / localhost)
+    is_loopback_plugin = (
+        parsed.scheme.lower() == "http"
+        and (parsed.hostname in ("127.0.0.1", "localhost"))
+        and (parsed.port is not None and 8765 <= int(parsed.port) <= 8775)
+        and (parsed.path in ("/callback", "/callback/"))
+    )
+
+    if candidate_origin not in allowed_origins and not is_loopback_plugin:
+        if strict:
+            raise ValueError(f"Untrusted redirect origin in return_to: '{candidate_origin}'")
+        return default_target
+
+    clean_path = (parsed.path or "").rstrip("/")
+    if clean_path.endswith("/api/auth") or clean_path.endswith("/api"):
+        clean_path = ""
+    return f"{candidate_origin}{clean_path}"
+
+
+def create_oidc_state(return_to: str, base_url: Optional[str] = None) -> str:
+    """Create an HMAC-SHA256 signed, expiring OIDC `state` token binding `return_to` and a random nonce."""
+    safe_return_to = validate_oidc_return_to(return_to, base_url=base_url, strict=True)
+    now = int(time.time())
+    state_payload = {
+        "return_to": safe_return_to,
+        "nonce": secrets.token_hex(16),
+        "iat": now,
+        "exp": now + 600,
+    }
+    payload_b64 = _base64url_encode(json.dumps(state_payload, separators=(",", ":")).encode("utf-8"))
+    sig = hmac.new(
+        settings.SECRET_KEY.encode("utf-8"),
+        payload_b64.encode("utf-8"),
+        hashlib.sha256,
+    ).digest()
+    sig_b64 = _base64url_encode(sig)
+    return f"{payload_b64}.{sig_b64}"
+
+
+def verify_oidc_state(state_token: Optional[str], base_url: Optional[str] = None) -> Dict[str, Any]:
+    """Verify HMAC-SHA256 signature, expiration, and allowed `return_to` of an OIDC `state` parameter."""
+    if not state_token or "." not in state_token:
+        raise ValueError("Missing or unsigned OIDC state parameter.")
+    try:
+        payload_b64, sig_b64 = state_token.split(".", 1)
+        expected_sig = hmac.new(
+            settings.SECRET_KEY.encode("utf-8"),
+            payload_b64.encode("utf-8"),
+            hashlib.sha256,
+        ).digest()
+        provided_sig = _base64url_decode(sig_b64)
+        if not hmac.compare_digest(expected_sig, provided_sig):
+            raise ValueError("Invalid OIDC state signature.")
+
+        data = json.loads(_base64url_decode(payload_b64).decode("utf-8"))
+        if int(data.get("exp", 0)) < int(time.time()):
+            raise ValueError("Expired OIDC state parameter.")
+
+        data["return_to"] = validate_oidc_return_to(
+            data.get("return_to"),
+            base_url=base_url,
+            strict=True,
+        )
+        return data
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Malformed OIDC state parameter: {exc}")
+
+
+# ASN.1 DER DigestInfo prefixes for RSA PKCS#1 v1.5 signature verification (RFC 8017 Section 9.2)
+_RSA_DIGEST_INFO_PREFIXES = {
+    "RS256": (hashlib.sha256, bytes.fromhex("3031300d060960864801650304020105000420")),
+    "RS384": (hashlib.sha384, bytes.fromhex("3041300d060960864801650304020205000430")),
+    "RS512": (hashlib.sha512, bytes.fromhex("3051300d060960864801650304020305000440")),
+}
+
+
+def _verify_rsa_pkcs1_v15(signing_input: bytes, signature: bytes, jwk: Dict[str, Any], alg: str) -> bool:
+    """Verify RSA PKCS#1 v1.5 JWS signature (`RS256`/`RS384`/`RS512`) against a JWK (`n`, `e`)."""
+    if alg not in _RSA_DIGEST_INFO_PREFIXES:
+        return False
+    hash_fn, digest_prefix = _RSA_DIGEST_INFO_PREFIXES[alg]
+    n_b64 = jwk.get("n")
+    e_b64 = jwk.get("e")
+    if not n_b64 or not e_b64:
+        return False
+    n_bytes = _base64url_decode(n_b64)
+    e_bytes = _base64url_decode(e_b64)
+    k = len(n_bytes)
+    if len(signature) != k or k < 128:
+        return False
+
+    n_int = int.from_bytes(n_bytes, "big")
+    e_int = int.from_bytes(e_bytes, "big")
+    sig_int = int.from_bytes(signature, "big")
+    if sig_int >= n_int:
+        return False
+
+    em = pow(sig_int, e_int, n_int).to_bytes(k, "big")
+    digest = hash_fn(signing_input).digest()
+    t = digest_prefix + digest
+    ps_len = k - len(t) - 3
+    if ps_len < 8:
+        return False
+    expected_em = b"\x00\x01" + (b"\xff" * ps_len) + b"\x00" + t
+    return hmac.compare_digest(em, expected_em)
+
+
+def _get_oidc_jwks(jwks_uri: str) -> List[Dict[str, Any]]:
+    """Fetch and cache JSON Web Key Set (JWKS) from the Identity Provider."""
+    now = time.time()
+    cached = _OIDC_JWKS_CACHE.get(jwks_uri)
+    if cached and now < cached[0]:
+        return cached[1]
+
+    resp = _make_oidc_request("GET", jwks_uri)
+    resp.raise_for_status()
+    keys = resp.json().get("keys", [])
+    if isinstance(keys, list):
+        _OIDC_JWKS_CACHE[jwks_uri] = (now + 3600, keys)
+        return keys
+    return []
+
+
+def _normalize_issuer_set(configured_issuer: str, discovery_issuer: Optional[str] = None) -> Set[str]:
+    """Return set of equivalent normalized issuer URLs accounting for Docker internal host aliases."""
+    issuers: Set[str] = set()
+    for raw in [configured_issuer, discovery_issuer or ""]:
+        clean = raw.strip().rstrip("/")
+        if not clean:
+            continue
+        issuers.add(clean)
+        for alias in ("localhost", "127.0.0.1", "host.docker.internal"):
+            issuers.add(clean.replace("localhost", alias).replace("host.docker.internal", alias))
+        issuers.add(clean.replace("shared-keycloak:8080", "localhost:18000"))
+        issuers.add(clean.replace("localhost:18000", "shared-keycloak:8080"))
+    return issuers
+
+
+def _verify_and_decode_oidc_jwt(
+    token: str,
+    issuer: str,
+    client_id: str,
+    client_secret: str,
+    discovery: Dict[str, Any],
+    verify_aud: bool = True,
+) -> Dict[str, Any]:
+    """
+    Cryptographically verify an OIDC JWT (`id_token` or `access_token`) signature (RS256/384/512 via JWKS
+    or HS256/384/512 via client_secret) and validate `iss`, `aud`/`azp`, and `exp` claims (`CWE-347`).
+    """
+    if not token or token.count(".") != 2:
+        raise ValueError("Malformed OIDC JWT token.")
+
+    header_b64, payload_b64, sig_b64 = token.split(".")
+    if not sig_b64:
+        raise ValueError("Unsigned OIDC JWT rejected.")
+
+    header = json.loads(_base64url_decode(header_b64).decode("utf-8"))
+    payload = json.loads(_base64url_decode(payload_b64).decode("utf-8"))
+
+    alg = str(header.get("alg") or "").upper()
+    if not alg or alg == "NONE":
+        raise ValueError("Disallowed 'none' algorithm in OIDC JWT.")
+
+    signing_input = f"{header_b64}.{payload_b64}".encode("utf-8")
+    sig_bytes = _base64url_decode(sig_b64)
+
+    if alg in ("HS256", "HS384", "HS512"):
+        if not client_secret:
+            raise ValueError("Cannot verify HMAC-signed OIDC JWT without client_secret.")
+        hash_map = {"HS256": hashlib.sha256, "HS384": hashlib.sha384, "HS512": hashlib.sha512}
+        expected_sig = hmac.new(
+            client_secret.encode("utf-8"),
+            signing_input,
+            hash_map[alg],
+        ).digest()
+        if not hmac.compare_digest(expected_sig, sig_bytes):
+            raise ValueError("Invalid HMAC signature on OIDC JWT.")
+    elif alg in ("RS256", "RS384", "RS512"):
+        jwks_uri = discovery.get("jwks_uri") or f"{issuer.rstrip('/')}/protocol/openid-connect/certs"
+        keys = _get_oidc_jwks(jwks_uri)
+        kid = header.get("kid")
+        candidate_keys = [k for k in keys if k.get("kty") == "RSA" and (not kid or k.get("kid") == kid)]
+        if not candidate_keys:
+            candidate_keys = [k for k in keys if k.get("kty") == "RSA"]
+        if not candidate_keys or not any(_verify_rsa_pkcs1_v15(signing_input, sig_bytes, k, alg) for k in candidate_keys):
+            raise ValueError("Invalid RSA JWS signature on OIDC JWT.")
+    else:
+        raise ValueError(f"Unsupported OIDC JWT signature algorithm: '{alg}'")
+
+    # Validate expiration (`exp`) with 60s clock-skew tolerance
+    now = int(time.time())
+    exp = payload.get("exp")
+    if exp is None or int(exp) + 60 < now:
+        raise ValueError("OIDC JWT token has expired.")
+
+    # Validate issuer (`iss`)
+    token_iss = str(payload.get("iss") or "").strip().rstrip("/")
+    allowed_issuers = _normalize_issuer_set(issuer, discovery.get("issuer"))
+    if not token_iss or token_iss not in allowed_issuers:
+        raise ValueError(f"Untrusted OIDC JWT issuer: '{token_iss}'")
+
+    # Validate audience (`aud` / `azp`)
+    if verify_aud and client_id:
+        aud = payload.get("aud")
+        azp = payload.get("azp")
+        aud_list = [aud] if isinstance(aud, str) else (aud if isinstance(aud, list) else [])
+        if client_id not in aud_list and azp != client_id:
+            raise ValueError(f"OIDC JWT audience mismatch for client '{client_id}'.")
+
+    return payload
+
+
 def get_oidc_authorization_url(
     db: Optional[Session] = None,
     state: Optional[str] = None,
@@ -371,7 +842,7 @@ def get_oidc_authorization_url(
         "redirect_uri": settings.OIDC_REDIRECT_URI,
         "response_type": "code",
         "scope": scopes,
-        "state": state or secrets.token_urlsafe(16)
+        "state": state or create_oidc_state(settings.OIDC_FRONTEND_REDIRECT_URL)
     }
 
     # If prompt_login is active or explicitly passed, force login prompt
@@ -383,7 +854,7 @@ def get_oidc_authorization_url(
 
 
 def exchange_oidc_code(code: str, db: Optional[Session] = None) -> Dict[str, Any]:
-    """Exchange authorization code for tokens and fetch userinfo."""
+    """Exchange authorization code for tokens, cryptographically verify JWTs, and fetch userinfo."""
     cfg = get_system_auth_settings(db) if db else None
     issuer = cfg.issuer_url if cfg else settings.OIDC_ISSUER_URL
     client_id = cfg.client_id if cfg else settings.OIDC_CLIENT_ID
@@ -412,8 +883,33 @@ def exchange_oidc_code(code: str, db: Optional[Session] = None) -> Dict[str, Any
 
     token_data = token_resp.json()
     access_token = token_data.get("access_token")
+    id_token = token_data.get("id_token")
 
-    user_info = {}
+    # Verify ID Token cryptographically if present
+    id_token_claims: Dict[str, Any] = {}
+    if id_token:
+        id_token_claims = _verify_and_decode_oidc_jwt(
+            id_token,
+            issuer=issuer,
+            client_id=client_id,
+            client_secret=client_secret,
+            discovery=discovery,
+            verify_aud=True,
+        )
+
+    # Verify Access Token cryptographically if it is a JWT
+    access_token_claims: Dict[str, Any] = {}
+    if access_token and access_token.count(".") == 2:
+        access_token_claims = _verify_and_decode_oidc_jwt(
+            access_token,
+            issuer=issuer,
+            client_id=client_id,
+            client_secret=client_secret,
+            discovery=discovery,
+            verify_aud=False,
+        )
+
+    user_info: Dict[str, Any] = {}
     if userinfo_endpoint and access_token:
         try:
             userinfo_resp = _make_oidc_request(
@@ -426,27 +922,14 @@ def exchange_oidc_code(code: str, db: Optional[Session] = None) -> Dict[str, Any
         except Exception:
             pass
 
-    # Parse ID Token payload for claims if present
-    id_token = token_data.get("id_token")
-    id_token_claims = {}
-    if id_token and id_token.count('.') == 2:
-        try:
-            _, payload_b64, _ = id_token.split('.')
-            id_token_claims = json.loads(_base64url_decode(payload_b64).decode('utf-8'))
-        except Exception:
-            pass
+    # OIDC Core 1.0 Section 5.3.4: verify UserInfo `sub` matches ID Token `sub`
+    if id_token_claims.get("sub") and user_info.get("sub") and user_info["sub"] != id_token_claims["sub"]:
+        raise ValueError("OIDC UserInfo 'sub' claim does not match ID Token 'sub' claim.")
 
-    # Parse Access Token payload for realm/resource roles (standard Keycloak JWT)
-    access_token_claims = {}
-    if access_token and access_token.count('.') == 2:
-        try:
-            _, payload_b64, _ = access_token.split('.')
-            access_token_claims = json.loads(_base64url_decode(payload_b64).decode('utf-8'))
-        except Exception:
-            pass
-
-    # Merge user info and claims
     merged_claims = {**access_token_claims, **id_token_claims, **user_info}
+    if not merged_claims.get("sub"):
+        raise ValueError("OIDC authentication failed: no verified 'sub' claim obtained from IdP.")
+
     return {
         "token_data": token_data,
         "claims": merged_claims
@@ -516,26 +999,23 @@ def provision_or_sync_oidc_user(db: Session, claims: Dict[str, Any]) -> User:
     """
     Just-In-Time (JIT) provisioning and hybrid role synchronization for OIDC authenticated users
     based on dynamic SystemAuthSettings and Role Mapping rules.
+    Enforces strict subject (`sub`) identity matching and requires `email_verified == True`
+    before linking an OIDC identity to any pre-existing local account (`CWE-287` / `CWE-303`).
     """
-    # If token response dict was passed directly (contains access_token or id_token), unpack claims
-    if "access_token" in claims or "id_token" in claims:
-        unpacked = {}
-        for k in ("access_token", "id_token"):
-            tok = claims.get(k)
-            if tok and isinstance(tok, str) and tok.count('.') == 2:
-                try:
-                    _, payload_b64, _ = tok.split('.')
-                    payload_dict = json.loads(_base64url_decode(payload_b64).decode('utf-8'))
-                    unpacked.update(payload_dict)
-                except Exception:
-                    pass
-        claims = {**unpacked, **claims}
+    external_id = str(claims.get("sub") or "").strip()
+    if not external_id:
+        raise ValueError("Invalid OIDC claims: missing 'sub' subject identifier.")
 
-    external_id = claims.get("sub")
     email = claims.get("email")
     if not email:
-        email = f"{external_id or 'user'}@oidc.local"
+        email = f"{external_id}@oidc.local"
     email = email.strip().lower()
+
+    email_verified_raw = claims.get("email_verified")
+    email_verified = (
+        email_verified_raw is True
+        or (isinstance(email_verified_raw, str) and email_verified_raw.strip().lower() == "true")
+    )
 
     full_name = (
         claims.get("name")
@@ -545,21 +1025,35 @@ def provision_or_sync_oidc_user(db: Session, claims: Dict[str, Any]) -> User:
     )
     username = claims.get("preferred_username") or email.split("@")[0]
 
-    # Find existing user by external_id or email
-    user = None
-    if external_id:
-        user = db.query(User).filter(User.external_id == external_id).first()
+    # 1. Primary lookup by immutable IdP `sub` (`external_id`)
+    user = db.query(User).filter(User.external_id == external_id).first()
+
+    # 2. Secondary lookup by email ONLY if email is verified by IdP and account is not already bound to another subject
     if not user:
-        user = db.query(User).filter(User.email.ilike(email)).first()
+        existing_by_email = db.query(User).filter(User.email.ilike(email)).first()
+        if existing_by_email:
+            if (
+                not email_verified
+                or existing_by_email.id == "usr-sysadmin-00"
+                or (existing_by_email.external_id and existing_by_email.external_id != external_id)
+            ):
+                raise ValueError(
+                    "Account linking denied: cannot link OIDC identity to an existing account "
+                    "without a verified email or when bound to a different subject."
+                )
+            user = existing_by_email
 
     auth_cfg = get_system_auth_settings(db)
     provider_label = auth_cfg.provider_name or "oidc"
 
     if not user:
-        # Create new user
+        # Ensure username uniqueness when provisioning a new OIDC user
+        candidate_username = username
+        if db.query(User).filter(User.username.ilike(candidate_username)).first():
+            candidate_username = f"{username}_{external_id[:6]}"
         user = User(
             id=str(uuid.uuid4()),
-            username=username,
+            username=candidate_username,
             email=email,
             full_name=full_name,
             auth_provider=provider_label,
@@ -571,12 +1065,12 @@ def provision_or_sync_oidc_user(db: Session, claims: Dict[str, Any]) -> User:
         db.commit()
         db.refresh(user)
     else:
-        # Update external_id and auth_provider if missing
+        # Update external_id and auth_provider if linking a verified email account
         updated = False
-        if not user.external_id and external_id:
+        if not user.external_id:
             user.external_id = external_id
             updated = True
-        if user.auth_provider == "local" and external_id:
+        if user.auth_provider == "local":
             user.auth_provider = provider_label
             updated = True
         if full_name and user.full_name != full_name:
@@ -619,119 +1113,4 @@ def provision_or_sync_oidc_user(db: Session, claims: Dict[str, Any]) -> User:
 
     return user
 
-
-
-def hash_password(password: str) -> str:
-    """Generate salted PBKDF2-HMAC-SHA256 hash."""
-    salt = secrets.token_hex(16)
-    key = hashlib.pbkdf2_hmac(
-        'sha256',
-        password.encode('utf-8'),
-        salt.encode('utf-8'),
-        100000
-    )
-    return f"{salt}${key.hex()}"
-
-
-def verify_password(password: str, hashed_value: str) -> bool:
-    """Verify plain password against stored salt$hash."""
-    if not hashed_value or "$" not in hashed_value:
-        return False
-    try:
-        salt, stored_hash = hashed_value.split("$", 1)
-        key = hashlib.pbkdf2_hmac(
-            'sha256',
-            password.encode('utf-8'),
-            salt.encode('utf-8'),
-            100000
-        )
-        return hmac.compare_digest(key.hex(), stored_hash)
-    except Exception:
-        return False
-
-
-def _base64url_encode(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).decode('utf-8').rstrip('=')
-
-
-def _base64url_decode(data: str) -> bytes:
-    padding = '=' * ((4 - len(data) % 4) % 4)
-    return base64.urlsafe_b64decode((data + padding).encode('utf-8'))
-
-
-def create_access_token(user: User) -> str:
-    """Generate secure signed JWT-like token for user session."""
-    header = {"alg": "HS256", "typ": "JWT"}
-    payload = {
-        "sub": user.id,
-        "username": user.username or user.email,
-        "email": user.email,
-        "full_name": user.full_name,
-        "auth_provider": user.auth_provider or "local",
-        "exp": int(time.time()) + settings.TOKEN_EXPIRY_SECONDS,
-        "iat": int(time.time())
-    }
-
-    header_b64 = _base64url_encode(json.dumps(header).encode('utf-8'))
-    payload_b64 = _base64url_encode(json.dumps(payload).encode('utf-8'))
-    signing_input = f"{header_b64}.{payload_b64}".encode('utf-8')
-    
-    signature = hmac.new(settings.SECRET_KEY.encode('utf-8'), signing_input, hashlib.sha256).digest()
-    signature_b64 = _base64url_encode(signature)
-
-    return f"{header_b64}.{payload_b64}.{signature_b64}"
-
-
-def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
-    """Verify and decode signed JWT token."""
-    if not token or token.count('.') != 2:
-        return None
-    try:
-        header_b64, payload_b64, signature_b64 = token.split('.')
-        signing_input = f"{header_b64}.{payload_b64}".encode('utf-8')
-        expected_sig = hmac.new(settings.SECRET_KEY.encode('utf-8'), signing_input, hashlib.sha256).digest()
-        provided_sig = _base64url_decode(signature_b64)
-
-        if not hmac.compare_digest(expected_sig, provided_sig):
-            return None
-
-        payload_json = _base64url_decode(payload_b64).decode('utf-8')
-        payload = json.loads(payload_json)
-
-        # Check expiration
-        if payload.get("exp", 0) < int(time.time()):
-            return None
-
-        return payload
-    except Exception:
-        return None
-
-
-def authenticate_user(db: Session, identifier: str, password: str) -> Optional[User]:
-    """Authenticate user by username or email and plain password."""
-    clean_id = identifier.strip().lower()
-    user = db.query(User).filter(
-        (User.email.ilike(clean_id)) | (User.username.ilike(clean_id))
-    ).first()
-
-    if not user:
-        return None
-    if not user.is_active:
-        return None
-    if not verify_password(password, user.password_hash or ""):
-        return None
-
-    return user
-
-
-def get_user_from_token(db: Session, token: str) -> Optional[User]:
-    """Fetch active user from token."""
-    payload = decode_access_token(token)
-    if not payload:
-        return None
-    user_id = payload.get("sub")
-    if not user_id:
-        return None
-    user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
-    return user
 

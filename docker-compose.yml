@@ -10,15 +10,19 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      - DATABASE_URL=postgresql://easyea_user:easyea_secret@db:5432/easyea_db
+      - EASYEA_ENV=${EASYEA_ENV:-development}
+      - EASYEA_SECRET_KEY=${EASYEA_SECRET_KEY:-}
+      - EASYEA_SEED_DEMO_USERS=${EASYEA_SEED_DEMO_USERS:-true}
+      - EASYEA_ADMIN_PASSWORD=${EASYEA_ADMIN_PASSWORD:-}
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-easyea_user}:${POSTGRES_PASSWORD:-easyea_secret}@db:5432/${POSTGRES_DB:-easyea_db}
       - PORT=8000
-      - OIDC_ENABLED=true
-      - OIDC_ISSUER_URL=http://host.docker.internal:18000/realms/dev-realm
-      - OIDC_CLIENT_ID=easyea-client
-      - OIDC_CLIENT_SECRET=easyea-dev-secret-key-2026
-      - OIDC_REDIRECT_URI=http://localhost:8000/api/auth/oidc/callback
-      - OIDC_FRONTEND_REDIRECT_URL=http://localhost:8000
-      - EASYEA_RBAC_MODE=hybrid
+      - OIDC_ENABLED=${OIDC_ENABLED:-true}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://host.docker.internal:18000/realms/dev-realm}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-easyea-client}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:8000/api/auth/oidc/callback}
+      - OIDC_FRONTEND_REDIRECT_URL=${OIDC_FRONTEND_REDIRECT_URL:-http://localhost:8000}
+      - EASYEA_RBAC_MODE=${EASYEA_RBAC_MODE:-hybrid}
     networks:
       - default
       - shared-idp-net
@@ -31,11 +35,11 @@ services:
     container_name: easyea-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: easyea_user
-      POSTGRES_PASSWORD: easyea_secret
-      POSTGRES_DB: easyea_db
+      POSTGRES_USER: ${POSTGRES_USER:-easyea_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-easyea_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-easyea_db}
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:

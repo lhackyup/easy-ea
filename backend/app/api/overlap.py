@@ -3,12 +3,18 @@ from sqlalchemy.orm import Session
 from typing import Dict, Any
 
 from app.core.database import get_db
+from app.models.archimate import User
+from app.api.deps import get_current_user
 from app.services.overlap_service import OverlapService
 
 router = APIRouter(prefix="/overlap", tags=["Functional Overlap & Rationalization"])
 
 @router.get("/matrix/{model_id}")
-def get_overlap_matrix(model_id: str, db: Session = Depends(get_db)):
+def get_overlap_matrix(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Computes and returns:
     - 2D Matrix of Business Capability/Function vs Applications

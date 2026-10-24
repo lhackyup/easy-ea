@@ -34,6 +34,7 @@ export const LoginScreen: React.FC = () => {
     login_url: string;
     allow_local_login?: boolean;
     allow_idp_login?: boolean;
+    demo_mode?: boolean;
   } | null>(null);
   const [oidcLoading, setOidcLoading] = useState(false);
 
@@ -232,33 +233,35 @@ export const LoginScreen: React.FC = () => {
                 </button>
               </form>
 
-              {/* Quick-fill Sys Admin Credentials Box */}
-              <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
-                    <Shield className="w-3.5 h-3.5 text-rose-600" />
-                    {t.auth.demoCredentialsTitle}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={fillSysAdmin}
-                    className="text-[10px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
-                  >
-                    <Sparkles className="w-3 h-3" />
-                    {t.auth.useSysAdminQuickFill}
-                  </button>
-                </div>
-                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-600">
-                  <div className="bg-white p-1.5 rounded-lg border border-slate-200">
-                    <span className="text-[9px] block text-slate-400 font-sans font-medium">{t.auth.demoUserLabel}</span>
-                    <span className="font-bold text-slate-800">sys_admin</span>
+              {/* Quick-fill Sys Admin Credentials Box (shown only in dev/demo mode) */}
+              {oidcConfig?.demo_mode && (
+                <div className="mt-4 p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                      <Shield className="w-3.5 h-3.5 text-rose-600" />
+                      {t.auth.demoCredentialsTitle}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={fillSysAdmin}
+                      className="text-[10px] font-bold text-rose-600 hover:text-rose-800 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3 h-3" />
+                      {t.auth.useSysAdminQuickFill}
+                    </button>
                   </div>
-                  <div className="bg-white p-1.5 rounded-lg border border-slate-200">
-                    <span className="text-[9px] block text-slate-400 font-sans font-medium">{t.auth.demoPassLabel}</span>
-                    <span className="font-bold text-slate-800">AdminEasyEA2026!</span>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] font-mono text-slate-600">
+                    <div className="bg-white p-1.5 rounded-lg border border-slate-200">
+                      <span className="text-[9px] block text-slate-400 font-sans font-medium">{t.auth.demoUserLabel}</span>
+                      <span className="font-bold text-slate-800">sys_admin</span>
+                    </div>
+                    <div className="bg-white p-1.5 rounded-lg border border-slate-200">
+                      <span className="text-[9px] block text-slate-400 font-sans font-medium">{t.auth.demoPassLabel}</span>
+                      <span className="font-bold text-slate-800">••••••••</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </>
           )}
         </div>

@@ -10,7 +10,8 @@ from app.main import app
 from app.services.sample_data import seed_sample_model
 from app.services.metamodel_service import seed_default_custom_attributes
 from app.services.rbac_service import seed_default_rbac
-from app.models.archimate import ModelWorkspace, ArchimateView, ArchimateElement
+from app.services.auth_service import create_access_token
+from app.models.archimate import ModelWorkspace, ArchimateView, ArchimateElement, User
 from app.services.drawio_service import export_view_to_drawio, export_model_to_drawio, parse_and_import_drawio
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -26,6 +27,8 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
+client = TestClient(app)
+
 @pytest.fixture(autouse=True)
 def setup_db():
     Base.metadata.create_all(bind=engine)
@@ -33,11 +36,13 @@ def setup_db():
     seed_sample_model(db)
     seed_default_custom_attributes(db)
     seed_default_rbac(db)
+    admin_user = db.query(User).filter(User.username == "admin").first() or db.query(User).first()
+    if admin_user:
+        token = create_access_token(admin_user)
+        client.headers.update({"Authorization": f"Bearer {token}"})
     db.close()
     yield
     Base.metadata.drop_all(bind=engine)
-
-client = TestClient(app)
 
 
 def test_export_single_view_to_drawio():

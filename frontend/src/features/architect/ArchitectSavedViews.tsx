@@ -59,7 +59,10 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
   const fetchViews = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`/api/saved-views?model_id=${modelId}`);
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
+      const res = await fetch(`/api/saved-views?model_id=${modelId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setViews(data);
@@ -85,7 +88,11 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
   const handleDeleteView = async (id: string, name: string) => {
     if (!window.confirm(`${t.architect.deleteViewConfirm}\n"${name}"`)) return;
     try {
-      const res = await fetch(`/api/saved-views/${id}`, { method: 'DELETE' });
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
+      const res = await fetch(`/api/saved-views/${id}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         setViews((prev) => prev.filter((v) => v.id !== id));
         showFeedback('success', t.architect.deleteViewSuccess);
@@ -97,7 +104,11 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
 
   const handleDuplicateView = async (id: string) => {
     try {
-      const res = await fetch(`/api/saved-views/${id}/duplicate`, { method: 'POST' });
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
+      const res = await fetch(`/api/saved-views/${id}/duplicate`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const dup = await res.json();
         setViews((prev) => [dup, ...prev]);
@@ -137,9 +148,13 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
         tags: parsedTags,
       };
 
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
       const res = await fetch(`/api/saved-views/${editingView.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload),
       });
 
@@ -159,7 +174,10 @@ export const ArchitectSavedViews: React.FC<ArchitectSavedViewsProps> = ({
   const handleExportView = async (view: SavedFilterView, format: 'xlsx' | 'csv') => {
     try {
       showFeedback('success', t.architect.exportingData);
-      const res = await fetch(`/api/saved-views/${view.id}/export?format=${format}`);
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
+      const res = await fetch(`/api/saved-views/${view.id}/export?format=${format}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const blob = await res.blob();
         const url = window.URL.createObjectURL(blob);

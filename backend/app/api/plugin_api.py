@@ -1,8 +1,10 @@
 import io
 import os
 import zipfile
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from app.core.config import settings
+from app.models.archimate import User
+from app.api.deps import get_current_user
 
 router = APIRouter(prefix="/plugin", tags=["Archi Plugin"])
 
@@ -51,7 +53,7 @@ def get_drawio_plugin_src_dir() -> str | None:
 
 
 @router.get("/download")
-def download_archi_plugin_zip():
+def download_archi_plugin_zip(current_user: User = Depends(get_current_user)):
     """
     Dynamically generates and returns a ZIP package containing the complete
     EasyEA Archi Plugin / jArchi scripts suite and documentation.
@@ -83,7 +85,7 @@ def download_archi_plugin_zip():
 
 
 @router.get("/camunda/download")
-def download_camunda_plugin_zip():
+def download_camunda_plugin_zip(current_user: User = Depends(get_current_user)):
     """
     Dynamically generates and returns a ZIP package containing the complete
     EasyEA Camunda Modeler Plugin and documentation.
@@ -115,7 +117,7 @@ def download_camunda_plugin_zip():
 
 
 @router.get("/drawio/download")
-def download_drawio_plugin_zip():
+def download_drawio_plugin_zip(current_user: User = Depends(get_current_user)):
     """
     Dynamically generates and returns a ZIP package containing the complete
     EasyEA Draw.io Desktop Plugin and documentation.

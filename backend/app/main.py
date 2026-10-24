@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
@@ -61,6 +61,7 @@ _safe_add_column("users", "password_hash VARCHAR")
 _safe_add_column("users", "auth_provider VARCHAR DEFAULT 'local'")
 _safe_add_column("users", "external_id VARCHAR")
 _safe_add_column("system_auth_settings", "max_schema_versions INTEGER DEFAULT 10")
+_safe_add_column("archimate_elements", "stereotype_id VARCHAR")
 
 
 # Auto-seed sample model, backfill codes and default custom attributes if needed
@@ -105,14 +106,27 @@ app = FastAPI(
     description="Cloud-native Business-Oriented Enterprise Architecture Platform with ArchiMate & APM"
 )
 
-# CORS Middleware
+# CORS Middleware (SAST-HIGH-05: explicit origins, methods, and headers)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
+
+# HTTP Security Headers Middleware (SAST-LOW-01: OWASP Secure Headers)
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    if "Content-Security-Policy" not in response.headers:
+        response.headers["Content-Security-Policy"] = "frame-ancestors 'self';"
+    return response
 
 # Include Routers
 app.include_router(models_router, prefix=settings.API_V1_STR)

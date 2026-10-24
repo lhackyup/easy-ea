@@ -142,13 +142,17 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     layer: string;
     documentation: string;
     properties: Record<string, any>;
+    stereotype_id?: string | null;
   }>({
     name: '',
     type: 'ApplicationComponent',
     layer: 'Application',
     documentation: '',
-    properties: {}
+    properties: {},
+    stereotype_id: null
   });
+
+  const [selectedStereotypeFilter, setSelectedStereotypeFilter] = useState<string>('all');
 
   // Form State for Relationship Create / Edit
   const [relationFormData, setRelationFormData] = useState<{
@@ -242,6 +246,51 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     return allAvailableTypes.find((tItem) => tItem.type === typeName);
   };
 
+  const getStereotypeBadgeClass = (color?: string) => {
+    switch (color) {
+      case 'indigo': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'purple': return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'blue': return 'bg-blue-50 text-blue-700 border-blue-200';
+      case 'emerald': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'amber': return 'bg-amber-50 text-amber-800 border-amber-200';
+      case 'rose': return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'cyan': return 'bg-cyan-50 text-cyan-700 border-cyan-200';
+      default: return 'bg-slate-50 text-slate-700 border-slate-200';
+    }
+  };
+
+  const availableStereotypesForType = useMemo(() => {
+    const typeInfo = getMetamodelTypeInfo(formData.type);
+    return typeInfo?.stereotypes || [];
+  }, [formData.type, allAvailableTypes]);
+
+  const uniqueStereotypesInElements = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; label: string; icon_color: string }>();
+    elements.forEach((el) => {
+      if (el.stereotype_id && el.stereotype) {
+        map.set(el.stereotype_id, el.stereotype as any);
+      }
+    });
+    return Array.from(map.values());
+  }, [elements]);
+
+  const handleStereotypeChange = (newStereoId: string) => {
+    const st = availableStereotypesForType.find((s) => s.id === newStereoId);
+    const updatedProps = { ...formData.properties };
+    if (st && st.attribute_links) {
+      for (const link of st.attribute_links) {
+        if (link.default_value && (updatedProps[link.attribute_name] === undefined || updatedProps[link.attribute_name] === null || updatedProps[link.attribute_name] === '')) {
+          updatedProps[link.attribute_name] = link.default_value;
+        }
+      }
+    }
+    setFormData({
+      ...formData,
+      stereotype_id: newStereoId || null,
+      properties: updatedProps
+    });
+  };
+
   const handleSelectElement = async (elemId: string) => {
     try {
       const elRes = await api.getElementDetail(elemId);
@@ -277,7 +326,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
       type: initialType,
       layer: initialLayer,
       documentation: '',
-      properties: initialProperties
+      properties: initialProperties,
+      stereotype_id: null
     });
     setModalError(null);
     setIsCreateModalOpen(true);
@@ -303,11 +353,14 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
       });
     }
 
+    const stValid = (typeInfo?.stereotypes || []).some((s) => s.id === formData.stereotype_id);
+
     setFormData((prev) => ({
       ...prev,
       type: newType,
       layer: newLayer,
-      properties: newProperties
+      properties: newProperties,
+      stereotype_id: stValid ? prev.stereotype_id : null
     }));
   };
 
@@ -337,7 +390,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
       type: selectedElement.type || 'ApplicationComponent',
       layer: selectedElement.layer || (typeInfo?.layer || 'Application'),
       documentation: selectedElement.documentation || '',
-      properties: mergedProps
+      properties: mergedProps,
+      stereotype_id: selectedElement.stereotype_id || null
     });
     setModalError(null);
     setIsEditModalOpen(true);
@@ -375,6 +429,22 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
       }
     }
 
+    // Stereotype required attributes validation
+    if (formData.stereotype_id) {
+      const st = availableStereotypesForType.find((s) => s.id === formData.stereotype_id);
+      if (st && st.attribute_links) {
+        for (const link of st.attribute_links) {
+          if (link.is_required) {
+            const val = formData.properties[link.attribute_name];
+            if (val === undefined || val === null || String(val).trim() === '') {
+              setModalError(interpolate(t.architect.stereotypeRequiredHint, { label: st.label }) + `: ${link.attribute_name}`);
+              return;
+            }
+          }
+        }
+      }
+    }
+
     setSaving(true);
     setModalError(null);
     try {
@@ -383,7 +453,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         type: formData.type,
         layer: formData.layer,
         documentation: formData.documentation.trim(),
-        properties: formData.properties
+        properties: formData.properties,
+        stereotype_id: formData.stereotype_id || null
       });
       setIsCreateModalOpen(false);
       showNotification(t.architect.elementCreatedSuccess, 'success');
@@ -417,6 +488,22 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
       }
     }
 
+    // Stereotype required attributes validation
+    if (formData.stereotype_id) {
+      const st = availableStereotypesForType.find((s) => s.id === formData.stereotype_id);
+      if (st && st.attribute_links) {
+        for (const link of st.attribute_links) {
+          if (link.is_required) {
+            const val = formData.properties[link.attribute_name];
+            if (val === undefined || val === null || String(val).trim() === '') {
+              setModalError(interpolate(t.architect.stereotypeRequiredHint, { label: st.label }) + `: ${link.attribute_name}`);
+              return;
+            }
+          }
+        }
+      }
+    }
+
     setSaving(true);
     setModalError(null);
     try {
@@ -425,7 +512,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         type: formData.type,
         layer: formData.layer,
         documentation: formData.documentation.trim(),
-        properties: formData.properties
+        properties: formData.properties,
+        stereotype_id: formData.stereotype_id || null
       });
       setIsEditModalOpen(false);
       showNotification(t.architect.elementUpdatedSuccess, 'success');
@@ -754,13 +842,17 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     if (search.trim()) count++;
     if (relationshipFilter !== 'all') count++;
     if (documentationFilter !== 'all') count++;
+    if (selectedStereotypeFilter !== 'all') count++;
     count += attributeFilterRules.length;
     return count;
-  }, [selectedLayer, selectedType, search, relationshipFilter, documentationFilter, attributeFilterRules]);
+  }, [selectedLayer, selectedType, search, relationshipFilter, documentationFilter, selectedStereotypeFilter, attributeFilterRules]);
 
   const fetchSavedViews = async () => {
     try {
-      const res = await fetch(`/api/saved-views?model_id=${modelId}`);
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
+      const res = await fetch(`/api/saved-views?model_id=${modelId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
       if (res.ok) {
         const data = await res.json();
         setSavedViews(data);
@@ -838,9 +930,13 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         filter_config: filterConfig
       };
 
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
       const res = await fetch('/api/saved-views', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload)
       });
 
@@ -881,9 +977,13 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         filter_config: filterConfig
       };
 
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
       const res = await fetch(`/api/saved-views/${activeSavedView.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload)
       });
 
@@ -909,6 +1009,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     setSearchInProps(false);
     setRelationshipFilter('all');
     setDocumentationFilter('all');
+    setSelectedStereotypeFilter('all');
     setAttributeFilterRules([]);
     setSortBy('name_asc');
     setActiveSavedView(null);
@@ -1041,6 +1142,11 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         return false;
       }
 
+      // 5b. Stereotype filter
+      if (selectedStereotypeFilter !== 'all' && el.stereotype_id !== selectedStereotypeFilter) {
+        return false;
+      }
+
       // 6. Multi-Attribute Filter Rules
       if (attributeFilterRules.length > 0) {
         const results = attributeFilterRules.map((rule) => {
@@ -1096,6 +1202,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     searchInProps,
     relationshipFilter,
     documentationFilter,
+    selectedStereotypeFilter,
     attributeFilterRules,
     matchLogic,
     sortBy,
@@ -1120,9 +1227,13 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         include_relationships: true
       };
 
+      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
       const res = await fetch('/api/saved-views/export', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload)
       });
 
@@ -1162,10 +1273,14 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   };
 
   // Group attributes by section for a given MetamodelElementType
-  const getGroupedAttributes = (typeInfo?: MetamodelElementType) => {
+  const getGroupedAttributes = (typeInfo?: MetamodelElementType, stereotypeId?: string | null) => {
     if (!typeInfo || !typeInfo.custom_attributes) return {};
+    const st = stereotypeId ? typeInfo.stereotypes?.find((s) => s.id === stereotypeId) : undefined;
+    const linkMap = new Map((st?.attribute_links || []).map((l) => [l.attribute_name, l]));
+
     return typeInfo.custom_attributes.reduce((acc, attr) => {
-      const sec = (attr.section || 'Custom Attributes').trim() || 'Custom Attributes';
+      const link = linkMap.get(attr.name);
+      const sec = (link?.section_override || attr.section || 'Custom Attributes').trim() || 'Custom Attributes';
       if (!acc[sec]) acc[sec] = [];
       acc[sec].push(attr);
       return acc;
@@ -1268,7 +1383,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
 
   // Selected element metadata
   const selectedTypeInfo = selectedElement ? getMetamodelTypeInfo(selectedElement.type) : undefined;
-  const selectedGroupedAttrs = getGroupedAttributes(selectedTypeInfo);
+  const selectedGroupedAttrs = getGroupedAttributes(selectedTypeInfo, selectedElement?.stereotype_id);
 
   // Other elements for relationship destination
   const otherElementsList = useMemo(() => {
@@ -1417,7 +1532,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                       <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
                       <div className="flex flex-col">
                         <span className="font-semibold">{t.architect.exportExcel}</span>
-                        <span className="text-[10px] text-slate-400">Cartella Excel con relazioni (.xlsx)</span>
+                        <span className="text-[10px] text-slate-400">{t.architect.exportExcelDesc}</span>
                       </div>
                     </button>
                     <button
@@ -1428,7 +1543,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                       <FileArchive className="w-4 h-4 text-blue-600 shrink-0" />
                       <div className="flex flex-col">
                         <span className="font-semibold">{t.architect.exportCsv}</span>
-                        <span className="text-[10px] text-slate-400">Archivio ZIP con CSV UTF-8 (.zip)</span>
+                        <span className="text-[10px] text-slate-400">{t.architect.exportCsvDesc}</span>
                       </div>
                     </button>
                   </div>
@@ -1487,7 +1602,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   onClick={() => handleExportRepository('xlsx')}
                   disabled={exporting}
                   className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 flex items-center gap-1 bg-white hover:bg-emerald-100 px-2 py-1 rounded-lg border border-emerald-300 shadow-2xs cursor-pointer transition"
-                  title="Esporta questa vista in Excel (.xlsx)"
+                  title={t.architect.exportExcelTooltip}
                 >
                   <FileSpreadsheet className="w-3 h-3 text-emerald-600" />
                   <span>XLSX</span>
@@ -1497,7 +1612,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   onClick={() => handleExportRepository('csv')}
                   disabled={exporting}
                   className="text-[11px] font-bold text-blue-800 hover:text-blue-950 flex items-center gap-1 bg-white hover:bg-blue-100 px-2 py-1 rounded-lg border border-blue-200 shadow-2xs cursor-pointer transition"
-                  title="Esporta questa vista in CSV (.zip)"
+                  title={t.architect.exportCsvTooltip}
                 >
                   <FileArchive className="w-3 h-3 text-blue-600" />
                   <span>CSV</span>
@@ -1512,7 +1627,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                 title={t.architect.updateSavedView}
               >
                 <RotateCcw className="w-3 h-3 text-emerald-600" />
-                <span>{savingView ? 'Salvataggio...' : t.architect.updateSavedView}</span>
+                <span>{savingView ? t.common.loading : t.architect.updateSavedView}</span>
               </button>
               <button
                 type="button"
@@ -1530,7 +1645,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   if (onClearInitialView) onClearInitialView();
                 }}
                 className="text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-emerald-100/50 cursor-pointer transition"
-                title="Scollega vista"
+                title={t.architect.detachViewTooltip}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -1648,6 +1763,15 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-[10px] font-bold">
                 {documentationFilter === 'with_doc' ? t.architect.docFilterWith : t.architect.docFilterWithout}
                 <button onClick={() => setDocumentationFilter('all')} className="hover:text-amber-700 cursor-pointer">
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {selectedStereotypeFilter !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-indigo-100 text-indigo-900 border border-indigo-200 rounded-lg text-[10px] font-bold font-mono">
+                {uniqueStereotypesInElements.find((s) => s.id === selectedStereotypeFilter)?.label || selectedStereotypeFilter}
+                <button onClick={() => setSelectedStereotypeFilter('all')} className="hover:text-indigo-700 cursor-pointer">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -1833,7 +1957,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                         ) : (
                           <input
                             type="text"
-                            placeholder="Valore filtro..."
+                            placeholder={t.architect.filterValuePlaceholder}
                             value={rule.value || ''}
                             onChange={(e) => handleUpdateAttributeRule(rule.id, { value: e.target.value })}
                             className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs text-slate-900 focus:outline-none focus:border-emerald-500"
@@ -1846,7 +1970,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                         type="button"
                         onClick={() => handleRemoveAttributeRule(rule.id)}
                         className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition self-end sm:self-center cursor-pointer"
-                        title="Rimuovi regola"
+                        title={t.metamodel.removeRuleTooltip}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -1953,6 +2077,40 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   </button>
                 </div>
               </div>
+
+              {/* Stereotype Filter */}
+              {uniqueStereotypesInElements.length > 0 && (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <span className="font-bold text-slate-700 text-[11px] block">{t.architect.filterStereotype}</span>
+                  <div className="flex flex-wrap gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedStereotypeFilter('all')}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                        selectedStereotypeFilter === 'all'
+                          ? 'bg-indigo-600 text-white border-indigo-600'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                      }`}
+                    >
+                      {t.architect.allStereotypes}
+                    </button>
+                    {uniqueStereotypesInElements.map((st) => (
+                      <button
+                        key={st.id}
+                        type="button"
+                        onClick={() => setSelectedStereotypeFilter(st.id)}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer font-mono ${
+                          selectedStereotypeFilter === st.id
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        {st.label || `«${st.name}»`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 3. Deep search in properties checkbox */}
@@ -2007,7 +2165,14 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     <div className="flex items-center space-x-2.5">
                       <Box className={`w-4 h-4 ${isSelected ? 'text-emerald-600' : 'text-slate-400'}`} />
                       <div>
-                        <h4 className="text-xs font-bold text-slate-900">{el.name}</h4>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="text-xs font-bold text-slate-900">{el.name}</h4>
+                          {el.stereotype && (
+                            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md border font-mono ${getStereotypeBadgeClass(el.stereotype.icon_color)}`}>
+                              {el.stereotype.label || `«${el.stereotype.name}»`}
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-slate-500 font-mono mt-0.5">{el.type}</div>
                       </div>
                     </div>
@@ -2033,10 +2198,15 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
               {/* Header Card with Edit & Delete Actions */}
               <div className="border-b border-slate-100 pb-5 space-y-3">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div className="flex items-center space-x-2">
+                  <div className="flex items-center space-x-2 flex-wrap gap-y-1">
                     <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${getLayerColor(selectedElement.layer)}`}>
                       {selectedElement.layer} Layer • {selectedElement.type}
                     </span>
+                    {selectedElement.stereotype && (
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border font-mono ${getStereotypeBadgeClass(selectedElement.stereotype.icon_color)}`}>
+                        {selectedElement.stereotype.label || `«${selectedElement.stereotype.name}»`}
+                      </span>
+                    )}
                     <span className="text-[10px] text-slate-500 font-mono">ID: {selectedElement.id}</span>
                   </div>
 
@@ -2116,7 +2286,18 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                                 className="bg-white border border-slate-200/80 rounded-xl p-3 text-xs space-y-1 shadow-2xs flex flex-col justify-between"
                               >
                                 <div className="flex items-start justify-between gap-1">
-                                  <span className="font-semibold text-slate-700 text-[11px]">{attr.label}</span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="font-semibold text-slate-700 text-[11px]">{attr.label}</span>
+                                    {attr.is_package ? (
+                                      <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200 px-1.5 py-0.2 rounded">
+                                        [{attr.package_code || attr.name.slice(0, 3).toUpperCase()}]
+                                      </span>
+                                    ) : attr.library_code ? (
+                                      <span className="text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.2 rounded">
+                                        [{attr.library_code}]
+                                      </span>
+                                    ) : null}
+                                  </div>
                                   <span className="text-[9px] font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
                                     {attr.data_type}
                                   </span>
@@ -2151,7 +2332,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                 <div className="flex items-center justify-between">
                   <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
                     <Link2 className="w-4 h-4 text-indigo-600" />
-                    <span>Relazioni ArchiMate</span>
+                    <span>{t.architect.archimateRelations}</span>
                   </h4>
 
                   <button
@@ -2362,6 +2543,33 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     </div>
                   </div>
 
+                  {/* Stereotype Selector */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{t.architect.stereotypeLabel}</span>
+                      </span>
+                      {formData.stereotype_id && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          «Stereotipo ArchiMate»
+                        </span>
+                      )}
+                    </label>
+                    <select
+                      value={formData.stereotype_id || ''}
+                      onChange={(e) => handleStereotypeChange(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">{t.architect.noStereotypeOption}</option>
+                      {availableStereotypesForType.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.label} - {st.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Element Name */}
                   <div className="sm:col-span-2 space-y-1">
                     <label className="text-xs font-bold text-slate-700">
@@ -2396,7 +2604,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
               {/* Dynamic Attribute Sections Defined by Admin */}
               {(() => {
                 const currentTypeInfo = getMetamodelTypeInfo(formData.type);
-                const grouped = getGroupedAttributes(currentTypeInfo);
+                const grouped = getGroupedAttributes(currentTypeInfo, formData.stereotype_id);
                 const sectionNames = Object.keys(grouped);
 
                 if (sectionNames.length === 0) return null;
@@ -2428,8 +2636,17 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                             {attrs.map((attr) => (
                               <div key={attr.id} className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 flex-wrap">
                                     <span>{attr.label}</span>
+                                    {attr.is_package ? (
+                                      <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.2 rounded">
+                                        [{attr.package_code || attr.name.slice(0, 3).toUpperCase()}]
+                                      </span>
+                                    ) : attr.library_code ? (
+                                      <span className="text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded">
+                                        [{attr.library_code}]
+                                      </span>
+                                    ) : null}
                                     {attr.is_required && <span className="text-rose-500">*</span>}
                                   </label>
                                   <span className="text-[9px] font-mono text-slate-400">
@@ -2543,6 +2760,33 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     <div className="pt-1 text-xs font-mono text-slate-500">{formData.id}</div>
                   </div>
 
+                  {/* Stereotype Selector */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="text-xs font-bold text-slate-700 flex items-center justify-between">
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{t.architect.stereotypeLabel}</span>
+                      </span>
+                      {formData.stereotype_id && (
+                        <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200">
+                          «Stereotipo ArchiMate»
+                        </span>
+                      )}
+                    </label>
+                    <select
+                      value={formData.stereotype_id || ''}
+                      onChange={(e) => handleStereotypeChange(e.target.value)}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+                    >
+                      <option value="">{t.architect.noStereotypeOption}</option>
+                      {availableStereotypesForType.map((st) => (
+                        <option key={st.id} value={st.id}>
+                          {st.label} - {st.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
                   {/* Element Name */}
                   <div className="sm:col-span-2 space-y-1">
                     <label className="text-xs font-bold text-slate-700">
@@ -2577,7 +2821,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
               {/* Dynamic Attribute Sections Defined by Admin */}
               {(() => {
                 const currentTypeInfo = getMetamodelTypeInfo(formData.type);
-                const grouped = getGroupedAttributes(currentTypeInfo);
+                const grouped = getGroupedAttributes(currentTypeInfo, formData.stereotype_id);
                 const sectionNames = Object.keys(grouped);
 
                 if (sectionNames.length === 0) return null;
@@ -2609,8 +2853,17 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                             {attrs.map((attr) => (
                               <div key={attr.id} className="space-y-1">
                                 <div className="flex items-center justify-between">
-                                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                  <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5 flex-wrap">
                                     <span>{attr.label}</span>
+                                    {attr.is_package ? (
+                                      <span className="text-[9px] font-mono font-bold bg-purple-50 text-purple-700 border border-purple-200 px-1 py-0.2 rounded">
+                                        [{attr.package_code || attr.name.slice(0, 3).toUpperCase()}]
+                                      </span>
+                                    ) : attr.library_code ? (
+                                      <span className="text-[9px] font-mono font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 px-1 py-0.2 rounded">
+                                        [{attr.library_code}]
+                                      </span>
+                                    ) : null}
                                     {attr.is_required && <span className="text-rose-500">*</span>}
                                   </label>
                                   <span className="text-[9px] font-mono text-slate-400">
@@ -2712,7 +2965,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   }`}
                 >
                   <ArrowRight className="w-3.5 h-3.5" />
-                  <span>Relazione in Uscita (Outgoing)</span>
+                  <span>{t.architect.outgoingRelation}</span>
                 </button>
                 <button
                   type="button"
@@ -2724,7 +2977,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   }`}
                 >
                   <ArrowRight className="w-3.5 h-3.5 transform rotate-180" />
-                  <span>Relazione in Entrata (Incoming)</span>
+                  <span>{t.architect.incomingRelation}</span>
                 </button>
               </div>
 
@@ -2808,7 +3061,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                 </label>
 
                 {loadingAllowedRels ? (
-                  <div className="p-4 text-center text-xs text-slate-400">Caricamento tipi di relazione consentiti...</div>
+                  <div className="p-4 text-center text-xs text-slate-400">{t.architect.loadingAllowedRelations}</div>
                 ) : allowedRelTypes.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                     {allowedRelTypes.map((relType) => {
@@ -2945,7 +3198,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                 </label>
 
                 {loadingAllowedRels ? (
-                  <div className="p-4 text-center text-xs text-slate-400">Caricamento tipi di relazione consentiti...</div>
+                  <div className="p-4 text-center text-xs text-slate-400">{t.architect.loadingAllowedRelations}</div>
                 ) : allowedRelTypes.length > 0 ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                     {allowedRelTypes.map((relType) => {
@@ -3137,7 +3390,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                 </div>
                 <div>
                   <h3 className="text-base font-extrabold text-slate-900">{t.architect.saveViewModalTitle}</h3>
-                  <p className="text-[11px] text-slate-500">Salva la configurazione di filtri attuale</p>
+                  <p className="text-[11px] text-slate-500">{t.architect.saveCurrentFilterConfigTooltip}</p>
                 </div>
               </div>
               <button
@@ -3245,7 +3498,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     </span>
                   ))}
                   {activeFiltersCount === 0 && (
-                    <span className="text-slate-400 italic">Tutti gli elementi del modello (Nessun filtro)</span>
+                    <span className="text-slate-400 italic">{t.architect.allModelElementsNoFilter}</span>
                   )}
                 </div>
               </div>

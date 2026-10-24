@@ -287,6 +287,11 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 <p className="text-xs text-slate-500 mt-1">
                   Supporta file nativi Archi (.archimate), Draw.io Desktop (.drawio) e Open Exchange Format (.xml)
                 </p>
+                {schema.format === 'drawio' && (
+                  <p className="text-[11px] font-mono text-slate-600 bg-slate-200/70 px-2.5 py-1 rounded-md mt-2">
+                    📁 Percorso Draw.io: ~/snap/drawio/current/checked_out/ (o ~/.easyea/checked_out/)
+                  </p>
+                )}
                 {selectedFile && (
                   <div className="mt-3 inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full">
                     <FileCheck className="w-3.5 h-3.5" />

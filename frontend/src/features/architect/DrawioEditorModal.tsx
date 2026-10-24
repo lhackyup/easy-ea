@@ -6,6 +6,8 @@ import { X, Save, Download, RefreshCw, CheckCircle2, AlertCircle, Layers, PlusCi
 import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../lib/api';
 
+const DRAWIO_ORIGIN = 'https://embed.diagrams.net';
+
 interface DrawioEditorModalProps {
   modelId: string;
   viewDetail?: DiagramViewDetail | null;
@@ -106,6 +108,8 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
     }, 4000);
 
     const handleMessage = async (event: MessageEvent) => {
+      if (event.origin !== DRAWIO_ORIGIN) return;
+      if (iframeRef.current?.contentWindow && event.source !== iframeRef.current.contentWindow) return;
       if (typeof event.data !== 'string') return;
 
       try {
@@ -128,7 +132,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
                 ]
               }
             }),
-            '*'
+            DRAWIO_ORIGIN
           );
         }
 
@@ -144,7 +148,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
               xml: xmlToLoad,
               title: nameRef.current || 'EasyEA Diagram'
             }),
-            '*'
+            DRAWIO_ORIGIN
           );
         }
 
@@ -206,7 +210,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
         action: 'export',
         format: 'xml'
       }),
-      '*'
+      DRAWIO_ORIGIN
     );
   };
 
@@ -218,7 +222,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
         action: 'export',
         format: 'xml'
       }),
-      '*'
+      DRAWIO_ORIGIN
     );
   };
 
@@ -483,7 +487,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
                 value={diagramName}
                 onChange={(e) => setDiagramName(e.target.value)}
                 className="bg-transparent text-white font-bold text-base focus:outline-none focus:border-b focus:border-indigo-500 hover:border-b hover:border-slate-600 transition px-1"
-                placeholder="Nome Vista Architetturale"
+                placeholder={t.schemas.viewNamePlaceholder}
               />
               <span className="text-xs bg-indigo-500/20 text-indigo-300 font-semibold px-2 py-0.5 rounded-full border border-indigo-500/30">
                 Draw.io + ArchiMate 3.x
@@ -517,8 +521,8 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
         <div className="flex items-center space-x-3">
           <button
             onClick={triggerExportDownload}
-            className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition border border-slate-700"
-            title="Scarica file .drawio per Draw.io Desktop"
+            className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition border border-slate-700 cursor-pointer"
+            title={t.schemas.downloadDrawioDesktopTooltip}
           >
             <Download className="w-4 h-4" />
             <span>Esporta .drawio</span>
@@ -527,16 +531,16 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
           <button
             onClick={triggerSaveToEasyEA}
             disabled={saving}
-            className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md hover:shadow-emerald-600/30 disabled:opacity-50"
+            className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition shadow-md hover:shadow-emerald-600/30 disabled:opacity-50 cursor-pointer"
           >
             {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{saving ? 'Salvataggio...' : 'Salva in EasyEA'}</span>
+            <span>{saving ? t.common.loading : 'Salva in EasyEA'}</span>
           </button>
 
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition"
-            title="Chiudi editor"
+            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer"
+            title={t.schemas.closeEditorTooltip}
           >
             <X className="w-5 h-5" />
           </button>
@@ -549,7 +553,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
           <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950 text-white space-y-4">
             <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin" />
             <div className="text-center">
-              <h3 className="text-sm font-bold">Caricamento Draw.io & Palette ArchiMate 3.x...</h3>
+              <h3 className="text-sm font-bold">{t.schemas.loadingDrawioPalette}</h3>
               <p className="text-xs text-slate-400 mt-1">
                 Iniezione stencils e sincronizzazione metamodello EasyEA in corso...
               </p>
@@ -559,9 +563,10 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
 
         <iframe
           ref={iframeRef}
-          src="https://embed.diagrams.net/?embed=1&ui=atlas&spin=1&proto=json&configure=1&libraries=1&libs=archimate3&noExitBtn=0&saveAndExit=0"
+          src={`${DRAWIO_ORIGIN}/?embed=1&ui=atlas&spin=1&proto=json&configure=1&libraries=1&libs=archimate3&noExitBtn=0&saveAndExit=0`}
           className="w-full h-full border-0"
           title="EasyEA Draw.io Editor"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
           allow="fullscreen"
         />
       </div>

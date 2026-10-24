@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { APMPortfolio, OverlapMatrixData } from '../../types';
+import { APMPortfolio, OverlapMatrixData, PlateauRoadmap, ArchitecturalRisksReport } from '../../types';
 import { api } from '../../lib/api';
 import { useLanguage } from '../../context/LanguageContext';
 import {
@@ -8,7 +8,11 @@ import {
   ShieldCheck,
   GitMerge,
   ArrowUpRight,
-  Sparkles
+  Sparkles,
+  Milestone,
+  ShieldAlert,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 
 interface ExecutiveOverviewProps {
@@ -20,18 +24,24 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
   const { t, interpolate } = useLanguage();
   const [apm, setApm] = useState<APMPortfolio | null>(null);
   const [overlap, setOverlap] = useState<OverlapMatrixData | null>(null);
+  const [plateaus, setPlateaus] = useState<PlateauRoadmap | null>(null);
+  const [risks, setRisks] = useState<ArchitecturalRisksReport | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [aData, oData] = await Promise.all([
+        const [aData, oData, pData, rData] = await Promise.all([
           api.getAPMPortfolio(modelId),
-          api.getOverlapMatrix(modelId)
+          api.getOverlapMatrix(modelId),
+          api.getPlateauRoadmap(modelId).catch(() => null),
+          api.getArchitecturalRisks(modelId).catch(() => null)
         ]);
         setApm(aData);
         setOverlap(oData);
+        setPlateaus(pData);
+        setRisks(rData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -151,7 +161,39 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
         </div>
       </div>
 
-      {/* 2-Column Split: TIME Capital Allocation (Left) + Top Vendors & Criticality (Right) */}
+      {/* Architectural Governance & SPOF Risk Alert Banner (if risks detected) */}
+      {risks && risks.summary.total_risks > 0 && (
+        <div className="p-4 bg-amber-50 border border-amber-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-amber-100 rounded-xl text-amber-800">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                  Governance Architetturale & Allerta Rischi ({risks.risk_level})
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-800">
+                  {risks.summary.total_risks} anomalie rilevate
+                </span>
+              </div>
+              <p className="text-xs text-amber-800/90 mt-0.5">
+                Rilevati <strong>{risks.summary.spof_count} Single Points of Failure (SPOF)</strong> e <strong>{risks.summary.lifecycle_risks_count} processi dipendenti da app in dismissione</strong>.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigateTab('processes')}
+            className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
+          >
+            <span>Analizza nei Processi</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* 2-Column Split: TIME Capital Allocation (Left) + Top Vendors & Quick Links (Right) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         {/* Left: Gartner TIME Capital Allocation */}
@@ -279,6 +321,83 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
         </div>
 
       </div>
+
+      {/* ArchiMate Transition Horizons (Plateau Roadmap: As-Is -> Transition -> To-Be) */}
+      {plateaus && plateaus.horizons && (
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <div className="flex items-center space-x-2.5">
+              <div className="p-2 bg-indigo-50 rounded-xl text-indigo-600 border border-indigo-100">
+                <Milestone className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Orizzonti di Transizione Architetturale (ArchiMate Plateaus & Roadmap)
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Evoluzione temporale del portfolio architetturale tra Baseline (As-Is), Plateau di Transizione e Target (To-Be)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {plateaus.horizons.map((h, idx) => {
+              const borderStyles = [
+                'border-slate-300 bg-slate-50/50',
+                'border-amber-300 bg-amber-50/40',
+                'border-emerald-300 bg-emerald-50/40'
+              ][idx % 3];
+
+              const badgeColors = [
+                'bg-slate-200 text-slate-800',
+                'bg-amber-100 text-amber-800',
+                'bg-emerald-100 text-emerald-800'
+              ][idx % 3];
+
+              return (
+                <div key={h.horizon} className={`border rounded-2xl p-4 space-y-3 ${borderStyles}`}>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${badgeColors}`}>
+                      Fase {idx + 1}
+                    </span>
+                    <span className="text-xs font-bold text-slate-700">
+                      {h.app_count} applicazioni
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-900">{h.horizon}</h4>
+                    <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{h.description}</p>
+                  </div>
+
+                  {h.applications.length > 0 && (
+                    <div className="pt-2 border-t border-slate-200/60 space-y-1">
+                      <div className="text-[10px] font-semibold text-slate-500 uppercase">Applicazioni Coinvolte:</div>
+                      <div className="flex flex-wrap gap-1">
+                        {h.applications.slice(0, 5).map((app) => (
+                          <span
+                            key={app.id}
+                            className="px-2 py-0.5 bg-white border border-slate-200 rounded text-[10px] font-medium text-slate-800 shadow-2xs"
+                          >
+                            {app.name}
+                          </span>
+                        ))}
+                        {h.applications.length > 5 && (
+                          <span className="px-1.5 py-0.5 text-[10px] text-slate-500">
+                            +{h.applications.length - 5} altre
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

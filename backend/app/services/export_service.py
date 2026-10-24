@@ -28,6 +28,18 @@ APM_HEADERS = [
 ]
 
 
+def sanitize_formula_injection(val: Any) -> Any:
+    """
+    Sanitize cell/field values to prevent CSV / Excel Formula Injection (DDE / CWE-1236 / SAST-MED-03).
+    If a string value begins with '=', '+', '-', '@', '\t', or '\r', prefix it with a single quote (').
+    """
+    if isinstance(val, str) and val:
+        stripped = val.lstrip(" ")
+        if stripped and stripped[0] in ("=", "+", "-", "@", "\t", "\r"):
+            return f"'{val}"
+    return val
+
+
 def extract_element_property(el: ArchimateElement, attr_name: str) -> Any:
     """Safely extracts any standard, APM, or custom property from an ArchimateElement."""
     # 1. Direct core model fields
@@ -152,7 +164,7 @@ def generate_view_excel(
         row_data = []
         for header in elem_headers:
             val = extract_element_property(el, header)
-            row_data.append(val)
+            row_data.append(sanitize_formula_injection(val))
 
         for col_idx, val in enumerate(row_data, 1):
             cell = ws_elem.cell(row=row_idx, column=col_idx, value=val)
@@ -188,11 +200,11 @@ def generate_view_excel(
         src_name = id_to_name.get(rel.source_id, rel.source_element.name if rel.source_element else rel.source_id)
         tgt_name = id_to_name.get(rel.target_id, rel.target_element.name if rel.target_element else rel.target_id)
         rel_row = [
-            src_name,
-            tgt_name,
-            rel.type,
-            rel.name or "",
-            rel.documentation or ""
+            sanitize_formula_injection(src_name),
+            sanitize_formula_injection(tgt_name),
+            sanitize_formula_injection(rel.type),
+            sanitize_formula_injection(rel.name or ""),
+            sanitize_formula_injection(rel.documentation or "")
         ]
         for col_idx, val in enumerate(rel_row, 1):
             cell = ws_rel.cell(row=row_idx, column=col_idx, value=val)
@@ -278,7 +290,7 @@ def generate_view_csv_zip(
     elem_writer.writerow(elem_headers)
 
     for el in elements:
-        row_data = [extract_element_property(el, h) for h in elem_headers]
+        row_data = [sanitize_formula_injection(extract_element_property(el, h)) for h in elem_headers]
         elem_writer.writerow(row_data)
 
     # 2. Relationships CSV String
@@ -294,11 +306,11 @@ def generate_view_csv_zip(
         src_name = id_to_name.get(rel.source_id, rel.source_element.name if rel.source_element else rel.source_id)
         tgt_name = id_to_name.get(rel.target_id, rel.target_element.name if rel.target_element else rel.target_id)
         rel_writer.writerow([
-            src_name,
-            tgt_name,
-            rel.type,
-            rel.name or "",
-            rel.documentation or ""
+            sanitize_formula_injection(src_name),
+            sanitize_formula_injection(tgt_name),
+            sanitize_formula_injection(rel.type),
+            sanitize_formula_injection(rel.name or ""),
+            sanitize_formula_injection(rel.documentation or "")
         ])
 
     # 3. Create ZIP

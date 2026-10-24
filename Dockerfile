@@ -32,9 +32,17 @@ COPY plugins ./plugins
 # Copy built frontend assets from stage 1 into the frontend dist location
 COPY --from=frontend-builder /build/dist /frontend/dist
 
+# Create non-privileged system group and user (SCA-CONTAINER-ROOT / CWE-250)
+RUN groupadd -g 1001 easyea \
+    && useradd -u 1001 -g easyea -d /app -s /usr/sbin/nologin easyea \
+    && chown -R easyea:easyea /app /frontend
+
 # Expose port (Cloud Run, Railway, Render, etc. pass PORT env var)
 ENV PORT=8000
 EXPOSE 8000
+
+# Run container as non-root user
+USER easyea
 
 # Start FastAPI with Uvicorn
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

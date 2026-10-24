@@ -1,5 +1,5 @@
 import re
-import xml.etree.ElementTree as ET
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
 from typing import Dict, List, Any, Optional, Tuple
 import uuid
 
@@ -117,7 +117,12 @@ def detect_layer(elem_type: str, folder_hint: Optional[str] = None) -> str:
 class ArchiModelParser:
     def __init__(self, xml_content: str):
         self.xml_content = xml_content
-        self.root = ET.fromstring(xml_content)
+        self.root = safe_xml_fromstring(
+            xml_content,
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
         # Determine format from XML header / namespaces / tags
         if "archimatetool.com" in xml_content or "archimate:" in xml_content:
             self.format_type = "archi_native"

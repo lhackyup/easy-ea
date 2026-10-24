@@ -1,4 +1,4 @@
-import xml.etree.ElementTree as ET
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
 import uuid
 import re
 import html
@@ -174,7 +174,12 @@ def parse_bpmn_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
         ]
     }
     """
-    root = ET.fromstring(xml_content)
+    root = safe_xml_fromstring(
+        xml_content,
+        forbid_dtd=True,
+        forbid_entities=True,
+        forbid_external=True,
+    )
 
     elements: List[Dict[str, Any]] = []
     relationships: List[Dict[str, Any]] = []

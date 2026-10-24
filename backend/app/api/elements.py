@@ -5,7 +5,8 @@ from pydantic import BaseModel
 import uuid
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateElement, ApplicationBusinessAttributes
+from app.models.archimate import ArchimateElement, ApplicationBusinessAttributes, User, ElementStereotype
+from app.api.deps import get_current_user, require_library_permission
 from app.parsers.archi_parser import detect_layer
 
 router = APIRouter(prefix="/elements", tags=["ArchiMate Elements"])
@@ -16,6 +17,7 @@ class ElementCreate(BaseModel):
     layer: Optional[str] = None
     documentation: Optional[str] = ""
     properties: Optional[Dict[str, Any]] = {}
+    stereotype_id: Optional[str] = None
 
 class ElementUpdate(BaseModel):
     name: Optional[str] = None
@@ -23,6 +25,34 @@ class ElementUpdate(BaseModel):
     layer: Optional[str] = None
     documentation: Optional[str] = None
     properties: Optional[Dict[str, Any]] = None
+    stereotype_id: Optional[str] = None
+
+def validate_and_apply_stereotype(
+    db: Session,
+    element_type: str,
+    props: Dict[str, Any],
+    stereotype_id: Optional[str]
+) -> Optional[ElementStereotype]:
+    if not stereotype_id:
+        return None
+    st = db.query(ElementStereotype).filter(ElementStereotype.id == stereotype_id).first()
+    if not st:
+        raise HTTPException(status_code=404, detail=f"Stereotype '{stereotype_id}' not found.")
+    if st.base_type != element_type:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lo stereotipo '{st.name}' è applicabile solo a elementi di tipo '{st.base_type}', non '{element_type}'."
+        )
+    # Validate required attribute links
+    for link in st.attribute_links:
+        if link.is_required:
+            val = props.get(link.attribute_name)
+            if val is None or (isinstance(val, str) and not val.strip()):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"L'attributo '{link.attribute_name}' è obbligatorio per lo stereotipo {st.label}."
+                )
+    return st
 
 def sync_apm_from_properties(apm: ApplicationBusinessAttributes, props: Dict[str, Any]):
     """Helper to update APM attributes from properties dict (supporting eea_ prefix or direct keys)."""
@@ -112,15 +142,19 @@ def list_elements(
     model_id: str,
     layer: Optional[str] = None,
     type: Optional[str] = None,
+    stereotype_id: Optional[str] = None,
     search: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """List elements of a model filtered by Layer, Type, or Search query."""
+    """List elements of a model filtered by Layer, Type, Stereotype, or Search query."""
     query = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id)
     if layer:
         query = query.filter(ArchimateElement.layer == layer)
     if type:
         query = query.filter(ArchimateElement.type == type)
+    if stereotype_id:
+        query = query.filter(ArchimateElement.stereotype_id == stereotype_id)
     if search:
         query = query.filter(ArchimateElement.name.ilike(f"%{search}%"))
 
@@ -157,6 +191,13 @@ def list_elements(
             "layer": e.layer,
             "documentation": e.documentation,
             "properties": props,
+            "stereotype_id": e.stereotype_id,
+            "stereotype": {
+                "id": e.stereotype.id,
+                "name": e.stereotype.name,
+                "label": e.stereotype.label,
+                "icon_color": e.stereotype.icon_color
+            } if e.stereotype else None,
             "incoming_count": len(e.incoming_relations or []),
             "outgoing_count": len(e.outgoing_relations or []),
             "apm": {
@@ -180,8 +221,10 @@ def search_elements(
     model_id: Optional[str] = Query(None, description="Filter by model ID"),
     layer: Optional[str] = Query(None, description="Filter by layer (e.g. Business, Application, Technology, Strategy)"),
     type: Optional[str] = Query(None, description="Filter by element type"),
+    stereotype_id: Optional[str] = Query(None, description="Filter by stereotype ID"),
     limit: int = Query(50, ge=1, le=200),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Search elements across models or within a model by name, documentation, type, or layer."""
     db_query = db.query(ArchimateElement)
@@ -191,6 +234,8 @@ def search_elements(
         db_query = db_query.filter(ArchimateElement.layer.ilike(layer))
     if type and type.lower() != "all":
         db_query = db_query.filter(ArchimateElement.type.ilike(type))
+    if stereotype_id:
+        db_query = db_query.filter(ArchimateElement.stereotype_id == stereotype_id)
     if query:
         term = f"%{query}%"
         db_query = db_query.filter(
@@ -214,12 +259,23 @@ def search_elements(
             "type": e.type,
             "layer": e.layer,
             "documentation": e.documentation,
-            "properties": props
+            "properties": props,
+            "stereotype_id": e.stereotype_id,
+            "stereotype": {
+                "id": e.stereotype.id,
+                "name": e.stereotype.name,
+                "label": e.stereotype.label,
+                "icon_color": e.stereotype.icon_color
+            } if e.stereotype else None
         })
     return results
 
 @router.get("/{element_id}")
-def get_element(element_id: str, db: Session = Depends(get_db)):
+def get_element(
+    element_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Retrieve details for a specific element including incoming/outgoing relationships."""
     e = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
     if not e:
@@ -254,6 +310,13 @@ def get_element(element_id: str, db: Session = Depends(get_db)):
         "layer": e.layer,
         "documentation": e.documentation,
         "properties": props,
+        "stereotype_id": e.stereotype_id,
+        "stereotype": {
+            "id": e.stereotype.id,
+            "name": e.stereotype.name,
+            "label": e.stereotype.label,
+            "icon_color": e.stereotype.icon_color
+        } if e.stereotype else None,
         "apm": {
             "business_fit": apm.business_fit,
             "technical_fit": apm.technical_fit,
@@ -296,11 +359,22 @@ def get_element(element_id: str, db: Session = Depends(get_db)):
     }
 
 @router.post("")
-def create_element(model_id: str, payload: ElementCreate, db: Session = Depends(get_db)):
+def create_element(
+    model_id: str,
+    payload: ElementCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Manually creates a new ArchiMate element."""
+    require_library_permission(db, current_user, "create_element", model_id)
     elem_id = f"elem-{uuid.uuid4().hex[:8]}"
     layer = payload.layer or detect_layer(payload.type)
     props = payload.properties or {}
+
+    st = None
+    if payload.stereotype_id:
+        st = validate_and_apply_stereotype(db, payload.type, props, payload.stereotype_id)
+
     el = ArchimateElement(
         id=elem_id,
         model_id=model_id,
@@ -308,7 +382,8 @@ def create_element(model_id: str, payload: ElementCreate, db: Session = Depends(
         type=payload.type,
         layer=layer,
         documentation=payload.documentation,
-        properties=props
+        properties=props,
+        stereotype_id=st.id if st else None
     )
     db.add(el)
 
@@ -325,14 +400,47 @@ def create_element(model_id: str, payload: ElementCreate, db: Session = Depends(
 
     db.commit()
     db.refresh(el)
-    return {"id": el.id, "name": el.name, "type": el.type, "layer": el.layer, "properties": el.properties}
+    return {
+        "id": el.id,
+        "name": el.name,
+        "type": el.type,
+        "layer": el.layer,
+        "properties": el.properties,
+        "stereotype_id": el.stereotype_id,
+        "stereotype": {
+            "id": el.stereotype.id,
+            "name": el.stereotype.name,
+            "label": el.stereotype.label,
+            "icon_color": el.stereotype.icon_color
+        } if el.stereotype else None
+    }
 
 @router.put("/{element_id}")
-def update_element(element_id: str, payload: ElementUpdate, db: Session = Depends(get_db)):
+def update_element(
+    element_id: str,
+    payload: ElementUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Updates an existing ArchiMate element."""
     el = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
     if not el:
         raise HTTPException(status_code=404, detail="Element not found")
+    require_library_permission(db, current_user, "edit_element", el.model_id)
+
+    target_type = payload.type or el.type
+    props = dict(payload.properties if payload.properties is not None else (el.properties or {}))
+
+    # Stereotype change or validation
+    if payload.stereotype_id is not None:
+        if payload.stereotype_id == "" or payload.stereotype_id is False:
+            el.stereotype_id = None
+        else:
+            st = validate_and_apply_stereotype(db, target_type, props, payload.stereotype_id)
+            el.stereotype_id = st.id if st else None
+    elif el.stereotype_id and (payload.properties is not None or payload.type is not None):
+        # Stereotype didn't change, but properties or type did; re-validate
+        validate_and_apply_stereotype(db, target_type, props, el.stereotype_id)
 
     if payload.name is not None:
         el.name = payload.name
@@ -359,14 +467,30 @@ def update_element(element_id: str, payload: ElementUpdate, db: Session = Depend
             sync_apm_from_properties(el.apm_attributes, payload.properties)
 
     db.commit()
-    return {"message": "Element updated successfully", "id": el.id}
+    db.refresh(el)
+    return {
+        "message": "Element updated successfully",
+        "id": el.id,
+        "stereotype_id": el.stereotype_id,
+        "stereotype": {
+            "id": el.stereotype.id,
+            "name": el.stereotype.name,
+            "label": el.stereotype.label,
+            "icon_color": el.stereotype.icon_color
+        } if el.stereotype else None
+    }
 
 @router.delete("/{element_id}")
-def delete_element(element_id: str, db: Session = Depends(get_db)):
+def delete_element(
+    element_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Deletes an ArchiMate element and all its relationships."""
     el = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
     if not el:
         raise HTTPException(status_code=404, detail="Element not found")
+    require_library_permission(db, current_user, "delete_element", el.model_id)
     db.delete(el)
     db.commit()
     return {"message": "Element deleted"}

@@ -1,9 +1,14 @@
+import logging
+import secrets
 import uuid
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
 
+from app.core.config import settings
 from app.models.archimate import User, UserRoleAssignment, ModelWorkspace
+
+logger = logging.getLogger(__name__)
 
 ROLE_DEFINITIONS = [
     {
@@ -153,7 +158,12 @@ def create_user(
     if existing:
         raise HTTPException(status_code=400, detail=f"User with email '{clean_email}' or username '{clean_username}' already exists.")
     
-    pwd_to_hash = password if password else "EasyEA2026!"
+    if password is not None and password.strip():
+        if len(password.strip()) < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
+        pwd_to_hash = password.strip()
+    else:
+        pwd_to_hash = secrets.token_urlsafe(16)
     user = User(
         id=f"usr-{uuid.uuid4().hex[:8]}",
         username=clean_username,
@@ -299,10 +309,11 @@ def check_user_permission(
         "edit_diagram", "import_model_file", "create_library_attribute"
     }
     if action in arch_write_actions:
-        if "architect" in user_roles_in_lib:
+        if "architect" in user_roles_in_lib or "lead_architect" in user_roles_in_lib:
+            matched_arch_role = "lead_architect" if "lead_architect" in user_roles_in_lib else "architect"
             return {
                 "allowed": True,
-                "role": "architect",
+                "role": matched_arch_role,
                 "scope": f"library:{target_model_id}",
                 "reason": f"Authorized as Enterprise Architect on library '{target_model_id}'."
             }
@@ -315,8 +326,8 @@ def check_user_permission(
     # APM write actions
     apm_write_actions = {"edit_apm_scores", "edit_apm_attributes", "toggle_apm_scope", "simulate_impact"}
     if action in apm_write_actions:
-        if "analyst" in user_roles_in_lib or "architect" in user_roles_in_lib:
-            matched_role = "analyst" if "analyst" in user_roles_in_lib else "architect"
+        if "analyst" in user_roles_in_lib or "architect" in user_roles_in_lib or "lead_architect" in user_roles_in_lib:
+            matched_role = "analyst" if "analyst" in user_roles_in_lib else ("lead_architect" if "lead_architect" in user_roles_in_lib else "architect")
             return {
                 "allowed": True,
                 "role": matched_role,
@@ -348,14 +359,51 @@ def check_user_permission(
     }
 
 def seed_default_rbac(db: Session):
-    """Seed initial sample users and role assignments demonstrating global vs library-scoped separation."""
+    """
+    Seed initial RBAC users and role assignments.
+    In production (EASYEA_ENV=production and EASYEA_SEED_DEMO_USERS=false), demo users are NOT seeded;
+    only a single bootstrap admin account is created if the user table is empty, using EASYEA_ADMIN_PASSWORD
+    or a cryptographically random one-time password.
+    """
+    if settings.ENVIRONMENT == "production" and not settings.SEED_DEMO_USERS:
+        if db.query(User).count() == 0:
+            bootstrap_pwd = settings.ADMIN_INITIAL_PASSWORD or secrets.token_urlsafe(18)
+            if not settings.ADMIN_INITIAL_PASSWORD:
+                logger.warning(
+                    "EasyEA production bootstrap: created initial 'sys_admin' account with generated one-time password: %s",
+                    bootstrap_pwd,
+                )
+            admin_user = User(
+                id="usr-sysadmin-00",
+                username="sys_admin",
+                email="sys_admin@easyea.local",
+                full_name="System Administrator",
+                password_hash=hash_password(bootstrap_pwd),
+                is_active=True,
+            )
+            db.add(admin_user)
+            db.flush()
+            db.add(
+                UserRoleAssignment(
+                    id=f"ura-{uuid.uuid4().hex[:8]}",
+                    user_id=admin_user.id,
+                    role="admin",
+                    model_id=None,
+                )
+            )
+            db.commit()
+        return
+
+    admin_pwd = settings.ADMIN_INITIAL_PASSWORD or "AdminEasyEA2026!"
+    demo_pwd = settings.DEMO_USER_PASSWORD or "EasyEA2026!"
+
     sample_users = [
         {
             "id": "usr-sysadmin-00",
             "username": "sys_admin",
             "email": "sys_admin@easyea.local",
             "full_name": "System Administrator",
-            "password": "AdminEasyEA2026!",
+            "password": admin_pwd,
             "assignments": [
                 {"role": "admin", "model_id": None}
             ]
@@ -365,7 +413,7 @@ def seed_default_rbac(db: Session):
             "username": "admin",
             "email": "admin@easyea.local",
             "full_name": "Alessandro Rossi (System Admin)",
-            "password": "AdminEasyEA2026!",
+            "password": admin_pwd,
             "assignments": [
                 {"role": "admin", "model_id": None}
             ]
@@ -375,7 +423,7 @@ def seed_default_rbac(db: Session):
             "username": "marco_arch",
             "email": "marco.arch@easybank.it",
             "full_name": "Marco Bianchi (Lead EA EasyBank)",
-            "password": "EasyEA2026!",
+            "password": demo_pwd,
             "assignments": [
                 {"role": "architect", "model_id": "sample-easybank-ea"}
             ]
@@ -385,7 +433,7 @@ def seed_default_rbac(db: Session):
             "username": "laura_analyst",
             "email": "laura.analyst@easybank.it",
             "full_name": "Laura Verdi (Senior Business Analyst)",
-            "password": "EasyEA2026!",
+            "password": demo_pwd,
             "assignments": [
                 {"role": "analyst", "model_id": "sample-easybank-ea"}
             ]
@@ -395,7 +443,7 @@ def seed_default_rbac(db: Session):
             "username": "giorgio_cio",
             "email": "giorgio.cio@easybank.it",
             "full_name": "Giorgio Ferrari (CIO & Board Director)",
-            "password": "EasyEA2026!",
+            "password": demo_pwd,
             "assignments": [
                 {"role": "executive", "model_id": "sample-easybank-ea"}
             ]

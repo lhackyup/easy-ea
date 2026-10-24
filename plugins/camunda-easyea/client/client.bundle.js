@@ -59,6 +59,43 @@
     }
   }
 
+  // HTML Escaping & Safe DOM Rendering (SAST-HIGH-03)
+  function escHtml(val) {
+    if (val === null || val === undefined) return '';
+    return String(val)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function setSafeHtml(container, htmlStr) {
+    if (!container) return;
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+    var parser = new DOMParser();
+    var doc = parser.parseFromString(String(htmlStr || ''), 'text/html');
+    var dangerous = doc.body.querySelectorAll('script, iframe, object, embed');
+    for (var i = 0; i < dangerous.length; i++) {
+      dangerous[i].remove();
+    }
+    var allElems = doc.body.querySelectorAll('*');
+    for (var j = 0; j < allElems.length; j++) {
+      var attrs = allElems[j].attributes;
+      for (var k = attrs.length - 1; k >= 0; k--) {
+        var attrName = attrs[k].name.toLowerCase();
+        if (attrName.indexOf('on') === 0) {
+          allElems[j].removeAttribute(attrs[k].name);
+        }
+      }
+    }
+    while (doc.body.firstChild) {
+      container.appendChild(doc.body.firstChild);
+    }
+  }
+
   function showToast(message, type) {
     if (camundaProps && camundaProps.displayNotification) {
       camundaProps.displayNotification({
@@ -72,7 +109,7 @@
     var toast = document.createElement('div');
     toast.className = 'easyea-toast';
     var icon = type === 'error' ? '❌ ' : (type === 'warning' ? '⚠️ ' : '✅ ');
-    toast.innerHTML = icon + message;
+    toast.textContent = icon + message;
     if (document.body) {
       document.body.appendChild(toast);
       setTimeout(function() {
@@ -127,9 +164,9 @@
     var modal = document.createElement('div');
     modal.className = 'easyea-modal' + (isLarge ? ' large' : '');
 
-    modal.innerHTML = 
+    setSafeHtml(modal,
       '<div class="easyea-modal-header">' +
-        '<h3>' + title + '</h3>' +
+        '<h3>' + escHtml(title) + '</h3>' +
         '<button class="easyea-modal-close" id="easyea-modal-close-btn">&times;</button>' +
       '</div>' +
       '<div class="easyea-modal-body" id="easyea-modal-body">' +
@@ -137,7 +174,8 @@
       '</div>' +
       '<div class="easyea-modal-footer" id="easyea-modal-footer">' +
         (footerHtml || '<button class="easyea-btn easyea-btn-secondary" id="easyea-btn-close">Close</button>') +
-      '</div>';
+      '</div>'
+    );
 
     overlay.appendChild(modal);
     if (document.body) {
@@ -166,19 +204,18 @@
     var body = 
       '<div class="easyea-form-group">' +
         '<label>EasyEA Server URL:</label>' +
-        '<input type="text" id="eea-set-url" class="easyea-input" value="' + (state.serverUrl || 'http://localhost:8000') + '" placeholder="http://localhost:8000">' +
+        '<input type="text" id="eea-set-url" class="easyea-input" value="' + escHtml(state.serverUrl || 'http://localhost:8000') + '" placeholder="http://localhost:8000">' +
       '</div>' +
       '<div class="easyea-form-group">' +
         '<label>Username:</label>' +
-        '<input type="text" id="eea-set-user" class="easyea-input" value="' + (state.username || '') + '" placeholder="admin">' +
+        '<input type="text" id="eea-set-user" class="easyea-input" value="' + escHtml(state.username || '') + '" placeholder="admin">' +
       '</div>' +
       '<div class="easyea-form-group">' +
         '<label>Password:</label>' +
         '<input type="password" id="eea-set-pass" class="easyea-input" placeholder="••••••••">' +
-        '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">Default credentials: <code>admin</code> / <code>AdminEasyEA2026!</code></div>' +
       '</div>' +
       '<div id="eea-login-status" style="margin-top: 10px; font-size: 13px;">' +
-        (state.token ? ('<span style="color: #34d399;">🟢 Connected as <b>' + (state.fullName || state.username) + '</b></span>') : '<span style="color: #94a3b8;">⚪ Not authenticated</span>') +
+        (state.token ? ('<span style="color: #34d399;">🟢 Connected as <b>' + escHtml(state.fullName || state.username) + '</b></span>') : '<span style="color: #94a3b8;">⚪ Not authenticated</span>') +
       '</div>';
 
     var footer = 
@@ -208,7 +245,7 @@
 
         var statusDiv = modal.querySelector('#eea-login-status');
         if (statusDiv) {
-          statusDiv.innerHTML = '<span style="color: #93c5fd;">⏳ Authenticating...</span>';
+          setSafeHtml(statusDiv, '<span style="color: #93c5fd;">⏳ Authenticating...</span>');
         }
 
         fetch(url.replace(/\/$/, '') + '/api/auth/login', {
@@ -239,14 +276,13 @@
         })
         .catch(function(err) {
           if (statusDiv) {
-            statusDiv.innerHTML = '<span style="color: #f87171;">❌ ' + err.message + '</span>';
+            setSafeHtml(statusDiv, '<span style="color: #f87171;">❌ ' + escHtml(err.message) + '</span>');
           }
         });
       };
     }
   }
 
-  // 2. Check-out BPMN Process Modal
   // 2. Check-out BPMN Process Modal
   function openCheckoutModal() {
     if (!state.token) {
@@ -290,12 +326,13 @@
     function renderList(schemas) {
       if (!listContainer) return;
       if (!schemas || schemas.length === 0) {
-        listContainer.innerHTML = 
+        setSafeHtml(listContainer,
           '<div style="padding: 30px; text-align: center; background: rgba(30, 41, 59, 0.4); border: 1px dashed #334155; border-radius: 8px;">' +
             '<p style="color: #94a3b8; font-size: 14px; margin-bottom: 12px;">No processes found matching your criteria.</p>' +
             '<p style="color: #64748b; font-size: 12px; margin-bottom: 16px;">You can create and save a new BPMN process directly from Camunda Modeler.</p>' +
-            '<button class="easyea-btn easyea-btn-primary" onclick="window.EasyEA.openCreateSchema()">💾 Save Current Diagram as New BPMN Schema</button>' +
-          '</div>';
+            '<button class="easyea-btn easyea-btn-primary" data-action="create-new">💾 Save Current Diagram as New BPMN Schema</button>' +
+          '</div>'
+        );
         return;
       }
 
@@ -303,38 +340,38 @@
       schemas.forEach(function(s) {
         var isLocked = s.status === 'checked_out';
         var lockBadge = isLocked 
-          ? '<span class="easyea-badge red">🔒 Locked by ' + (s.locked_by_username || 'another user') + '</span>'
+          ? '<span class="easyea-badge red">🔒 Locked by ' + escHtml(s.locked_by_username || 'another user') + '</span>'
           : '<span class="easyea-badge green">🟢 Available</span>';
         
         var formatBadge = s.format === 'bpmn'
           ? '<span class="easyea-badge purple">BPMN 2.0</span>'
-          : '<span class="easyea-badge blue">' + (s.format ? s.format.toUpperCase() : 'ARCHI') + '</span>';
+          : '<span class="easyea-badge blue">' + escHtml(s.format ? s.format.toUpperCase() : 'ARCHI') + '</span>';
 
         var docHtml = s.documentation 
-          ? ('<div style="font-size: 11px; color: #94a3b8; margin-top: 2px; max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + s.documentation + '</div>')
+          ? ('<div style="font-size: 11px; color: #94a3b8; margin-top: 2px; max-width: 420px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">' + escHtml(s.documentation) + '</div>')
           : '';
 
         html += 
-          '<div class="easyea-tree-item" id="schema-item-' + s.id + '" style="padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 6px;">' +
+          '<div class="easyea-tree-item" id="schema-item-' + escHtml(s.id) + '" style="padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 6px;">' +
             '<div style="flex: 1; min-width: 0; padding-right: 12px;">' +
               '<div style="display: flex; align-items: center; gap: 8px;">' +
-                '<span style="font-weight: 600; font-size: 14px; color: #ffffff;">📋 ' + s.name + '</span> ' +
+                '<span style="font-weight: 600; font-size: 14px; color: #ffffff;">📋 ' + escHtml(s.name) + '</span> ' +
                 formatBadge +
-                '<span style="font-size: 11px; color: #94a3b8;">' + (s.current_version || 'v1.0') + '</span>' +
+                '<span style="font-size: 11px; color: #94a3b8;">' + escHtml(s.current_version || 'v1.0') + '</span>' +
               '</div>' +
               '<div style="font-size: 11px; color: #64748b; margin-top: 2px;">' +
-                'Workspace: <strong style="color: #cbd5e1;">' + (s.workspace_name || s.model_id) + '</strong> &bull; Viewpoint: ' + (s.viewpoint || 'Business Process') +
+                'Workspace: <strong style="color: #cbd5e1;">' + escHtml(s.workspace_name || s.model_id) + '</strong> &bull; Viewpoint: ' + escHtml(s.viewpoint || 'Business Process') +
               '</div>' +
               docHtml +
             '</div>' +
             '<div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">' +
               lockBadge +
-              '<button class="easyea-btn easyea-btn-primary" style="padding: 5px 12px; font-size: 12px;" data-action="checkout" data-id="' + s.id + '">' + (isLocked ? 'Open' : '📥 Check-out') + '</button>' +
+              '<button class="easyea-btn easyea-btn-primary" style="padding: 5px 12px; font-size: 12px;" data-action="checkout" data-id="' + escHtml(s.id) + '">' + (isLocked ? 'Open' : '📥 Check-out') + '</button>' +
             '</div>' +
           '</div>';
       });
       html += '</div>';
-      listContainer.innerHTML = html;
+      setSafeHtml(listContainer, html);
     }
 
     if (listContainer) {
@@ -386,7 +423,7 @@
       })
       .catch(function(err) {
         if (listContainer) {
-          listContainer.innerHTML = '<p style="color: #f87171;">Error loading processes: ' + err.message + '</p>';
+          setSafeHtml(listContainer, '<p style="color: #f87171;">Error loading processes: ' + escHtml(err.message) + '</p>');
         }
       });
 
@@ -440,10 +477,11 @@
   }
 
   function doCheckout(schemaId) {
-    var btn = document.querySelector('#schema-item-' + schemaId + ' button');
-    if (btn) btn.innerHTML = '⏳ Checking out...';
+    var itemEl = document.getElementById('schema-item-' + schemaId);
+    var btn = itemEl ? itemEl.querySelector('button') : null;
+    if (btn) btn.textContent = '⏳ Checking out...';
 
-    apiFetch('/api/schemas/' + schemaId + '/checkout', { method: 'POST' })
+    apiFetch('/api/schemas/' + encodeURIComponent(schemaId) + '/checkout', { method: 'POST' })
       .then(function(res) {
         state.activeSchema = res.schema;
         saveConfig();
@@ -455,7 +493,7 @@
         }
       })
       .catch(function(err) {
-        if (btn) btn.innerHTML = '📥 Check-out';
+        if (btn) btn.textContent = '📥 Check-out';
         showToast('Check-out error: ' + err.message, 'error');
       });
   }
@@ -496,7 +534,7 @@
     function renderElements(elements) {
       if (!resultsContainer) return;
       if (!elements || elements.length === 0) {
-        resultsContainer.innerHTML = '<div style="padding: 24px; text-align: center; color: #94a3b8;">No elements found in catalog matching the query.</div>';
+        setSafeHtml(resultsContainer, '<div style="padding: 24px; text-align: center; color: #94a3b8;">No elements found in catalog matching the query.</div>');
         return;
       }
 
@@ -510,29 +548,29 @@
         else if (el.layer === 'Technology') badgeColor = 'green';
         else if (el.layer === 'Strategy') badgeColor = 'rose';
 
-        var docHtml = el.documentation ? ('<div style="font-size: 11px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;">' + el.documentation + '</div>') : '';
+        var docHtml = el.documentation ? ('<div style="font-size: 11px; color: #94a3b8; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 320px;">' + escHtml(el.documentation) + '</div>') : '';
 
         html += 
           '<div class="easyea-tree-item" style="padding: 10px 12px; display: flex; justify-content: space-between; align-items: center; background: rgba(30, 41, 59, 0.7); border: 1px solid #334155; border-radius: 6px;">' +
             '<div style="flex: 1; min-width: 0; padding-right: 12px;">' +
               '<div style="display: flex; align-items: center; gap: 6px;">' +
-                '<span style="font-weight: 600; color: #f8fafc; font-size: 13px;">' + el.name + '</span> ' +
-                '<span class="easyea-badge ' + badgeColor + '">' + el.type + '</span>' +
+                '<span style="font-weight: 600; color: #f8fafc; font-size: 13px;">' + escHtml(el.name) + '</span> ' +
+                '<span class="easyea-badge ' + badgeColor + '">' + escHtml(el.type) + '</span>' +
               '</div>' +
               '<div style="font-size: 11px; color: #64748b; margin-top: 2px;">' +
-                'ID: <code>' + el.id + '</code> &bull; Layer: <strong style="color: #cbd5e1;">' + el.layer + '</strong>' +
+                'ID: <code>' + escHtml(el.id) + '</code> &bull; Layer: <strong style="color: #cbd5e1;">' + escHtml(el.layer) + '</strong>' +
               '</div>' +
               docHtml +
             '</div>' +
             '<div style="display: flex; gap: 6px; flex-shrink: 0;">' +
-              '<button class="easyea-btn easyea-btn-primary" style="padding: 4px 8px; font-size: 11px;" data-action="insert" data-id="' + el.id + '" title="Insert as new BPMN shape on canvas">➕ Insert</button>' +
-              '<button class="easyea-btn easyea-btn-secondary" style="padding: 4px 8px; font-size: 11px;" data-action="link" data-id="' + el.id + '" title="Apply name to selected element on canvas">🔗 Link Selected</button>' +
-              '<button class="easyea-btn easyea-btn-secondary" style="padding: 4px 6px; font-size: 11px;" data-action="copy" data-id="' + el.id + '" title="Copy metadata to clipboard">📋</button>' +
+              '<button class="easyea-btn easyea-btn-primary" style="padding: 4px 8px; font-size: 11px;" data-action="insert" data-id="' + escHtml(el.id) + '" title="Insert as new BPMN shape on canvas">➕ Insert</button>' +
+              '<button class="easyea-btn easyea-btn-secondary" style="padding: 4px 8px; font-size: 11px;" data-action="link" data-id="' + escHtml(el.id) + '" title="Apply name to selected element on canvas">🔗 Link Selected</button>' +
+              '<button class="easyea-btn easyea-btn-secondary" style="padding: 4px 6px; font-size: 11px;" data-action="copy" data-id="' + escHtml(el.id) + '" title="Copy metadata to clipboard">📋</button>' +
             '</div>' +
           '</div>';
       });
 
-      resultsContainer.innerHTML = html;
+      setSafeHtml(resultsContainer, html);
     }
 
     if (resultsContainer) {
@@ -562,7 +600,7 @@
       var q = searchInput ? searchInput.value.trim() : '';
       var layer = layerSelect ? layerSelect.value : 'all';
       if (resultsContainer) {
-        resultsContainer.innerHTML = '<p style="color: #94a3b8; font-size: 12px;">⏳ Searching catalog...</p>';
+        setSafeHtml(resultsContainer, '<p style="color: #94a3b8; font-size: 12px;">⏳ Searching catalog...</p>');
       }
 
       var url = '/api/elements/search?limit=60';
@@ -575,7 +613,7 @@
         })
         .catch(function(err) {
           if (resultsContainer) {
-            resultsContainer.innerHTML = '<p style="color: #f87171;">Error searching catalog: ' + err.message + '</p>';
+            setSafeHtml(resultsContainer, '<p style="color: #f87171;">Error searching catalog: ' + escHtml(err.message) + '</p>');
           }
         });
     }
@@ -742,7 +780,7 @@
       var headers = {};
       if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
 
-      fetch(state.serverUrl.replace(/\/$/, '') + '/api/schemas/' + state.activeSchema.id + '/checkin-diff', {
+      fetch(state.serverUrl.replace(/\/$/, '') + '/api/schemas/' + encodeURIComponent(state.activeSchema.id) + '/checkin-diff', {
         method: 'POST',
         headers: headers,
         body: formData
@@ -782,8 +820,8 @@
             var badgeColor = el.layer === 'Business' ? 'amber' : (el.layer === 'Application' ? 'blue' : 'purple');
             html += 
               '<div style="font-size: 12px; padding: 6px 8px; margin-bottom: 4px; background: rgba(30, 41, 59, 0.6); border-left: 3px solid #34d399; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">' +
-                '<span><strong style="color: #ffffff;">' + el.name + '</strong></span>' +
-                '<span class="easyea-badge ' + badgeColor + '" style="font-size: 10px;">' + (el.type || 'Element') + '</span>' +
+                '<span><strong style="color: #ffffff;">' + escHtml(el.name) + '</strong></span>' +
+                '<span class="easyea-badge ' + badgeColor + '" style="font-size: 10px;">' + escHtml(el.type || 'Element') + '</span>' +
               '</div>';
           });
         }
@@ -793,14 +831,14 @@
           html += '<div style="font-size: 11px; font-weight: 700; color: #60a5fa; margin: 10px 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px;">📝 Modified Elements (' + diff.modified_elements.length + ')</div>';
           diff.modified_elements.forEach(function(el) {
             var changesSummary = (el.changes || []).map(function(c) {
-              return '<code>' + c.field + (c.prop_key ? ('.' + c.prop_key) : '') + '</code>: "' + (c.old_value || '') + '" ➔ <strong style="color: #60a5fa;">"' + (c.new_value || '') + '"</strong>';
+              return '<code>' + escHtml(c.field) + (c.prop_key ? ('.' + escHtml(c.prop_key)) : '') + '</code>: "' + escHtml(c.old_value || '') + '" ➔ <strong style="color: #60a5fa;">"' + escHtml(c.new_value || '') + '"</strong>';
             }).join(', ');
             var badgeColor = el.layer === 'Business' ? 'amber' : (el.layer === 'Application' ? 'blue' : 'purple');
             html += 
               '<div style="font-size: 12px; padding: 6px 8px; margin-bottom: 4px; background: rgba(30, 41, 59, 0.6); border-left: 3px solid #60a5fa; border-radius: 4px;">' +
                 '<div style="display: flex; justify-content: space-between; align-items: center;">' +
-                  '<span><strong style="color: #ffffff;">' + el.name + '</strong></span>' +
-                  '<span class="easyea-badge ' + badgeColor + '" style="font-size: 10px;">' + (el.type || 'Element') + '</span>' +
+                  '<span><strong style="color: #ffffff;">' + escHtml(el.name) + '</strong></span>' +
+                  '<span class="easyea-badge ' + badgeColor + '" style="font-size: 10px;">' + escHtml(el.type || 'Element') + '</span>' +
                 '</div>' +
                 (changesSummary ? ('<div style="font-size: 11px; color: #94a3b8; margin-top: 3px;">' + changesSummary + '</div>') : '') +
               '</div>';
@@ -815,8 +853,8 @@
             var tgt = rel.target_name || rel.target_id || 'Target';
             html += 
               '<div style="font-size: 12px; padding: 6px 8px; margin-bottom: 4px; background: rgba(30, 41, 59, 0.6); border-left: 3px solid #c084fc; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">' +
-                '<span><strong style="color: #cbd5e1;">' + src + '</strong> ➔ <strong style="color: #cbd5e1;">' + tgt + '</strong></span>' +
-                '<span class="easyea-badge purple" style="font-size: 10px;">' + (rel.type || 'Relation') + '</span>' +
+                '<span><strong style="color: #cbd5e1;">' + escHtml(src) + '</strong> ➔ <strong style="color: #cbd5e1;">' + escHtml(tgt) + '</strong></span>' +
+                '<span class="easyea-badge purple" style="font-size: 10px;">' + escHtml(rel.type || 'Relation') + '</span>' +
               '</div>';
           });
         }
@@ -827,8 +865,8 @@
           diff.catalog_removals.forEach(function(rm) {
             html += 
               '<div style="font-size: 12px; padding: 6px 8px; margin-bottom: 4px; background: rgba(30, 41, 59, 0.6); border-left: 3px solid #f87171; border-radius: 4px; display: flex; justify-content: space-between; align-items: center;">' +
-                '<span><strong style="color: #f87171;">' + (rm.name || rm.id) + '</strong></span>' +
-                '<span class="easyea-badge red" style="font-size: 10px;">' + (rm.type || 'Removed') + '</span>' +
+                '<span><strong style="color: #f87171;">' + escHtml(rm.name || rm.id) + '</strong></span>' +
+                '<span class="easyea-badge red" style="font-size: 10px;">' + escHtml(rm.type || 'Removed') + '</span>' +
               '</div>';
           });
         }
@@ -841,13 +879,14 @@
             '<textarea id="eea-commit-msg" class="easyea-textarea" rows="2" placeholder="Describe the changes made to the BPMN process flow..."></textarea>' +
           '</div>';
 
-        container.innerHTML = html;
+        setSafeHtml(container, html);
 
         var footerContainer = modal.querySelector('#easyea-modal-footer');
         if (footerContainer) {
-          footerContainer.innerHTML = 
+          setSafeHtml(footerContainer,
             '<button class="easyea-btn easyea-btn-secondary" id="easyea-btn-close">Cancel</button>' +
-            '<button class="easyea-btn easyea-btn-primary" id="eea-btn-confirm-checkin">🚀 Confirm Check-in & Sync</button>';
+            '<button class="easyea-btn easyea-btn-primary" id="eea-btn-confirm-checkin">🚀 Confirm Check-in & Sync</button>'
+          );
 
           var cancelBtn = footerContainer.querySelector('#easyea-btn-close');
           if (cancelBtn) cancelBtn.onclick = closeModal;
@@ -857,7 +896,7 @@
             confirmBtn.onclick = function() {
               var msgInput = modal.querySelector('#eea-commit-msg');
               var msg = (msgInput ? msgInput.value.trim() : '') || 'Updated BPMN process diagram';
-              apiFetch('/api/schemas/' + state.activeSchema.id + '/checkin-confirm', {
+              apiFetch('/api/schemas/' + encodeURIComponent(state.activeSchema.id) + '/checkin-confirm', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -892,7 +931,7 @@
       })
       .catch(function(err) {
         var container = modal.querySelector('#eea-diff-loading');
-        if (container) container.innerHTML = '<p style="color: #f87171;">Error: ' + err.message + '</p>';
+        if (container) setSafeHtml(container, '<p style="color: #f87171;">Error: ' + escHtml(err.message) + '</p>');
       });
     });
   }
@@ -929,13 +968,13 @@
         if (!container) return;
 
         if (!models || models.length === 0) {
-          container.innerHTML = '<p style="color: #f87171;">No workspaces found. Please create a workspace first in EasyEA.</p>';
+          setSafeHtml(container, '<p style="color: #f87171;">No workspaces found. Please create a workspace first in EasyEA.</p>');
           return;
         }
 
         var optionsHtml = models.map(function(m) {
           var sel = (state.activeModelId === m.id) ? ' selected' : '';
-          return '<option value="' + m.id + '"' + sel + '>' + m.name + (m.code ? (' [' + m.code + ']') : '') + '</option>';
+          return '<option value="' + escHtml(m.id) + '"' + sel + '>' + escHtml(m.name) + (m.code ? (' [' + escHtml(m.code) + ']') : '') + '</option>';
         }).join('');
 
         var html = 
@@ -953,13 +992,14 @@
           '</div>' +
           '<div id="eea-create-status" style="margin-top: 8px; font-size: 13px;"></div>';
 
-        container.innerHTML = html;
+        setSafeHtml(container, html);
 
         var footerContainer = modal.querySelector('#easyea-modal-footer');
         if (footerContainer) {
-          footerContainer.innerHTML = 
+          setSafeHtml(footerContainer,
             '<button class="easyea-btn easyea-btn-secondary" id="easyea-btn-close">Cancel</button>' +
-            '<button class="easyea-btn easyea-btn-primary" id="eea-btn-create-submit">🚀 Save & Check-in</button>';
+            '<button class="easyea-btn easyea-btn-primary" id="eea-btn-create-submit">🚀 Save & Check-in</button>'
+          );
 
           var cancelBtn = footerContainer.querySelector('#easyea-btn-close');
           if (cancelBtn) cancelBtn.onclick = closeModal;
@@ -977,11 +1017,11 @@
               var viewpoint = vpInput ? vpInput.value.trim() : 'Business Process Viewpoint';
 
               if (!schemaName) {
-                if (statusDiv) statusDiv.innerHTML = '<span style="color: #f87171;">⚠️ Please enter a schema name.</span>';
+                if (statusDiv) setSafeHtml(statusDiv, '<span style="color: #f87171;">⚠️ Please enter a schema name.</span>');
                 return;
               }
 
-              if (statusDiv) statusDiv.innerHTML = '<span style="color: #93c5fd;">⏳ Saving schema and synchronizing BPMN elements into ArchiMate...</span>';
+              if (statusDiv) setSafeHtml(statusDiv, '<span style="color: #93c5fd;">⏳ Saving schema and synchronizing BPMN elements into ArchiMate...</span>');
 
               getXml(function(xmlContent) {
                 var formData = new FormData();
@@ -992,7 +1032,7 @@
                 var headers = {};
                 if (state.token) headers['Authorization'] = 'Bearer ' + state.token;
 
-                fetch(state.serverUrl.replace(/\/$/, '') + '/api/schemas/' + modelId + '/import-file', {
+                fetch(state.serverUrl.replace(/\/$/, '') + '/api/schemas/' + encodeURIComponent(modelId) + '/import-file', {
                   method: 'POST',
                   headers: headers,
                   body: formData
@@ -1011,7 +1051,7 @@
                   closeModal();
                 })
                 .catch(function(err) {
-                  if (statusDiv) statusDiv.innerHTML = '<span style="color: #f87171;">❌ ' + err.message + '</span>';
+                  if (statusDiv) setSafeHtml(statusDiv, '<span style="color: #f87171;">❌ ' + escHtml(err.message) + '</span>');
                 });
               });
             };
@@ -1020,7 +1060,7 @@
       })
       .catch(function(err) {
         var container = modal.querySelector('#eea-create-schema-body');
-        if (container) container.innerHTML = '<p style="color: #f87171;">Error loading workspaces: ' + err.message + '</p>';
+        if (container) setSafeHtml(container, '<p style="color: #f87171;">Error loading workspaces: ' + escHtml(err.message) + '</p>');
       });
   }
 
@@ -1033,7 +1073,7 @@
     if (!confirm('Are you sure you want to discard check-out for "' + state.activeSchema.name + '"? The server lock will be released.')) {
       return;
     }
-    apiFetch('/api/schemas/' + state.activeSchema.id + '/discard-checkout', { method: 'POST' })
+    apiFetch('/api/schemas/' + encodeURIComponent(state.activeSchema.id) + '/discard-checkout', { method: 'POST' })
       .then(function() {
         showToast('Check-out discarded and lock released.', 'info');
         state.activeSchema = null;
@@ -1059,16 +1099,16 @@
       document.body.appendChild(widget);
     }
 
-    var authText = state.token ? ('🟢 ' + (state.fullName || state.username)) : '⚙️ EasyEA Login';
-    var schemaText = state.activeSchema ? ('📋 ' + state.activeSchema.name) : '💾 Save to EasyEA';
+    var authText = state.token ? ('🟢 ' + escHtml(state.fullName || state.username)) : '⚙️ EasyEA Login';
 
-    widget.innerHTML = 
+    setSafeHtml(widget,
       '<div class="easyea-toolbar-widget">' +
         '<span style="font-weight: 600; cursor: pointer; color: #a5b4fc;" id="eea-tb-settings" title="Click to open Settings & Login">' + authText + '</span>' +
         '<span style="color: #475569;">|</span>' +
-        '<span style="cursor: pointer; color: #cbd5e1;" id="eea-tb-checkout" title="Click to browse and check-out processes">' + (state.activeSchema ? ('📋 ' + state.activeSchema.name) : '📥 Check-out') + '</span>' +
+        '<span style="cursor: pointer; color: #cbd5e1;" id="eea-tb-checkout" title="Click to browse and check-out processes">' + (state.activeSchema ? ('📋 ' + escHtml(state.activeSchema.name)) : '📥 Check-out') + '</span>' +
         '<button class="easyea-toolbar-btn primary" id="eea-tb-checkin">' + (state.activeSchema ? '📤 Check-in' : '💾 Save as New') + '</button>' +
-      '</div>';
+      '</div>'
+    );
 
     var setBtn = document.getElementById('eea-tb-settings');
     if (setBtn) setBtn.onclick = openSettingsModal;

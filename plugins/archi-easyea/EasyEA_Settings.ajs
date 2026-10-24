@@ -21,6 +21,8 @@
     var HttpRequest = Java.type("java.net.http.HttpRequest");
     var HttpResponse = Java.type("java.net.http.HttpResponse");
     var ServerSocket = Java.type("java.net.ServerSocket");
+    var InetAddress = Java.type("java.net.InetAddress");
+    var UUID = Java.type("java.util.UUID");
     var InputStreamReader = Java.type("java.io.InputStreamReader");
     var BufferedReader = Java.type("java.io.BufferedReader");
     var StandardCharsets = Java.type("java.nio.charset.StandardCharsets");
@@ -50,13 +52,34 @@
         return config;
     }
 
+    function escapeHtml(str) {
+        if (!str) return "";
+        return ("" + str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
     function saveConfig(config) {
         if (!CONFIG_DIR.exists()) {
             CONFIG_DIR.mkdirs();
+            try {
+                CONFIG_DIR.setReadable(false, false);
+                CONFIG_DIR.setReadable(true, true);
+                CONFIG_DIR.setWritable(true, true);
+                CONFIG_DIR.setExecutable(true, true);
+            } catch(e) {}
         }
         var writer = new FileWriter(CONFIG_FILE);
         writer.write(JSON.stringify(config, null, 2));
         writer.close();
+        try {
+            CONFIG_FILE.setReadable(false, false);
+            CONFIG_FILE.setReadable(true, true); // owner-only permissions (0600)
+            CONFIG_FILE.setWritable(true, true);
+        } catch(e) {}
         ensureShutdownHookRegistered();
     }
 
@@ -447,9 +470,11 @@
 
             var serverSocket = null;
             var port = 8765;
+            var loopback = InetAddress.getByName("127.0.0.1");
             for (var p = 8765; p <= 8775; p++) {
                 try {
-                    serverSocket = new ServerSocket(p);
+                    // SAST-MED-01: bind exclusively to 127.0.0.1 (not 0.0.0.0)
+                    serverSocket = new ServerSocket(p, 1, loopback);
                     serverSocket.setSoTimeout(120000); // 2 min timeout
                     port = p;
                     break;
@@ -461,7 +486,8 @@
                 return;
             }
 
-            var callbackUrl = "http://127.0.0.1:" + port + "/callback";
+            var expectedClientState = "archi_" + UUID.randomUUID().toString();
+            var callbackUrl = "http://127.0.0.1:" + port + "/callback?client_state=" + expectedClientState;
             var authUrl = serverUrl + "/api/auth/oidc/login?return_to=" + encodeURIComponent(callbackUrl);
 
             console.log("Opening Keycloak login page in browser...");
@@ -476,6 +502,7 @@
 
             var receivedToken = null;
             var receivedError = null;
+            var receivedClientState = null;
             var startTime = System.currentTimeMillis();
 
             while (!receivedToken && !receivedError && (System.currentTimeMillis() - startTime < 120000)) {
@@ -512,7 +539,15 @@
                                 receivedToken = decodeURIComponent(paramVal);
                             } else if (paramKey === "error" || paramKey === "auth_error" || paramKey === "error_description") {
                                 receivedError = decodeURIComponent(paramVal);
+                            } else if (paramKey === "client_state") {
+                                receivedClientState = decodeURIComponent(paramVal);
                             }
+                        }
+
+                        // SAST-MED-01: verify loopback anti-CSRF state token
+                        if (receivedToken && receivedClientState !== expectedClientState) {
+                            receivedError = "Invalid or missing anti-CSRF state token in loopback callback.";
+                            receivedToken = null;
                         }
 
                         var htmlBody = "";
@@ -524,11 +559,12 @@
                                 ".badge{display:inline-block;margin-top:1.25rem;padding:0.4rem 1rem;background:#064e3b;color:#6ee7b7;border-radius:9999px;font-size:0.8rem;font-weight:bold;}</style></head>" +
                                 "<body><div class='card'><h1>Authentication Successful!</h1><p>Your access token for Archi has been registered successfully.<br><br>You can now close this tab and return to <strong>Archi</strong> to select your working library.</p><div class='badge'>Active Keycloak Session</div></div></body></html>";
                         } else {
+                            // SAST-MED-01: escape receivedError to prevent Reflected XSS
                             htmlBody = "<!DOCTYPE html><html><head><meta charset='utf-8'><title>EasyEA - Error</title>" +
                                 "<style>body{font-family:system-ui,-apple-system,sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0f172a;color:#f8fafc;}" +
                                 ".card{background:#1e293b;padding:2.5rem;border-radius:1.25rem;border:1px solid #ef4444;text-align:center;max-width:420px;}" +
                                 "h1{color:#ef4444;font-size:1.5rem;margin:0 0 0.75rem 0;}p{color:#94a3b8;font-size:0.95rem;}</style></head>" +
-                                "<body><div class='card'><h1>Authentication Error</h1><p>" + (receivedError || "Token parameter not found in the request.") + "</p></div></body></html>";
+                                "<body><div class='card'><h1>Authentication Error</h1><p>" + escapeHtml(receivedError || "Token parameter not found in the request.") + "</p></div></body></html>";
                         }
 
                         var bodyBytes = new StringClass(htmlBody).getBytes(StandardCharsets.UTF_8);

@@ -4,6 +4,8 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
+from app.models.archimate import ArchimateElement, User
+from app.api.deps import get_current_user, require_library_permission
 from app.services.apm_service import APMService
 
 router = APIRouter(prefix="/apm", tags=["Application Portfolio Management"])
@@ -25,7 +27,11 @@ class AppAttributeUpdate(BaseModel):
     notes: Optional[str] = None
 
 @router.get("/portfolio/{model_id}")
-def get_apm_portfolio(model_id: str, db: Session = Depends(get_db)):
+def get_apm_portfolio(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Returns full executive APM metrics:
     - TIME quadrant distributions (counts & costs)
@@ -39,9 +45,14 @@ def get_apm_portfolio(model_id: str, db: Session = Depends(get_db)):
 def update_application_apm(
     element_id: str,
     payload: AppAttributeUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     """Update business attributes (fit scores, cost, owners, lifecycle) for an application."""
+    el = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
+    if not el:
+        raise HTTPException(status_code=404, detail="Application element not found")
+    require_library_permission(db, current_user, "edit_apm_attributes", el.model_id)
     update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
     apm = APMService.update_app_attributes(db, element_id, update_data)
     return {

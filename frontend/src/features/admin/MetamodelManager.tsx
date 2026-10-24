@@ -39,9 +39,11 @@ import {
   Folder,
   FolderPlus,
   Edit3,
-  Pencil
+  Pencil,
+  Package
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { AttributePackagesManager } from './AttributePackagesManager';
 
 const LAYERS = ['All', 'Strategy', 'Business', 'Application', 'Technology', 'Motivation', 'Implementation'];
 
@@ -55,7 +57,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
   activeModelId
 }) => {
   const { t, interpolate } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'types' | 'matrix'>('types');
+  const [activeTab, setActiveTab] = useState<'types' | 'packages' | 'matrix'>('types');
 
   // Active Scope for Metamodel view: 'global' or specific model_id
   const [selectedScope, setSelectedScope] = useState<string>(activeModelId || 'global');
@@ -97,6 +99,66 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
     newSection: '',
     error: null,
     saving: false,
+  });
+
+  // Add Section Modal State
+  const [addSectionModal, setAddSectionModal] = useState<{
+    isOpen: boolean;
+    sectionName: string;
+    error: string | null;
+  }>({
+    isOpen: false,
+    sectionName: '',
+    error: null,
+  });
+
+  // Stereotypes Modal States
+  const [stereotypeModal, setStereotypeModal] = useState<{
+    isOpen: boolean;
+    isEditing: boolean;
+    stereotypeId: string | null;
+    name: string;
+    label: string;
+    description: string;
+    icon_color: string;
+    base_type: string;
+    model_id: string | null;
+    saving: boolean;
+    error: string | null;
+  }>({
+    isOpen: false,
+    isEditing: false,
+    stereotypeId: null,
+    name: '',
+    label: '',
+    description: '',
+    icon_color: 'indigo',
+    base_type: '',
+    model_id: null,
+    saving: false,
+    error: null,
+  });
+
+  const [linkAttrModal, setLinkAttrModal] = useState<{
+    isOpen: boolean;
+    stereotypeId: string;
+    stereotypeLabel: string;
+    attribute_name: string;
+    is_required: boolean;
+    default_value: string;
+    section_override: string;
+    saving: boolean;
+    error: string | null;
+  }>({
+    isOpen: false,
+    stereotypeId: '',
+    stereotypeLabel: '',
+    attribute_name: '',
+    is_required: false,
+    default_value: '',
+    section_override: '',
+    saving: false,
+    error: null,
   });
 
   // Form State
@@ -161,6 +223,12 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
       setLoadingMatrix(false);
     }
   };
+
+  useEffect(() => {
+    if (activeModelId && activeModelId !== selectedScope) {
+      setSelectedScope(activeModelId);
+    }
+  }, [activeModelId]);
 
   useEffect(() => {
     loadMetamodel(selectedScope);
@@ -250,6 +318,25 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
     }
   };
 
+  const handleOpenAddSection = () => {
+    setAddSectionModal({
+      isOpen: true,
+      sectionName: '',
+      error: null,
+    });
+  };
+
+  const handleSaveAddSection = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = addSectionModal.sectionName.trim();
+    if (!cleanName) {
+      setAddSectionModal((prev) => ({ ...prev, error: t.metamodel.addSectionErrorEmpty }));
+      return;
+    }
+    setAddSectionModal({ isOpen: false, sectionName: '', error: null });
+    handleOpenAddModal(selectedType?.type, selectedType?.layer, cleanName);
+  };
+
   const handleSaveAttribute = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name.trim() || !formData.label.trim()) return;
@@ -310,6 +397,143 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
     }
   };
 
+  const getStereotypeColorClass = (color?: string) => {
+    switch (color) {
+      case 'indigo': return 'bg-indigo-100 text-indigo-800 border-indigo-300';
+      case 'purple': return 'bg-purple-100 text-purple-800 border-purple-300';
+      case 'blue': return 'bg-blue-100 text-blue-800 border-blue-300';
+      case 'emerald': return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'amber': return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'rose': return 'bg-rose-100 text-rose-800 border-rose-300';
+      case 'cyan': return 'bg-cyan-100 text-cyan-800 border-cyan-300';
+      default: return 'bg-slate-100 text-slate-800 border-slate-300';
+    }
+  };
+
+  const handleOpenAddStereotype = (baseType: string) => {
+    setStereotypeModal({
+      isOpen: true,
+      isEditing: false,
+      stereotypeId: null,
+      name: '',
+      label: '',
+      description: '',
+      icon_color: 'indigo',
+      base_type: baseType,
+      model_id: selectedScope !== 'global' ? selectedScope : null,
+      saving: false,
+      error: null,
+    });
+  };
+
+  const handleOpenEditStereotype = (st: any) => {
+    setStereotypeModal({
+      isOpen: true,
+      isEditing: true,
+      stereotypeId: st.id,
+      name: st.name,
+      label: st.label,
+      description: st.description || '',
+      icon_color: st.icon_color || 'indigo',
+      base_type: st.base_type,
+      model_id: st.model_id || null,
+      saving: false,
+      error: null,
+    });
+  };
+
+  const handleSaveStereotype = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!stereotypeModal.name.trim()) {
+      setStereotypeModal((prev) => ({ ...prev, error: 'Il nome dello stereotipo è obbligatorio' }));
+      return;
+    }
+    setStereotypeModal((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      if (stereotypeModal.isEditing && stereotypeModal.stereotypeId) {
+        await api.updateStereotype(stereotypeModal.stereotypeId, {
+          name: stereotypeModal.name.trim(),
+          label: stereotypeModal.label.trim(),
+          description: stereotypeModal.description.trim(),
+          icon_color: stereotypeModal.icon_color,
+        });
+      } else {
+        await api.createStereotype({
+          name: stereotypeModal.name.trim(),
+          label: stereotypeModal.label.trim() || undefined,
+          base_type: stereotypeModal.base_type,
+          description: stereotypeModal.description.trim() || undefined,
+          icon_color: stereotypeModal.icon_color,
+          model_id: stereotypeModal.model_id,
+        });
+      }
+      setStereotypeModal((prev) => ({ ...prev, isOpen: false }));
+      await loadMetamodel(selectedScope);
+    } catch (err: any) {
+      setStereotypeModal((prev) => ({ ...prev, error: err.message || 'Errore durante il salvataggio dello stereotipo' }));
+    } finally {
+      setStereotypeModal((prev) => ({ ...prev, saving: false }));
+    }
+  };
+
+  const handleDeleteStereotype = async (stereotypeId: string) => {
+    if (!window.confirm(t.metamodel.confirmDeleteStereotype)) return;
+    try {
+      await api.deleteStereotype(stereotypeId);
+      await loadMetamodel(selectedScope);
+    } catch (err: any) {
+      alert(err.message || 'Errore durante l\'eliminazione dello stereotipo');
+    }
+  };
+
+  const handleOpenLinkAttribute = (stereotypeId: string, stereotypeLabel: string) => {
+    const availableAttrs = selectedType?.custom_attributes || [];
+    const firstAttrName = availableAttrs.length > 0 ? availableAttrs[0].name : '';
+    setLinkAttrModal({
+      isOpen: true,
+      stereotypeId,
+      stereotypeLabel,
+      attribute_name: firstAttrName,
+      is_required: false,
+      default_value: '',
+      section_override: '',
+      saving: false,
+      error: null,
+    });
+  };
+
+  const handleSaveLinkAttribute = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkAttrModal.attribute_name.trim()) {
+      setLinkAttrModal((prev) => ({ ...prev, error: 'Seleziona un attributo da collegare' }));
+      return;
+    }
+    setLinkAttrModal((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      await api.linkAttributeToStereotype(linkAttrModal.stereotypeId, {
+        attribute_name: linkAttrModal.attribute_name.trim(),
+        is_required: linkAttrModal.is_required,
+        default_value: linkAttrModal.default_value.trim() || undefined,
+        section_override: linkAttrModal.section_override.trim() || undefined,
+      });
+      setLinkAttrModal((prev) => ({ ...prev, isOpen: false }));
+      await loadMetamodel(selectedScope);
+    } catch (err: any) {
+      setLinkAttrModal((prev) => ({ ...prev, error: err.message || 'Errore durante il collegamento dell\'attributo' }));
+    } finally {
+      setLinkAttrModal((prev) => ({ ...prev, saving: false }));
+    }
+  };
+
+  const handleUnlinkAttribute = async (stereotypeId: string, linkId: string) => {
+    try {
+      await api.unlinkAttributeFromStereotype(stereotypeId, linkId);
+      await loadMetamodel(selectedScope);
+    } catch (err: any) {
+      alert(err.message || 'Errore durante la rimozione della regola attributo');
+    }
+  };
+
   const getDataTypeIcon = (dt: string) => {
     switch (dt) {
       case 'number':
@@ -344,17 +568,15 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
   const allAvailableTypes = layersData.flatMap((l) => l.element_types);
 
   const allKnownSections = Array.from(
-    new Set([
-      'APM & Business Portfolio',
-      'Custom Attributes',
-      'Security & Compliance',
-      'Disaster Recovery & SLAs',
-      'Financial Governance',
-      'Technical Architecture',
-      'Data Privacy & GDPR',
-      ...allAvailableTypes.flatMap((tItem) => (tItem.custom_attributes || []).map((a) => (a.section || 'Custom Attributes').trim()))
-    ])
-  ).filter(Boolean);
+    new Set(
+      allAvailableTypes.flatMap((tItem) =>
+        (tItem.custom_attributes || []).map((a) => (a.section || '').trim()).filter(Boolean)
+      )
+    )
+  ).filter(Boolean) as string[];
+  if (allKnownSections.length === 0) {
+    allKnownSections.push('APM Portfolio', 'TIME Assessment');
+  }
 
   const filteredTypes = filteredLayers.flatMap((layer) =>
     layer.element_types
@@ -417,6 +639,17 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
             <span>{t.metamodel.tabObjectTypes}</span>
           </button>
           <button
+            onClick={() => setActiveTab('packages')}
+            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+              activeTab === 'packages'
+                ? 'bg-white text-rose-600 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>{t.metamodel.tabAttributePackages}</span>
+          </button>
+          <button
             onClick={() => setActiveTab('matrix')}
             className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
               activeTab === 'matrix'
@@ -435,167 +668,185 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
       {/* ======================================================== */}
       {activeTab === 'types' && (
         <div className="space-y-6">
-          {/* Scope Selector Bar (Global vs Library) */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 border border-slate-200 rounded-2xl p-3 shadow-inner">
-            <div className="flex items-center space-x-2">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 pl-1">
-                <Layers className="w-3.5 h-3.5 text-rose-600" />
-                {t.metamodel.scopeFilterTitle}
-              </span>
-              <select
-                value={selectedScope}
-                onChange={(e) => setSelectedScope(e.target.value)}
-                className="bg-white border border-slate-300 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 focus:outline-none focus:border-rose-500 cursor-pointer shadow-sm"
-              >
-                <option value="global">{t.metamodel.scopeGlobalOption}</option>
-                {models.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {interpolate(t.metamodel.scopeLibraryPrefix, { code: m.code || '----', name: m.name })}
-                  </option>
+          {/* ======================================================== */}
+          {/* SEZIONE IN ALTO: RICERCA & SELEZIONE TIPI DI OGGETTO     */}
+          {/* ======================================================== */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
+            {/* Filter Row: Search & Layer Pills */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  placeholder={t.metamodel.filterTypesPlaceholder}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {LAYERS.map((layer) => (
+                  <button
+                    key={layer}
+                    onClick={() => setSelectedLayer(layer)}
+                    className={`px-2.5 py-1 rounded-xl text-xs font-bold transition border cursor-pointer ${
+                      selectedLayer === layer
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:text-slate-900 hover:bg-slate-100'
+                    }`}
+                  >
+                    {layer === 'All' ? t.metamodel.allLayersFilter : layer}
+                  </button>
                 ))}
-              </select>
-            </div>
-
-            <div className="text-[11px] text-slate-500 pr-1">
-              {selectedScope === 'global' ? (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-200 text-slate-700 font-semibold">
-                  🌐 {t.metamodel.scopeBadgeGlobal}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-800 font-semibold font-mono">
-                  📚 {interpolate(t.metamodel.scopeBadgeLibrary, { code: models.find(m => m.id === selectedScope)?.code || '----' })}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Layer Filter Pills & Add Button */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex flex-wrap items-center gap-2">
-              {LAYERS.map((layer) => (
-                <button
-                  key={layer}
-                  onClick={() => setSelectedLayer(layer)}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                    selectedLayer === layer
-                      ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                      : 'bg-white text-slate-700 border-slate-200 hover:text-slate-900 hover:border-slate-300'
-                  }`}
-                >
-                  {layer === 'All' ? t.metamodel.allLayersFilter : layer}
-                </button>
-              ))}
-            </div>
-
-            <button
-              onClick={() => handleOpenAddModal()}
-              className="flex items-center space-x-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition self-start sm:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t.metamodel.addAttributeBtn}</span>
-            </button>
-          </div>
-
-          {/* Main 2-Column Split */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            
-            {/* Left: Object Types List */}
-            <div className="lg:col-span-5 space-y-3">
-              <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
-                <div className="relative">
-                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    placeholder={t.metamodel.filterTypesPlaceholder}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:border-rose-500 focus:bg-white"
-                  />
-                </div>
-
-                <div className="text-[11px] font-bold text-slate-500 px-1">
-                  {interpolate(t.metamodel.totalObjectTypes, { count: filteredTypes.length })}
-                </div>
-
-                <div className="space-y-2 max-h-[620px] overflow-y-auto pr-1">
-                  {filteredTypes.map((item) => {
-                    const isSelected = selectedType?.type === item.type;
-                    const totalAttrs =
-                      (item.standard_attributes?.length || 0) +
-                      (item.custom_attributes?.length || 0);
-
-                    return (
-                      <div
-                        key={item.type}
-                        onClick={() => setSelectedType(item)}
-                        className={`p-3.5 rounded-xl border cursor-pointer transition ${
-                          isSelected
-                            ? 'bg-rose-50/70 border-rose-500 ring-1 ring-rose-500/40 shadow-sm'
-                            : 'bg-white border-slate-200 hover:border-slate-300'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between">
-                          <div>
-                            <span className="font-mono text-xs font-bold text-slate-900">{item.type}</span>
-                            <h4 className="text-xs text-slate-600 mt-0.5">{item.name}</h4>
-                          </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${item.layerMeta.bg_color} ${item.layerMeta.text_color} ${item.layerMeta.border_color}`}>
-                            {item.layer}
-                          </span>
-                        </div>
-
-                        <div className="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500">
-                          <span>{totalAttrs} {t.metamodel.totalAttributes}</span>
-                          {item.custom_attributes && item.custom_attributes.length > 0 && (
-                            <span className="font-bold text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">
-                              +{item.custom_attributes.length} custom
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
               </div>
             </div>
 
-            {/* Right: Object Type Attributes Inspector */}
-            <div className="lg:col-span-7 space-y-6">
-              {selectedType ? (
-                <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-                  
-                  {/* Type Detail Header */}
-                  <div className="border-b border-slate-100 pb-4 flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 bg-rose-50 px-2.5 py-0.5 rounded-full border border-rose-200">
-                          {selectedType.layer} Layer
-                        </span>
-                        <span className="font-mono text-xs font-bold text-slate-500">{selectedType.type}</span>
+            {/* Types Selection Grid */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 px-1">
+                <span>{interpolate(t.metamodel.totalObjectTypes, { count: filteredTypes.length })}</span>
+                <span className="text-[10px] text-slate-400 font-normal">{t.metamodel.selectObjectTypeBannerHint}</span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-7 gap-2 max-h-52 overflow-y-auto p-1.5 border border-slate-200 rounded-xl bg-slate-50/60">
+                {filteredTypes.map((item) => {
+                  const isSelected = selectedType?.type === item.type;
+                  const customCount = item.custom_attributes?.length || 0;
+                  const stereoCount = item.stereotypes?.length || 0;
+
+                  return (
+                    <div
+                      key={item.type}
+                      onClick={() => setSelectedType(item)}
+                      className={`p-2 rounded-xl border cursor-pointer transition text-left flex flex-col justify-between ${
+                        isSelected
+                          ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/30 shadow-sm'
+                          : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-2xs'
+                      }`}
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center justify-between">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${item.layerMeta.bg_color} ${item.layerMeta.text_color} ${item.layerMeta.border_color}`}>
+                            {item.layer}
+                          </span>
+                          {customCount > 0 && (
+                            <span className="text-[9px] font-bold text-rose-700 bg-rose-100 px-1 py-0.2 rounded">
+                              +{customCount}
+                            </span>
+                          )}
+                        </div>
+                        <div className="font-mono text-xs font-bold text-slate-900 truncate" title={item.type}>
+                          {item.type}
+                        </div>
+                        <div className="text-[10px] text-slate-500 truncate" title={item.name}>
+                          {item.name}
+                        </div>
                       </div>
-                      <h3 className="text-lg font-bold text-slate-900 mt-1.5">{selectedType.name}</h3>
-                      <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                        {selectedType.description}
+
+                      <div className="mt-1 pt-1 border-t border-slate-100 flex items-center justify-between text-[9px] text-slate-400">
+                        <span>{item.standard_attributes?.length || 0} core</span>
+                        {stereoCount > 0 && (
+                          <span className="font-bold text-indigo-700 bg-indigo-50 px-1 py-0.2 rounded">
+                            {stereoCount} st.
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Currently Selected Type Summary Banner */}
+            {selectedType && (
+              <div className="bg-gradient-to-r from-rose-50/60 to-indigo-50/40 border border-slate-200 rounded-xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 bg-rose-100 border border-rose-200 px-2 py-0.5 rounded-full">
+                      {selectedType.layer} Layer
+                    </span>
+                    <span className="font-mono text-xs font-bold text-slate-900">{selectedType.type}</span>
+                    <span className="text-xs text-slate-500">•</span>
+                    <span className="text-xs font-bold text-slate-800">{selectedType.name}</span>
+                  </div>
+                  <p className="text-xs text-slate-600 max-w-4xl leading-relaxed">
+                    {selectedType.description}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+                  <span className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                    Attributi Custom: <strong className="text-rose-700">{selectedType.custom_attributes?.length || 0}</strong>
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
+                    Stereotipi: <strong className="text-indigo-700">{selectedType.stereotypes?.length || 0}</strong>
+                  </span>
+
+                  <button
+                    onClick={() => handleOpenAddSection()}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                    title={interpolate(t.metamodel.addSectionModalSubtitle, { type: selectedType.type })}
+                  >
+                    <FolderPlus className="w-3.5 h-3.5 text-slate-600" />
+                    <span>{t.metamodel.addSectionBtn}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenAddStereotype(selectedType.type)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                    title={t.metamodel.addStereotypeBtn}
+                  >
+                    <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                    <span>{t.metamodel.addStereotypeBtn}</span>
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenAddModal(selectedType.type, selectedType.layer)}
+                    className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition cursor-pointer"
+                    title={t.metamodel.addAttributeBtn}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{t.metamodel.addAttributeBtn}</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ======================================================== */}
+          {/* SEZIONE IN BASSO: 2 COLONNE (SINISTRA: ATTRIBUTI 60%, DESTRA: STEREOTIPI 40%) */}
+          {/* ======================================================== */}
+          {selectedType ? (
+            <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-start">
+              
+              {/* ==================================================== */}
+              {/* IN BASSO A SINISTRA: ATTRIBUTI & SEZIONI (60%)      */}
+              {/* ==================================================== */}
+              <div className="lg:col-span-3 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5">
+                {/* Header */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="w-4 h-4 text-rose-600" />
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900">
+                        {interpolate(t.metamodel.customAttributesSection, { count: selectedType.custom_attributes?.length || 0 })}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        Gestisci o aggiungi attributi e sezioni personalizzate per {selectedType.type}
                       </p>
                     </div>
-
-                    <button
-                      onClick={() => handleOpenAddModal(selectedType.type, selectedType.layer)}
-                      className="flex items-center space-x-1 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-bold transition self-start"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      <span>{t.metamodel.addAttributeBtn}</span>
-                    </button>
                   </div>
+                </div>
 
-                  {/* Section 1: Standard ArchiMate Attributes (Core) */}
-                  <div className="space-y-3">
-                    <div className="flex items-center space-x-2">
-                      <Tag className="w-4 h-4 text-slate-500" />
-                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                        {t.metamodel.standardCoreSection}
-                      </h4>
-                    </div>
+                {/* Section 1: Standard ArchiMate Attributes (Core) */}
+                <div className="space-y-3">
+                  <div className="flex items-center space-x-2">
+                    <Tag className="w-4 h-4 text-slate-500" />
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      {t.metamodel.standardCoreSection}
+                    </h4>
+                  </div>
 
                     <div className="grid grid-cols-1 gap-2.5">
                       {selectedType.standard_attributes?.map((attr) => (
@@ -845,17 +1096,172 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                       </div>
                     )}
                   </div>
+                </div>
 
+              {/* ==================================================== */}
+              {/* IN BASSO A DESTRA: GESTIONE DEGLI STEREOTIPI (40%)   */}
+              {/* ==================================================== */}
+              <div className="lg:col-span-2 bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-5">
+                {/* Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
+                  <div className="flex items-center space-x-2">
+                    <Layers className="w-4 h-4 text-indigo-600" />
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-indigo-900">
+                        {interpolate(t.metamodel.stereotypesSectionTitle, { count: selectedType.stereotypes?.length || 0 })}
+                      </h4>
+                      <p className="text-[11px] text-slate-500 mt-0.5">
+                        {t.metamodel.stereotypesSectionDesc}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-16 text-center text-slate-400 text-xs">
-                  {t.metamodel.selectObjectTypeHint}
-                </div>
-              )}
+
+                {selectedType.stereotypes && selectedType.stereotypes.length > 0 ? (
+                  <div className="space-y-3">
+                    {selectedType.stereotypes.map((st) => (
+                      <div
+                        key={st.id}
+                        className="bg-indigo-50/30 border border-indigo-100 rounded-2xl p-4 space-y-3 shadow-2xs"
+                      >
+                        {/* Stereotype Header */}
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 pb-2.5 border-b border-indigo-100/80">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className={`text-xs font-bold px-2.5 py-0.5 rounded-lg border font-mono ${getStereotypeColorClass(st.icon_color)}`}>
+                                {st.label}
+                              </span>
+                              <span className="font-bold text-slate-900 text-xs">{st.name}</span>
+                              {st.is_system ? (
+                                <span className="text-[10px] font-bold bg-slate-200 text-slate-700 px-2 py-0.2 rounded-full">
+                                  System
+                                </span>
+                              ) : st.model_id ? (
+                                <span className="text-[10px] font-bold bg-purple-100 text-purple-800 px-2 py-0.2 rounded-full">
+                                  Libreria
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.2 rounded-full">
+                                  Globale
+                                </span>
+                              )}
+                            </div>
+                            {st.description && (
+                              <p className="text-[11px] text-slate-600 leading-relaxed">{st.description}</p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                            <button
+                              onClick={() => handleOpenLinkAttribute(st.id, st.label)}
+                              className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-bold text-indigo-700 bg-white hover:bg-indigo-50 border border-indigo-200 rounded-lg transition shadow-2xs cursor-pointer"
+                              title={t.metamodel.stereotypeAddAttributeRule}
+                            >
+                              <Plus className="w-3 h-3" />
+                              <span>{t.metamodel.stereotypeAddAttributeRule}</span>
+                            </button>
+                            <button
+                              onClick={() => handleOpenEditStereotype(st)}
+                              className="p-1 text-slate-500 hover:text-slate-800 hover:bg-white rounded-lg border border-transparent hover:border-slate-200 transition cursor-pointer"
+                              title={t.metamodel.editStereotypeTooltip}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            {!st.is_system && (
+                              <button
+                                onClick={() => handleDeleteStereotype(st.id)}
+                                className="p-1 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-transparent hover:border-rose-200 transition cursor-pointer"
+                                title={t.metamodel.deleteStereotypeTooltip}
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Linked Attribute Rules */}
+                        <div className="space-y-2">
+                          <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                            {interpolate(t.metamodel.stereotypeLinkedAttributes, { count: st.attribute_links?.length || 0 })}
+                          </div>
+
+                          {st.attribute_links && st.attribute_links.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-2">
+                              {st.attribute_links.map((link) => (
+                                <div
+                                  key={link.id}
+                                  className="p-2.5 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs shadow-2xs"
+                                >
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="font-mono font-bold text-slate-900 text-xs">
+                                      {link.attribute_name}
+                                    </span>
+                                    {link.is_required && (
+                                      <span className="text-[9px] font-bold bg-rose-100 text-rose-800 border border-rose-200 px-1.5 py-0.2 rounded">
+                                        {t.metamodel.required}
+                                      </span>
+                                    )}
+                                    {link.default_value !== undefined && link.default_value !== null && link.default_value !== '' && (
+                                      <span className="text-[10px] text-slate-600 bg-slate-50 border border-slate-200 px-2 py-0.5 rounded-md">
+                                        Default: <strong className="font-mono">{String(link.default_value)}</strong>
+                                      </span>
+                                    )}
+                                    {link.section_override && (
+                                      <span className="text-[10px] text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md">
+                                        Sezione: <strong>{link.section_override}</strong>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  <button
+                                    onClick={() => handleUnlinkAttribute(st.id, link.id)}
+                                    className="text-slate-400 hover:text-rose-600 p-1 rounded-md transition cursor-pointer"
+                                    title={t.metamodel.removeRuleTooltip}
+                                  >
+                                    <X className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-[11px] text-slate-500 italic">
+                              {t.metamodel.noLinkedAttributesForStereotype}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-6 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-center space-y-2">
+                    <p className="text-xs text-slate-500">{t.metamodel.noStereotypesForType}</p>
+                    <button
+                      onClick={() => handleOpenAddStereotype(selectedType.type)}
+                      className="text-xs font-bold text-indigo-600 hover:text-indigo-800 cursor-pointer"
+                    >
+                      {t.metamodel.addStereotypeBtn}
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-
-          </div>
+          ) : (
+            <div className="bg-white border border-dashed border-slate-300 rounded-2xl p-16 text-center text-slate-400 text-xs">
+              {t.metamodel.selectObjectTypeHint}
+            </div>
+          )}
         </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* TAB 2: ATTRIBUTE PACKAGES                                */}
+      {/* ======================================================== */}
+      {activeTab === 'packages' && (
+        <AttributePackagesManager
+          models={models}
+          selectedScope={selectedScope}
+          onPackageUpdated={() => loadMetamodel(selectedScope)}
+        />
       )}
 
       {/* ======================================================== */}
@@ -1512,6 +1918,76 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
         </div>
       )}
 
+      {/* Modal: Add New Section */}
+      {addSectionModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => setAddSectionModal({ isOpen: false, sectionName: '', error: null })}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2.5 mb-1">
+              <div className="w-8 h-8 rounded-xl bg-rose-100 flex items-center justify-center text-rose-600">
+                <FolderPlus className="w-4 h-4" />
+              </div>
+              <h3 className="text-base font-bold text-slate-900">
+                {t.metamodel.addSectionModalTitle}
+              </h3>
+            </div>
+            <p className="text-xs text-slate-500 mb-4">
+              {interpolate(t.metamodel.addSectionModalSubtitle, { type: selectedType?.type || '' })}
+            </p>
+
+            {addSectionModal.error && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
+                <span>{addSectionModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveAddSection} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t.metamodel.addSectionNameLabel} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  autoFocus
+                  placeholder={t.metamodel.addSectionNamePlaceholder}
+                  value={addSectionModal.sectionName}
+                  onChange={(e) => setAddSectionModal((prev) => ({ ...prev, sectionName: e.target.value, error: null }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-rose-500 focus:bg-white font-medium"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  {t.metamodel.addSectionHelp}
+                </p>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setAddSectionModal({ isOpen: false, sectionName: '', error: null })}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition cursor-pointer"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="submit"
+                  className="flex items-center space-x-1.5 px-5 py-2 text-xs font-bold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{t.metamodel.createSectionBtn}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal: Rename Section */}
       {renameSectionModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -1584,6 +2060,252 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                 >
                   <Check className="w-4 h-4" />
                   <span>{t.metamodel.renameBtn}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Create / Edit Stereotype */}
+      {stereotypeModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setStereotypeModal((prev) => ({ ...prev, isOpen: false }))}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-5 pb-3 border-b border-slate-100">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shadow-xs">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {stereotypeModal.isEditing ? 'Modifica Stereotipo' : t.metamodel.addStereotypeBtn}
+                </h3>
+                <p className="text-xs text-slate-500 font-mono">
+                  Base Type: <strong>{stereotypeModal.base_type}</strong>
+                </p>
+              </div>
+            </div>
+
+            {stereotypeModal.error && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{stereotypeModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveStereotype} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t.metamodel.stereotypeName} *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder={t.metamodel.stereotypeNamePlaceholder}
+                  value={stereotypeModal.name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setStereotypeModal((prev) => ({
+                      ...prev,
+                      name: val,
+                      label: prev.label && prev.label !== `«${prev.name}»` ? prev.label : `«${val}»`
+                    }));
+                  }}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {t.metamodel.stereotypeLabel}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="«Microservice»"
+                    value={stereotypeModal.label}
+                    onChange={(e) => setStereotypeModal((prev) => ({ ...prev, label: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    {t.metamodel.stereotypeColor}
+                  </label>
+                  <select
+                    value={stereotypeModal.icon_color}
+                    onChange={(e) => setStereotypeModal((prev) => ({ ...prev, icon_color: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white cursor-pointer font-bold"
+                  >
+                    <option value="indigo">Indigo / Violet</option>
+                    <option value="purple">Purple / Fucsia</option>
+                    <option value="blue">Blue / Navy</option>
+                    <option value="emerald">Emerald / Green</option>
+                    <option value="amber">Amber / Yellow</option>
+                    <option value="rose">Rose / Red</option>
+                    <option value="cyan">Cyan / Teal</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t.metamodel.stereotypeDescription}
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder={t.metamodel.stereotypeDescPlaceholder}
+                  value={stereotypeModal.description}
+                  onChange={(e) => setStereotypeModal((prev) => ({ ...prev, description: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setStereotypeModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={stereotypeModal.saving}
+                  className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{t.common.save}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Link Attribute to Stereotype */}
+      {linkAttrModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setLinkAttrModal((prev) => ({ ...prev, isOpen: false }))}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center space-x-3 mb-5 pb-3 border-b border-slate-100">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shadow-xs">
+                <Tag className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  {t.metamodel.stereotypeAddAttributeRule}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Stereotipo: <strong>{linkAttrModal.stereotypeLabel}</strong>
+                </p>
+              </div>
+            </div>
+
+            {linkAttrModal.error && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-700 rounded-xl text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{linkAttrModal.error}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSaveLinkAttribute} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t.metamodel.stereotypeAttributeName} *
+                </label>
+                {selectedType?.custom_attributes && selectedType.custom_attributes.length > 0 ? (
+                  <select
+                    value={linkAttrModal.attribute_name}
+                    onChange={(e) => setLinkAttrModal((prev) => ({ ...prev, attribute_name: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white cursor-pointer font-medium"
+                  >
+                    {selectedType.custom_attributes.map((attr) => (
+                      <option key={attr.id} value={attr.name}>
+                        [{attr.section || 'General'}] {attr.label} ({attr.name})
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Es. apm_hosting_type, micro_repo_url..."
+                    value={linkAttrModal.attribute_name}
+                    onChange={(e) => setLinkAttrModal((prev) => ({ ...prev, attribute_name: e.target.value }))}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white font-mono"
+                  />
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t.metamodel.stereotypeDefaultValue}
+                </label>
+                <input
+                  type="text"
+                  placeholder={t.metamodel.stereotypeDefaultPlaceholder}
+                  value={linkAttrModal.default_value}
+                  onChange={(e) => setLinkAttrModal((prev) => ({ ...prev, default_value: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  {t.metamodel.stereotypeSectionOverride}
+                </label>
+                <input
+                  type="text"
+                  placeholder={t.metamodel.stereotypeSectionPlaceholder}
+                  value={linkAttrModal.section_override}
+                  onChange={(e) => setLinkAttrModal((prev) => ({ ...prev, section_override: e.target.value }))}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                />
+              </div>
+
+              <div className="pt-2">
+                <label className="flex items-center space-x-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={linkAttrModal.is_required}
+                    onChange={(e) => setLinkAttrModal((prev) => ({ ...prev, is_required: e.target.checked }))}
+                    className="w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500"
+                  />
+                  <span className="text-xs font-bold text-slate-800">
+                    {t.metamodel.stereotypeIsRequired}
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setLinkAttrModal((prev) => ({ ...prev, isOpen: false }))}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={linkAttrModal.saving}
+                  className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{t.common.save}</span>
                 </button>
               </div>
             </form>

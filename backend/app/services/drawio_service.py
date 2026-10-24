@@ -1,4 +1,5 @@
-import xml.etree.ElementTree as ET
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+from xml.etree.ElementTree import Element, SubElement, tostring
 import uuid
 import re
 import html
@@ -92,10 +93,10 @@ def _get_rel_style(rel_type: str) -> str:
     return RELATIONSHIP_STYLES.get(rel_type, "edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=open;strokeColor=#4F46E5;strokeWidth=2;")
 
 
-def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
+def build_diagram_xml_element(view: ArchimateView, db: Session) -> Element:
     """Builds a single <diagram> XML element representing an ArchimateView."""
-    diagram_el = ET.Element("diagram", {"id": view.id, "name": view.name or "View"})
-    graph_model = ET.SubElement(
+    diagram_el = Element("diagram", {"id": view.id, "name": view.name or "View"})
+    graph_model = SubElement(
         diagram_el,
         "mxGraphModel",
         {
@@ -116,9 +117,9 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
             "shadow": "0"
         }
     )
-    root_el = ET.SubElement(graph_model, "root")
-    ET.SubElement(root_el, "mxCell", {"id": "0"})
-    ET.SubElement(root_el, "mxCell", {"id": "1", "parent": "0"})
+    root_el = SubElement(graph_model, "root")
+    SubElement(root_el, "mxCell", {"id": "0"})
+    SubElement(root_el, "mxCell", {"id": "1", "parent": "0"})
 
     view_data = view.view_data or {}
     nodes = view_data.get("nodes", [])
@@ -148,7 +149,7 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
         height = str(n.get("height", 65))
         parent = str(n.get("parent_id") or "1")
 
-        obj = ET.SubElement(
+        obj = SubElement(
             root_el,
             "object",
             {
@@ -161,7 +162,7 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
             }
         )
         cell_style = _get_shape_style(elem_type, layer)
-        cell = ET.SubElement(
+        cell = SubElement(
             obj,
             "mxCell",
             {
@@ -170,7 +171,7 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
                 "parent": parent
             }
         )
-        ET.SubElement(
+        SubElement(
             cell,
             "mxGeometry",
             {
@@ -194,7 +195,7 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
         target = str(c.get("target_node_id") or "")
 
         if source and target:
-            obj = ET.SubElement(
+            obj = SubElement(
                 root_el,
                 "object",
                 {
@@ -205,7 +206,7 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
                 }
             )
             rel_style = _get_rel_style(rel_type)
-            cell = ET.SubElement(
+            cell = SubElement(
                 obj,
                 "mxCell",
                 {
@@ -216,7 +217,7 @@ def build_diagram_xml_element(view: ArchimateView, db: Session) -> ET.Element:
                     "target": target
                 }
             )
-            ET.SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
+            SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
 
     return diagram_el
 
@@ -227,7 +228,7 @@ def export_view_to_drawio(view_id: str, db: Session) -> str:
     if not view:
         raise ValueError("View not found")
 
-    mxfile = ET.Element(
+    mxfile = Element(
         "mxfile",
         {
             "host": "EasyEA Platform",
@@ -239,7 +240,7 @@ def export_view_to_drawio(view_id: str, db: Session) -> str:
     )
     diagram_el = build_diagram_xml_element(view, db)
     mxfile.append(diagram_el)
-    return ET.tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
+    return tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
 
 def export_model_to_drawio(model_id: str, db: Session) -> str:
@@ -248,7 +249,7 @@ def export_model_to_drawio(model_id: str, db: Session) -> str:
     if not workspace:
         raise ValueError("Model Workspace not found")
 
-    mxfile = ET.Element(
+    mxfile = Element(
         "mxfile",
         {
             "host": "EasyEA Platform",
@@ -275,7 +276,7 @@ def export_model_to_drawio(model_id: str, db: Session) -> str:
             diagram_el = build_diagram_xml_element(view, db)
             mxfile.append(diagram_el)
 
-    return ET.tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
+    return tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
 
 def parse_and_import_drawio(model_id: str, xml_content: str, db: Session) -> Dict[str, Any]:
@@ -288,7 +289,12 @@ def parse_and_import_drawio(model_id: str, xml_content: str, db: Session) -> Dic
         raise ValueError("Model Workspace not found")
 
     try:
-        root = ET.fromstring(xml_content)
+        root = safe_xml_fromstring(
+            xml_content,
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
     except Exception as e:
         raise ValueError(f"Invalid Draw.io XML format: {str(e)}")
 
@@ -506,10 +512,10 @@ def parse_and_import_drawio(model_id: str, xml_content: str, db: Session) -> Dic
     }
 
 
-def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> ET.Element:
+def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> Element:
     """Builds a single <diagram> XML element representing an ArchiSchema."""
-    diagram_el = ET.Element("diagram", {"id": schema.id, "name": schema.name or "Schema"})
-    graph_model = ET.SubElement(
+    diagram_el = Element("diagram", {"id": schema.id, "name": schema.name or "Schema"})
+    graph_model = SubElement(
         diagram_el,
         "mxGraphModel",
         {
@@ -530,9 +536,9 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
             "shadow": "0"
         }
     )
-    root_el = ET.SubElement(graph_model, "root")
-    ET.SubElement(root_el, "mxCell", {"id": "0"})
-    ET.SubElement(root_el, "mxCell", {"id": "1", "parent": "0"})
+    root_el = SubElement(graph_model, "root")
+    SubElement(root_el, "mxCell", {"id": "0"})
+    SubElement(root_el, "mxCell", {"id": "1", "parent": "0"})
 
     view_data = schema.view_data or {}
     nodes = view_data.get("nodes", [])
@@ -562,7 +568,7 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
         height = str(n.get("height", 65))
         parent = str(n.get("parent_id") or "1")
 
-        obj = ET.SubElement(
+        obj = SubElement(
             root_el,
             "object",
             {
@@ -575,7 +581,7 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
             }
         )
         cell_style = _get_shape_style(elem_type, layer)
-        cell = ET.SubElement(
+        cell = SubElement(
             obj,
             "mxCell",
             {
@@ -584,7 +590,7 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
                 "parent": parent
             }
         )
-        ET.SubElement(
+        SubElement(
             cell,
             "mxGeometry",
             {
@@ -608,7 +614,7 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
         target = str(c.get("target_node_id") or "")
 
         if source and target:
-            obj = ET.SubElement(
+            obj = SubElement(
                 root_el,
                 "object",
                 {
@@ -619,7 +625,7 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
                 }
             )
             rel_style = _get_rel_style(rel_type)
-            cell = ET.SubElement(
+            cell = SubElement(
                 obj,
                 "mxCell",
                 {
@@ -630,7 +636,7 @@ def build_diagram_xml_element_from_schema(schema: ArchiSchema, db: Session) -> E
                     "target": target
                 }
             )
-            ET.SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
+            SubElement(cell, "mxGeometry", {"relative": "1", "as": "geometry"})
 
     return diagram_el
 
@@ -641,7 +647,7 @@ def export_schema_to_drawio_xml(schema: ArchiSchema, db: Session) -> str:
         if "<mxfile" in schema.raw_xml:
             return schema.raw_xml
         # Wrap raw mxGraphModel
-        mxfile = ET.Element(
+        mxfile = Element(
             "mxfile",
             {
                 "host": "EasyEA Platform",
@@ -651,15 +657,20 @@ def export_schema_to_drawio_xml(schema: ArchiSchema, db: Session) -> str:
                 "type": "embed"
             }
         )
-        diag_el = ET.SubElement(mxfile, "diagram", {"id": schema.id, "name": schema.name or "Schema"})
+        diag_el = SubElement(mxfile, "diagram", {"id": schema.id, "name": schema.name or "Schema"})
         try:
-            gm = ET.fromstring(schema.raw_xml)
+            gm = safe_xml_fromstring(
+                schema.raw_xml,
+                forbid_dtd=True,
+                forbid_entities=True,
+                forbid_external=True,
+            )
             diag_el.append(gm)
-            return ET.tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
+            return tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
         except Exception:
             pass
 
-    mxfile = ET.Element(
+    mxfile = Element(
         "mxfile",
         {
             "host": "EasyEA Platform",
@@ -671,7 +682,7 @@ def export_schema_to_drawio_xml(schema: ArchiSchema, db: Session) -> str:
     )
     diagram_el = build_diagram_xml_element_from_schema(schema, db)
     mxfile.append(diagram_el)
-    return ET.tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
+    return tostring(mxfile, encoding="utf-8", xml_declaration=True).decode("utf-8")
 
 
 def parse_drawio_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
@@ -680,7 +691,12 @@ def parse_drawio_file_to_canonical_model(xml_content: str) -> Dict[str, Any]:
     expected by compute_schema_diff: { "elements": [...], "relationships": [...], "views": [...] }
     """
     try:
-        root = ET.fromstring(xml_content)
+        root = safe_xml_fromstring(
+            xml_content,
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True,
+        )
     except Exception as e:
         raise ValueError(f"Formato Draw.io XML non valido: {str(e)}")
 

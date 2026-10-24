@@ -6,10 +6,17 @@ import uuid
 import re
 
 from app.core.database import get_db
-from app.models.archimate import ModelWorkspace, ArchimateElement, ArchimateRelationship, ArchimateView, ApplicationBusinessAttributes
+from app.models.archimate import ModelWorkspace, ArchimateElement, ArchimateRelationship, ArchimateView, ApplicationBusinessAttributes, User
+from app.api.deps import (
+    get_current_user,
+    require_admin,
+    require_library_permission,
+    read_upload_bounded,
+)
 from app.parsers.archi_parser import ArchiModelParser
 from app.services.sample_data import seed_sample_model
 from app.services.apm_service import calculate_time_quadrant
+from app.services.metamodel_service import activate_default_packages_for_workspace
 
 router = APIRouter(prefix="/models", tags=["Models & Import"])
 
@@ -56,7 +63,10 @@ def generate_unique_library_code(db: Session, name: Optional[str] = None, reques
     return candidate
 
 @router.get("", response_model=List[Dict[str, Any]])
-def list_models(db: Session = Depends(get_db)):
+def list_models(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """List all architectural models in the repository."""
     models = db.query(ModelWorkspace).all()
     results = []
@@ -81,7 +91,11 @@ def list_models(db: Session = Depends(get_db)):
     return results
 
 @router.get("/{model_id}")
-def get_model_detail(model_id: str, db: Session = Depends(get_db)):
+def get_model_detail(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Get overview details for a specific model."""
     m = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not m:
@@ -112,7 +126,10 @@ def get_model_detail(model_id: str, db: Session = Depends(get_db)):
     }
 
 @router.post("/seed-sample")
-def seed_sample(db: Session = Depends(get_db)):
+def seed_sample(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Populates or resets the rich enterprise sample model."""
     model_id = seed_sample_model(db)
     return {"message": "Sample enterprise model ready", "model_id": model_id}
@@ -122,14 +139,15 @@ async def upload_archi_model(
     file: UploadFile = File(...),
     model_name: Optional[str] = Form(None),
     code: Optional[str] = Form(None),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
 ):
     """
     Imports an Archi Tool XML file (.archimate or Open Group ArchiMate Exchange XML)
     and extracts all Elements, Relationships, Views, and sets up APM foundations.
     """
+    content_bytes = await read_upload_bounded(file)
     try:
-        content_bytes = await file.read()
         content_str = content_bytes.decode("utf-8", errors="ignore")
         
         parser = ArchiModelParser(content_str)
@@ -208,6 +226,7 @@ async def upload_archi_model(
             db.add(v)
 
         db.commit()
+        activate_default_packages_for_workspace(db, workspace_id)
 
         return {
             "success": True,
@@ -237,7 +256,11 @@ class ModelUpdate(BaseModel):
     modeling_tool: Optional[str] = None
 
 @router.post("", response_model=Dict[str, Any])
-def create_empty_model(payload: ModelCreate, db: Session = Depends(get_db)):
+def create_empty_model(
+    payload: ModelCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Creates a new empty architectural model."""
     workspace_id = f"model-{uuid.uuid4().hex[:8]}"
     final_code = generate_unique_library_code(db, payload.name, payload.code)
@@ -252,6 +275,7 @@ def create_empty_model(payload: ModelCreate, db: Session = Depends(get_db)):
     )
     db.add(workspace)
     db.commit()
+    activate_default_packages_for_workspace(db, workspace.id)
     db.refresh(workspace)
     return {
         "id": workspace.id,
@@ -264,8 +288,14 @@ def create_empty_model(payload: ModelCreate, db: Session = Depends(get_db)):
     }
 
 @router.put("/{model_id}")
-def update_model(model_id: str, payload: ModelUpdate, db: Session = Depends(get_db)):
+def update_model(
+    model_id: str,
+    payload: ModelUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Updates model metadata."""
+    require_library_permission(db, current_user, "write_architecture", model_id)
     m = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
@@ -281,7 +311,11 @@ def update_model(model_id: str, payload: ModelUpdate, db: Session = Depends(get_
     return {"message": "Model updated successfully"}
 
 @router.get("/{model_id}/export")
-def export_model_json(model_id: str, db: Session = Depends(get_db)):
+def export_model_json(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Exports full model content in structured JSON format."""
     m = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not m:
@@ -347,7 +381,11 @@ def export_model_json(model_id: str, db: Session = Depends(get_db)):
     }
 
 @router.delete("/{model_id}")
-def delete_model(model_id: str, db: Session = Depends(get_db)):
+def delete_model(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
     """Deletes a model workspace and all associated elements, views, and relationships."""
     m = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not m:

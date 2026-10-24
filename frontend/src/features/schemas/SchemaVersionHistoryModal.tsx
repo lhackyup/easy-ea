@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ArchiSchema, SchemaVersionHistory } from '../../types';
 import { api } from '../../lib/api';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   History,
   Download,
@@ -24,6 +25,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
   onClose,
   onRollbackSuccess
 }) => {
+  const { t, interpolate } = useLanguage();
   const [versions, setVersions] = useState<SchemaVersionHistory[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -48,7 +50,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
   }, [schema.id]);
 
   const handleRollback = async (version: SchemaVersionHistory) => {
-    if (!window.confirm(`Sei sicuro di voler ripristinare lo schema alla versione ${version.version_label}?`)) {
+    if (!window.confirm(interpolate(t.schemas.confirmRestoreVersion, { version: version.version_label }))) {
       return;
     }
     setActionLoadingId(version.id);
@@ -110,7 +112,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center text-slate-400">
               <RefreshCw className="w-8 h-8 animate-spin text-purple-500 mb-2" />
-              <p className="text-xs font-semibold">Caricamento versioni...</p>
+              <p className="text-xs font-semibold">{t.schemas.loadingVersions}</p>
             </div>
           ) : versions.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
@@ -188,7 +190,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
                           type="button"
                           onClick={() => handleRollback(ver)}
                           disabled={actionLoadingId === ver.id}
-                          title="Ripristina a questa versione"
+                          title={t.schemas.restoreToVersionTooltip}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold text-purple-700 hover:text-white bg-purple-50 hover:bg-purple-600 border border-purple-200 transition flex items-center space-x-1"
                         >
                           {actionLoadingId === ver.id ? (
@@ -209,13 +211,13 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-200 bg-slate-50 flex items-center justify-between shrink-0 text-xs text-slate-500">
-          <span>Lo storico conserva fino alle $N$ versioni configurate dall'amministratore.</span>
+          <span>{t.schemas.versionHistoryRetentionNote}</span>
           <button
             type="button"
             onClick={onClose}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition"
           >
-            Chiudi
+            {t.common.close}
           </button>
         </div>
       </div>

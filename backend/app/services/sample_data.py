@@ -195,7 +195,7 @@ def seed_sample_model(db: Session) -> str:
                 "connections": [
                     {"id": "c1", "relationship_id": "rel-6", "source_node_id": "v1-node-app-stripe", "target_node_id": "v1-node-proc-pay"},
                     {"id": "c2", "relationship_id": "rel-8", "source_node_id": "v1-node-app-fraud", "target_node_id": "v1-node-proc-pay"},
-                    {"id": "c3", "relationship_id": "rel-4", "source_node_id": "v1-node-app-core", "target_node_id": "v1-node-proc-pay"},
+                    {"id": "c3", "relationship_id": "rel-9", "source_node_id": "v1-node-app-core", "target_node_id": "v1-node-proc-pay"},
                     {"id": "c4", "relationship_id": "rel-22", "source_node_id": "v1-node-tech-eks", "target_node_id": "v1-node-app-fraud"},
                     {"id": "c5", "relationship_id": "rel-20", "source_node_id": "v1-node-tech-eks", "target_node_id": "v1-node-app-core"}
                 ]

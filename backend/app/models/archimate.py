@@ -25,6 +25,7 @@ class ModelWorkspace(Base):
     saved_views = relationship("SavedFilterView", back_populates="workspace", cascade="all, delete-orphan")
     schema_folders = relationship("SchemaFolder", back_populates="workspace", cascade="all, delete-orphan")
     schemas = relationship("ArchiSchema", back_populates="workspace", cascade="all, delete-orphan")
+    active_packages = relationship("WorkspaceAttributePackage", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class ArchimateElement(Base):
@@ -37,6 +38,7 @@ class ArchimateElement(Base):
     layer = Column(String, nullable=False, index=True) # Strategy, Business, Application, Technology, Motivation, Implementation
     documentation = Column(Text, nullable=True)
     properties = Column(JSON, default=dict)
+    stereotype_id = Column(String, ForeignKey("element_stereotypes.id", ondelete="SET NULL"), nullable=True, index=True)
 
     workspace = relationship("ModelWorkspace", back_populates="elements")
     outgoing_relations = relationship("ArchimateRelationship", foreign_keys="ArchimateRelationship.source_id", back_populates="source_element", cascade="all, delete-orphan")
@@ -44,6 +46,7 @@ class ArchimateElement(Base):
     
     # Optional 1-to-1 APM business attributes
     apm_attributes = relationship("ApplicationBusinessAttributes", back_populates="element", uselist=False, cascade="all, delete-orphan")
+    stereotype = relationship("ElementStereotype", back_populates="elements")
 
 
 class ArchimateRelationship(Base):
@@ -119,6 +122,92 @@ class CustomAttributeDefinition(Base):
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     workspace = relationship("ModelWorkspace", foreign_keys=[model_id])
+
+
+class AttributePackage(Base):
+    __tablename__ = "attribute_packages"
+
+    id = Column(String, primary_key=True, index=True)
+    code = Column(String(3), unique=True, index=True, nullable=False) # 3-letter lowercase/uppercase code (e.g. "apm", "tme")
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    icon_color = Column(String, default="blue") # e.g. "blue", "emerald", "amber", "purple", "rose"
+    is_default_active = Column(Boolean, default=True) # Activated by default on newly created libraries
+    is_system = Column(Boolean, default=False, nullable=False, server_default='0', index=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    items = relationship("AttributePackageItem", back_populates="package", cascade="all, delete-orphan", order_by="AttributePackageItem.sort_order")
+    workspace_links = relationship("WorkspaceAttributePackage", back_populates="package", cascade="all, delete-orphan")
+
+
+class AttributePackageItem(Base):
+    __tablename__ = "attribute_package_items"
+
+    id = Column(String, primary_key=True, index=True)
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String, nullable=False, index=True) # Key with 3-char prefix, e.g. "apm_annual_cost", "tme_business_fit"
+    label = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    element_type = Column(String, nullable=False, default="ApplicationComponent", index=True) # Target type or "*"
+    layer = Column(String, nullable=False, default="Application", index=True)
+    data_type = Column(String, nullable=False, default="string") # string, number, boolean, date, select
+    options = Column(JSON, default=list) # Choices for select
+    default_value = Column(String, nullable=True)
+    is_required = Column(Boolean, default=False)
+    section = Column(String, nullable=False, default="Package Attributes")
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    package = relationship("AttributePackage", back_populates="items")
+
+
+class WorkspaceAttributePackage(Base):
+    __tablename__ = "workspace_attribute_packages"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    activated_at = Column(DateTime, default=utc_now)
+    activated_by = Column(String, nullable=True)
+
+    workspace = relationship("ModelWorkspace", back_populates="active_packages")
+    package = relationship("AttributePackage", back_populates="workspace_links")
+
+
+class ElementStereotype(Base):
+    __tablename__ = "element_stereotypes"
+
+    id = Column(String, primary_key=True, index=True) # e.g. "stereo-microservice"
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=True, index=True) # None = Global, or library-scoped
+    base_type = Column(String, nullable=False, index=True) # e.g. "ApplicationComponent", "BusinessProcess", "Node"
+    name = Column(String, nullable=False, index=True) # e.g. "Microservice"
+    label = Column(String, nullable=False) # e.g. "«Microservice»"
+    description = Column(Text, nullable=True)
+    icon_color = Column(String, default="indigo") # e.g. "blue", "indigo", "emerald", "amber", "rose", "purple", "cyan"
+    is_system = Column(Boolean, default=False, nullable=False, server_default='0', index=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    attribute_links = relationship("StereotypeAttributeLink", back_populates="stereotype", cascade="all, delete-orphan", order_by="StereotypeAttributeLink.sort_order")
+    elements = relationship("ArchimateElement", back_populates="stereotype")
+    workspace = relationship("ModelWorkspace", foreign_keys=[model_id])
+
+
+class StereotypeAttributeLink(Base):
+    __tablename__ = "stereotype_attribute_links"
+
+    id = Column(String, primary_key=True, index=True) # e.g. "sal-uuid"
+    stereotype_id = Column(String, ForeignKey("element_stereotypes.id", ondelete="CASCADE"), nullable=False, index=True)
+    attribute_name = Column(String, nullable=False, index=True) # Attribute technical key e.g. "apm_hosting_type", "micro_git_repo"
+    is_required = Column(Boolean, default=False)
+    default_value = Column(String, nullable=True)
+    section_override = Column(String, nullable=True)
+    sort_order = Column(Integer, default=0)
+    created_at = Column(DateTime, default=utc_now)
+
+    stereotype = relationship("ElementStereotype", back_populates="attribute_links")
 
 
 class User(Base):

@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateView, ArchimateElement, ArchimateRelationship
+from app.models.archimate import ArchimateView, ArchimateElement, ArchimateRelationship, User
+from app.api.deps import get_current_user, require_library_permission
 from app.services.drawio_service import export_view_to_drawio
 
 router = APIRouter(prefix="/views", tags=["Diagram Views"])
@@ -25,7 +26,11 @@ class ViewUpdate(BaseModel):
     view_data: Optional[Dict[str, Any]] = None
 
 @router.get("", response_model=List[Dict[str, Any]])
-def list_views(model_id: str, db: Session = Depends(get_db)):
+def list_views(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """List all diagram views in the model."""
     views = db.query(ArchimateView).filter(ArchimateView.model_id == model_id).all()
     results = []
@@ -44,7 +49,11 @@ def list_views(model_id: str, db: Session = Depends(get_db)):
     return results
 
 @router.get("/{view_id}")
-def get_view(view_id: str, db: Session = Depends(get_db)):
+def get_view(
+    view_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
     Returns full diagram view structure ready for rendering (e.g., in React Flow),
     with populated element details (type, layer, documentation, APM info).
@@ -106,11 +115,17 @@ def get_view(view_id: str, db: Session = Depends(get_db)):
     }
 
 @router.put("/{view_id}")
-def update_view(view_id: str, payload: ViewUpdate, db: Session = Depends(get_db)):
+def update_view(
+    view_id: str,
+    payload: ViewUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Update view details or visual layout."""
     v = db.query(ArchimateView).filter(ArchimateView.id == view_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="View not found")
+    require_library_permission(db, current_user, "edit_diagram", v.model_id)
 
     if payload.name is not None:
         v.name = payload.name
@@ -126,8 +141,14 @@ def update_view(view_id: str, payload: ViewUpdate, db: Session = Depends(get_db)
     return {"message": "View updated successfully"}
 
 @router.post("", response_model=Dict[str, Any])
-def create_view(model_id: str, payload: ViewCreate, db: Session = Depends(get_db)):
+def create_view(
+    model_id: str,
+    payload: ViewCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Create a new diagram view."""
+    require_library_permission(db, current_user, "edit_diagram", model_id)
     view_id = f"view-{uuid.uuid4().hex[:12]}"
     new_view = ArchimateView(
         id=view_id,
@@ -150,17 +171,26 @@ def create_view(model_id: str, payload: ViewCreate, db: Session = Depends(get_db
     }
 
 @router.delete("/{view_id}")
-def delete_view(view_id: str, db: Session = Depends(get_db)):
+def delete_view(
+    view_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Delete a diagram view."""
     v = db.query(ArchimateView).filter(ArchimateView.id == view_id).first()
     if not v:
         raise HTTPException(status_code=404, detail="View not found")
+    require_library_permission(db, current_user, "edit_diagram", v.model_id)
     db.delete(v)
     db.commit()
     return {"message": "View deleted successfully"}
 
 @router.get("/{view_id}/drawio")
-def export_view_drawio(view_id: str, db: Session = Depends(get_db)):
+def export_view_drawio(
+    view_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """Export single view as .drawio XML file."""
     view = db.query(ArchimateView).filter(ArchimateView.id == view_id).first()
     if not view:

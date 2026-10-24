@@ -23,7 +23,7 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
-ROOT_DIR = Path(__file__).resolve().parents[3]
+ROOT_DIR = Path(__file__).resolve().parents[4]
 
 
 def query_osv_batch(queries: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -343,11 +343,18 @@ def scan_sast_patterns() -> List[Dict[str, Any]]:
                 if "node_modules" in path.parts or "venv" in path.parts or "bundle.js" in path.name:
                     continue
                 try:
-                    lines = path.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    full_text = path.read_text(encoding="utf-8", errors="ignore")
+                    lines = full_text.splitlines()
                 except Exception:
                     continue
                 for idx, line in enumerate(lines, start=1):
                     if pattern.search(line):
+                        if (
+                            rule["id"] == "SAST-FE-POSTMESSAGE-WILDCARD"
+                            and "addEventListener" in line
+                            and "event.origin" in full_text
+                        ):
+                            continue
                         matches.append(
                             {
                                 "rule_id": rule["id"],

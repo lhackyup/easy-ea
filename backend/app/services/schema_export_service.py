@@ -1,5 +1,6 @@
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
+from defusedxml.ElementTree import fromstring as safe_xml_fromstring
+from defusedxml.minidom import parseString as safe_minidom_parse_string
+from xml.etree.ElementTree import Element, SubElement, tostring
 import uuid
 from typing import Dict, List, Any, Optional, Set
 from sqlalchemy.orm import Session
@@ -27,8 +28,13 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
     # 1. If raw_xml is already present, valid and non-empty, use it directly
     if schema.raw_xml and schema.raw_xml.strip().startswith("<?xml") or (schema.raw_xml and "<archimate:model" in schema.raw_xml):
         try:
-            # Validate it's well-formed XML
-            ET.fromstring(schema.raw_xml.strip())
+            # Validate it's well-formed XML and safe against DTD/entity expansion
+            safe_xml_fromstring(
+                schema.raw_xml.strip(),
+                forbid_dtd=True,
+                forbid_entities=True,
+                forbid_external=True,
+            )
             return schema.raw_xml.strip()
         except Exception:
             pass
@@ -56,16 +62,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
         if rel_id:
             referenced_rel_ids.add(rel_id)
 
-    # Query DB elements & relationships
-    elements_list = []
-    if referenced_elem_ids:
-        elements_list = db.query(ArchimateElement).filter(
-            ArchimateElement.model_id == schema.model_id,
-            ArchimateElement.id.in_(referenced_elem_ids)
-        ).all()
-
-    found_elem_ids = {e.id for e in elements_list}
-
+    # Query DB relationships first to discover all connected elements
     relationships_list = []
     if referenced_rel_ids:
         relationships_list = db.query(ArchimateRelationship).filter(
@@ -75,8 +72,26 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
 
     found_rel_ids = {r.id for r in relationships_list}
 
+    # CRITICAL: Archi requires all endpoints (source & target) of all relationships
+    # in the XML model to have a corresponding element definition.
+    for rel in relationships_list:
+        if rel.source_id:
+            referenced_elem_ids.add(rel.source_id)
+        if rel.target_id:
+            referenced_elem_ids.add(rel.target_id)
+
+    # Query DB elements (covering both visual diagram nodes AND relationship endpoints)
+    elements_list = []
+    if referenced_elem_ids:
+        elements_list = db.query(ArchimateElement).filter(
+            ArchimateElement.model_id == schema.model_id,
+            ArchimateElement.id.in_(referenced_elem_ids)
+        ).all()
+
+    found_elem_ids = {e.id for e in elements_list}
+
     # Build XML Root
-    root = ET.Element(
+    root = Element(
         "archimate:model",
         {
             "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
@@ -102,7 +117,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
 
     folder_elems = {}
     for f_name, f_type, f_id in folders_meta:
-        f_el = ET.SubElement(root, "folder", {"name": f_name, "id": f_id, "type": f_type})
+        f_el = SubElement(root, "folder", {"name": f_name, "id": f_id, "type": f_type})
         folder_elems[f_type] = f_el
 
     # Add Elements to matching layer folder
@@ -117,7 +132,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
         
         parent_folder = folder_elems.get(target_f_type, folder_elems["other"])
         clean_type = el.type if el.type.startswith("archimate:") else f"archimate:{el.type}"
-        el_node = ET.SubElement(
+        el_node = SubElement(
             parent_folder,
             "element",
             {
@@ -127,20 +142,20 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
             }
         )
         if el.documentation:
-            doc_el = ET.SubElement(el_node, "documentation")
+            doc_el = SubElement(el_node, "documentation")
             doc_el.text = el.documentation
 
         # Export properties if present
         if isinstance(el.properties, dict):
             for p_key, p_val in el.properties.items():
                 if p_val is not None and str(p_val) != "":
-                    ET.SubElement(el_node, "property", {"key": str(p_key), "value": str(p_val)})
+                    SubElement(el_node, "property", {"key": str(p_key), "value": str(p_val)})
 
     # SAFETY NET: For any referenced elem_id not found in DB, synthesize element to prevent Archi unresolved proxy error
     for ref_id in referenced_elem_ids:
         if ref_id not in found_elem_ids:
             parent_folder = folder_elems["application"]
-            ET.SubElement(
+            SubElement(
                 parent_folder,
                 "element",
                 {
@@ -158,7 +173,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
         if not clean_rel_type.endswith("Relationship") and not clean_rel_type.endswith("Association"):
             clean_rel_type = f"{clean_rel_type}Relationship"
         
-        rel_node = ET.SubElement(
+        rel_node = SubElement(
             rel_folder,
             "element",
             {
@@ -170,12 +185,12 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
             }
         )
         if rel.documentation:
-            doc_el = ET.SubElement(rel_node, "documentation")
+            doc_el = SubElement(rel_node, "documentation")
             doc_el.text = rel.documentation
         if isinstance(rel.properties, dict):
             for p_key, p_val in rel.properties.items():
                 if p_val is not None and str(p_val) != "":
-                    ET.SubElement(rel_node, "property", {"key": str(p_key), "value": str(p_val)})
+                    SubElement(rel_node, "property", {"key": str(p_key), "value": str(p_val)})
 
     # SAFETY NET: For any referenced rel_id in connections not found in DB, synthesize relationship
     for c in connections:
@@ -187,7 +202,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
 
         if r_id and r_id not in found_rel_ids and s_elem and t_elem:
             rel_folder = folder_elems["relations"]
-            ET.SubElement(
+            SubElement(
                 rel_folder,
                 "element",
                 {
@@ -202,7 +217,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
 
     # Add Diagram View in Views folder
     views_folder = folder_elems["diagrams"]
-    diag_node = ET.SubElement(
+    diag_node = SubElement(
         views_folder,
         "element",
         {
@@ -213,7 +228,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
         }
     )
     if schema.documentation:
-        doc_el = ET.SubElement(diag_node, "documentation")
+        doc_el = SubElement(diag_node, "documentation")
         doc_el.text = schema.documentation
 
     # Filter connections that have both source and target in valid_node_ids
@@ -250,14 +265,14 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
         if node_id in target_conns_map:
             child_attrs["targetConnections"] = " ".join(target_conns_map[node_id])
 
-        child_el = ET.SubElement(diag_node, "child", child_attrs)
+        child_el = SubElement(diag_node, "child", child_attrs)
         
         # Bounds
         x = int(n.get("x", 100))
         y = int(n.get("y", 100))
         w = int(n.get("width", 140))
         h = int(n.get("height", 60))
-        ET.SubElement(child_el, "bounds", {
+        SubElement(child_el, "bounds", {
             "x": str(x),
             "y": str(y),
             "width": str(w),
@@ -280,9 +295,14 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
                 }
                 if rel_id and rel_id in found_rel_ids:
                     conn_attrs["archimateRelationship"] = rel_id
-                ET.SubElement(child_el, "sourceConnection", conn_attrs)
+                SubElement(child_el, "sourceConnection", conn_attrs)
 
     # Format pretty XML
-    rough_str = ET.tostring(root, encoding="utf-8")
-    reparsed = minidom.parseString(rough_str)
+    rough_str = tostring(root, encoding="utf-8")
+    reparsed = safe_minidom_parse_string(
+        rough_str,
+        forbid_dtd=True,
+        forbid_entities=True,
+        forbid_external=True,
+    )
     return reparsed.toprettyxml(indent="  ", encoding="UTF-8").decode("utf-8")
