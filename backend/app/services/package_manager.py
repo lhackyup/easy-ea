@@ -108,9 +108,12 @@ class PackageViewSpec(BaseModel):
     icon: Optional[str] = "Table"
     sort_order: Optional[int] = 0
     target_stereotypes: List[str] = []
+    target_types: Optional[List[str]] = []
+    target_layer: Optional[str] = None
     columns: Optional[List[Dict[str, Any]]] = []
     default_sort: Optional[Dict[str, str]] = None
     filters: Optional[List[Dict[str, Any]]] = []
+    filter_config: Optional[Dict[str, Any]] = None
     metrics: Optional[List[Dict[str, Any]]] = []
     charts: Optional[List[Dict[str, Any]]] = []
     matrix_config: Optional[Dict[str, Any]] = None
@@ -652,6 +655,19 @@ def install_package_bundle(file_bytes: bytes, db: Session, force: bool = False) 
                     v_spec = PackageViewSpec(**v_item)
                     pv_id = f"pkv-{code}-{v_spec.id}"
                     view_sort = v_spec.sort_order if (v_spec.sort_order is not None and v_spec.sort_order != 0) else (idx + 1)
+                    cfg = v_spec.model_dump()
+                    if v_spec.filter_config:
+                        cfg["filter_config"] = v_spec.filter_config
+                    elif v_spec.filters:
+                        cfg["filter_config"] = {
+                            "attributeFilterRules": v_spec.filters,
+                            "matchLogic": "AND"
+                        }
+                    if v_spec.target_layer:
+                        if "filter_config" not in cfg or not cfg["filter_config"]:
+                            cfg["filter_config"] = {}
+                        cfg["filter_config"]["selectedLayer"] = v_spec.target_layer
+
                     pv = PackageView(
                         id=pv_id,
                         package_id=pkg.id,
@@ -662,7 +678,8 @@ def install_package_bundle(file_bytes: bytes, db: Session, force: bool = False) 
                         view_type=v_spec.view_type or "table",
                         icon=v_spec.icon or "Table",
                         target_stereotypes=v_spec.target_stereotypes or [],
-                        config=v_spec.model_dump(),
+                        target_types=v_spec.target_types or [],
+                        config=cfg,
                         sort_order=view_sort
                     )
                     db.add(pv)
@@ -801,6 +818,9 @@ def export_package_bundle(package_id: str, db: Session) -> Tuple[bytes, str]:
                 v_data["icon"] = pv.icon or "Table"
                 v_data["sort_order"] = pv.sort_order
                 v_data["target_stereotypes"] = pv.target_stereotypes or []
+                v_data["target_types"] = pv.target_types or []
+                if pv.config and "filter_config" in pv.config:
+                    v_data["filter_config"] = pv.config["filter_config"]
                 views_list.append(v_data)
             zf.writestr("views.json", json.dumps(views_list, indent=2, ensure_ascii=False))
 

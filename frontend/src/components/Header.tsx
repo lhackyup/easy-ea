@@ -433,15 +433,15 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
-                onClick={() => onSelectArchitectureTab('saved-views')}
+                onClick={() => onSelectArchitectureTab('business-views')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
-                  architectureTab === 'saved-views'
+                  architectureTab === 'business-views'
                     ? 'bg-emerald-600 text-white shadow-sm'
                     : 'text-slate-600 hover:text-emerald-700 hover:bg-emerald-50/60'
                 }`}
               >
-                <BookmarkCheck className="w-3.5 h-3.5" />
-                <span>{t.subtabs.savedViews}</span>
+                <Sliders className="w-3.5 h-3.5" />
+                <span>{t.subtabs.businessViews}</span>
               </button>
 
               <button

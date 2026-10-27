@@ -35,12 +35,12 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 @pytest.fixture(autouse=True)
 def setup_test_db():
     Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = override_get_db
     db = TestingSessionLocal()
     # Clean up test packages
     db.query(AttributePackage).filter(AttributePackage.code.in_(["doraview", "testpkg"])).delete()
@@ -56,6 +56,8 @@ def setup_test_db():
         token = create_access_token(admin_user)
         client.headers.update({"Authorization": f"Bearer {token}"})
     db.close()
+    yield
+    app.dependency_overrides.pop(get_db, None)
 
 
 def create_eap_with_views(code: str = "doraview", version: str = "1.0.0") -> bytes:

@@ -141,9 +141,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: GitMerge
     },
     {
-      id: 'saved-views' as ArchitectureSubTab,
-      label: t.subtabs.savedViews,
-      icon: BookmarkCheck
+      id: 'business-views' as ArchitectureSubTab,
+      label: t.subtabs.businessViews,
+      icon: Sliders
     },
     {
       id: 'import' as ArchitectureSubTab,

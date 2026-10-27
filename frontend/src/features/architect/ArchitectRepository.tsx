@@ -70,7 +70,7 @@ export interface AttributeFilterRule {
 
 interface ArchitectRepositoryProps {
   modelId: string;
-  initialSavedView?: SavedFilterView | null;
+  initialSavedView?: any | null;
   onClearInitialView?: () => void;
 }
 
@@ -100,9 +100,9 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   const [matchLogic, setMatchLogic] = useState<'AND' | 'OR'>('AND');
   const [attributeFilterRules, setAttributeFilterRules] = useState<AttributeFilterRule[]>([]);
 
-  // Saved Views & Export State
-  const [savedViews, setSavedViews] = useState<SavedFilterView[]>([]);
-  const [activeSavedView, setActiveSavedView] = useState<SavedFilterView | null>(null);
+  // Unified Saved / Business Views & Export State
+  const [savedViews, setSavedViews] = useState<any[]>([]);
+  const [activeSavedView, setActiveSavedView] = useState<any | null>(null);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [saveViewName, setSaveViewName] = useState('');
   const [saveViewDesc, setSaveViewDesc] = useState('');
@@ -850,16 +850,42 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
 
   const fetchSavedViews = async () => {
     try {
+      const customRes = await api.getCustomBusinessViews(modelId);
+      const customViews = (customRes.views || []).map((cv: any) => ({
+        id: cv.id,
+        name: cv.name,
+        description: cv.description,
+        is_active: cv.is_active,
+        is_global: cv.is_global,
+        view_type: cv.view_type,
+        target_types: cv.target_types,
+        config: cv.config,
+        filter_config: cv.config?.filter_config
+      }));
+
+      // Backward compatibility with legacy repository saved views
       const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
       const res = await fetch(`/api/saved-views?model_id=${modelId}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {}
       });
-      if (res.ok) {
-        const data = await res.json();
-        setSavedViews(data);
+      const legacyViews = res.ok ? await res.json() : [];
+      const mappedLegacy = legacyViews.map((lv: any) => ({
+        id: lv.id,
+        name: lv.name,
+        description: lv.description,
+        is_active: true,
+        filter_config: lv.filter_config
+      }));
+
+      const merged = [...customViews];
+      for (const lv of mappedLegacy) {
+        if (!merged.some((v) => v.id === lv.id)) {
+          merged.push(lv);
+        }
       }
+      setSavedViews(merged);
     } catch (err) {
-      console.error('Error fetching saved views:', err);
+      console.error('Error fetching views:', err);
     }
   };
 
@@ -869,11 +895,17 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     }
   }, [modelId]);
 
-  const applySavedView = (view: SavedFilterView) => {
+  const applySavedView = (view: any) => {
     setActiveSavedView(view);
-    const cfg = view.filter_config || {};
+    const cfg = view.filter_config || view.config?.filter_config || {};
     setSelectedLayer(cfg.selectedLayer || 'All');
-    setSelectedType(cfg.selectedType || 'All');
+    if (cfg.selectedType) {
+      setSelectedType(cfg.selectedType);
+    } else if (view.target_types && view.target_types.length > 0) {
+      setSelectedType(view.target_types[0]);
+    } else {
+      setSelectedType('All');
+    }
     setSearch(cfg.search || '');
     setSearchInProps(cfg.searchInProps ?? false);
     setRelationshipFilter(cfg.relationshipFilter || 'all');
@@ -894,7 +926,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     setSaveViewDesc(activeSavedView?.description || '');
     setSaveViewAuthor(currentAuthor);
     setSaveViewTags(activeSavedView?.tags?.join(', ') || '');
-    setSaveViewIsShared(activeSavedView?.is_shared ?? true);
+    setSaveViewIsShared(activeSavedView?.is_global ?? activeSavedView?.is_shared ?? true);
     setIsSaveViewModalOpen(true);
   };
 
@@ -904,11 +936,6 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
 
     try {
       setSavingView(true);
-      const parsedTags = saveViewTags
-        .split(',')
-        .map((t) => t.trim())
-        .filter(Boolean);
-
       const filterConfig = {
         selectedLayer,
         selectedType,
@@ -916,42 +943,59 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         searchInProps,
         relationshipFilter,
         documentationFilter,
+        selectedStereotypeFilter,
         matchLogic,
         attributeFilterRules,
         sortBy
       };
 
-      const payload: SavedViewCreatePayload = {
-        model_id: modelId,
+      const customPayload = {
         name: saveViewName.trim(),
         description: saveViewDesc.trim() || undefined,
-        author: currentAuthor,
-        is_shared: saveViewIsShared,
-        tags: parsedTags,
-        filter_config: filterConfig
+        category: 'Repository Views',
+        view_type: 'table' as const,
+        icon: 'Table',
+        is_active: false, // Default is inactive / bozza as explicitly requested!
+        is_global: false,
+        target_types: selectedType && selectedType !== 'All' && selectedType !== 'all' ? [selectedType] : [],
+        target_stereotypes: selectedStereotypeFilter && selectedStereotypeFilter !== 'all' ? [selectedStereotypeFilter] : [],
+        config: {
+          columns: [
+            { field: 'name', label: 'Nome / Name', type: 'string', sortable: true, filterable: true },
+            { field: 'type', label: 'Tipo / Type', type: 'badge', sortable: true, filterable: true },
+            { field: 'layer', label: 'Layer', type: 'badge', sortable: true, filterable: true },
+            { field: 'documentation', label: 'Documentazione', type: 'string', sortable: false, filterable: false },
+            ...attributeFilterRules.map((rule) => ({
+              field: rule.attributeName,
+              label: rule.attributeName.replace(/^(eea_|apm_)/, '').replace(/_/g, ' ').toUpperCase(),
+              type: 'string',
+              sortable: true,
+              filterable: true
+            }))
+          ],
+          filter_config: filterConfig
+        }
       };
 
-      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
-      const res = await fetch('/api/saved-views', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(payload)
-      });
+      const res = await api.createCustomBusinessView(modelId, customPayload);
+      const createdView = res.view;
+      const unified = {
+        id: createdView.id,
+        name: createdView.name,
+        description: createdView.description,
+        is_active: createdView.is_active,
+        view_type: createdView.view_type,
+        target_types: createdView.target_types,
+        config: createdView.config,
+        filter_config: createdView.config?.filter_config
+      };
 
-      if (res.ok) {
-        const created = await res.json();
-        setSavedViews((prev) => [created, ...prev]);
-        setActiveSavedView(created);
-        setIsSaveViewModalOpen(false);
-        showNotification(t.architect.saveViewSuccess, 'success');
-      } else {
-        showNotification('Errore durante il salvataggio della vista', 'error');
-      }
-    } catch (err) {
-      showNotification('Errore di connessione', 'error');
+      setSavedViews((prev) => [unified, ...prev]);
+      setActiveSavedView(unified);
+      setIsSaveViewModalOpen(false);
+      showNotification('Vista creata come Vista Business in stato Bozza (Inattiva)!', 'success');
+    } catch (err: any) {
+      showNotification(err.message || 'Errore durante il salvataggio della vista', 'error');
     } finally {
       setSavingView(false);
     }
@@ -969,32 +1013,57 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         searchInProps,
         relationshipFilter,
         documentationFilter,
+        selectedStereotypeFilter,
         matchLogic,
         attributeFilterRules,
         sortBy
       };
 
-      const payload: SavedViewUpdatePayload = {
-        filter_config: filterConfig
-      };
-
-      const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
-      const res = await fetch(`/api/saved-views/${activeSavedView.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (res.ok) {
-        const updated = await res.json();
+      if (activeSavedView.id.startsWith('pkv-custom-') || activeSavedView.id.startsWith('pkv-')) {
+        await api.updateCustomBusinessView(activeSavedView.id, {
+          name: activeSavedView.name,
+          category: activeSavedView.category || 'Repository Views',
+          view_type: activeSavedView.view_type || 'table',
+          target_types: selectedType && selectedType !== 'All' && selectedType !== 'all' ? [selectedType] : [],
+          target_stereotypes: selectedStereotypeFilter && selectedStereotypeFilter !== 'all' ? [selectedStereotypeFilter] : [],
+          config: {
+            ...(activeSavedView.config || {}),
+            filter_config: filterConfig
+          }
+        });
+        const updated = {
+          ...activeSavedView,
+          config: {
+            ...(activeSavedView.config || {}),
+            filter_config: filterConfig
+          },
+          filter_config: filterConfig
+        };
         setSavedViews((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
         setActiveSavedView(updated);
-        showNotification(t.architect.updateViewSuccess, 'success');
+        showNotification('Vista business aggiornata con i filtri correnti!', 'success');
       } else {
-        showNotification('Errore durante l\'aggiornamento della vista', 'error');
+        const payload: SavedViewUpdatePayload = {
+          filter_config: filterConfig
+        };
+        const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
+        const res = await fetch(`/api/saved-views/${activeSavedView.id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          const updated = await res.json();
+          setSavedViews((prev) => prev.map((v) => (v.id === updated.id ? updated : v)));
+          setActiveSavedView(updated);
+          showNotification(t.architect.updateViewSuccess, 'success');
+        } else {
+          showNotification('Errore durante l\'aggiornamento della vista', 'error');
+        }
       }
     } catch (err) {
       showNotification('Errore di connessione', 'error');
@@ -3601,6 +3670,17 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     </span>
                   </div>
                 </label>
+              </div>
+
+              {/* Unified Business View Note */}
+              <div className="p-3 bg-amber-50/90 border border-amber-200/90 rounded-xl flex items-start space-x-2.5 text-xs text-amber-900">
+                <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                <div className="space-y-0.5">
+                  <span className="font-bold block">Vista Business (Stato iniziale: Inattiva / Bozza)</span>
+                  <span className="text-[11px] text-amber-800 leading-relaxed block">
+                    Questa ricerca verrà salvata come <strong>Vista Business</strong>. Rimarrà inattiva finché non decidi di pubblicarla nella sezione Business o modificarla dalla scheda <strong>Viste</strong>.
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center justify-end space-x-3 pt-2 border-t border-slate-100">

@@ -21,6 +21,7 @@ import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
 import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
+import { BusinessViewsManager } from './features/architect/BusinessViewsManager';
 import { SchemaRepository } from './features/schemas/SchemaRepository';
 import { DataImportHub } from './features/architect/DataImportHub';
 import { AdminHub } from './features/admin/AdminHub';
@@ -40,7 +41,7 @@ export function App() {
   const [businessTab, setBusinessTab] = useState<BusinessSubTab>('overview');
   const [architectureTab, setArchitectureTab] = useState<ArchitectureSubTab>('repository');
   const [adminTab, setAdminTab] = useState<AdminSubTab>('models');
-  const [selectedSavedView, setSelectedSavedView] = useState<SavedFilterView | null>(null);
+  const [selectedSavedView, setSelectedSavedView] = useState<any | null>(null);
 
   // Dynamic Package Views State
   const [packagesWithViews, setPackagesWithViews] = useState<PackageWithViews[]>([]);
@@ -255,17 +256,19 @@ export function App() {
                     )}
                     {architectureTab === 'schemas' && <SchemaRepository modelId={selectedModelId} />}
                     {architectureTab === 'relations' && <RelationsMatrix modelId={selectedModelId} />}
-                    {architectureTab === 'saved-views' && (
-                      <ArchitectSavedViews
+                    {architectureTab === 'business-views' && (
+                      <BusinessViewsManager
                         modelId={selectedModelId}
-                        onApplyView={(view) => {
+                        onOpenInBusiness={(viewId) => {
+                          setActivePackageView({ packageId: 'custom-business-views', viewId });
+                          setBusinessTab('package_view');
+                          setActiveHub('business');
+                        }}
+                        onApplyToRepository={(view) => {
                           setSelectedSavedView(view);
                           setArchitectureTab('repository');
                         }}
-                        onNavigateToRepository={() => {
-                          setSelectedSavedView(null);
-                          setArchitectureTab('repository');
-                        }}
+                        onViewsChanged={() => loadPackageViews(selectedModelId)}
                       />
                     )}
                     {architectureTab === 'import' && <DataImportHub modelId={selectedModelId} />}

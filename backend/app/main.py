@@ -75,6 +75,11 @@ _safe_add_column("attribute_packages", "author VARCHAR(255)")
 _safe_add_column("attribute_packages", "license VARCHAR(64)")
 _safe_add_column("element_stereotypes", "package_id VARCHAR")
 _safe_add_column("package_views", "sort_order INTEGER DEFAULT 0")
+_safe_add_column("package_views", "model_id VARCHAR")
+_safe_add_column("package_views", "is_global BOOLEAN DEFAULT FALSE")
+_safe_add_column("package_views", "target_types JSON DEFAULT '[]'")
+_safe_add_column("package_views", "author VARCHAR")
+_safe_add_column("package_views", "is_active BOOLEAN DEFAULT TRUE")
 
 def _safe_alter_column(table_name: str, sql_action: str):
     with engine.connect() as conn:
@@ -88,6 +93,7 @@ def _safe_alter_column(table_name: str, sql_action: str):
 _safe_alter_column("attribute_packages", "ALTER COLUMN code TYPE VARCHAR(32)")
 _safe_alter_column("archimate_elements", "ALTER COLUMN model_id DROP NOT NULL")
 _safe_alter_column("archimate_relationships", "ALTER COLUMN model_id DROP NOT NULL")
+_safe_alter_column("package_views", "ALTER COLUMN package_id DROP NOT NULL")
 
 # Ensure model_id is nullable on SQLite for reference elements/relationships
 if engine.dialect.name == "sqlite":

@@ -378,7 +378,11 @@ class PackageView(Base):
     __tablename__ = "package_views"
 
     id = Column(String, primary_key=True, index=True) # e.g. "pkv-uuid"
-    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=True, index=True)
+    is_global = Column(Boolean, default=False, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    author = Column(String, nullable=True)
     view_key = Column(String(64), nullable=False, index=True) # Technical key within package e.g. "it4it_digital_portfolio"
     name = Column(String, nullable=False)
     description = Column(Text, nullable=True)
@@ -386,11 +390,13 @@ class PackageView(Base):
     view_type = Column(String(32), nullable=False, default="table") # "table" | "matrix" | "kpi_dashboard"
     icon = Column(String(32), nullable=True, default="Table")
     target_stereotypes = Column(JSON, default=list) # List of stereotype keys/names
+    target_types = Column(JSON, default=list) # List of base ArchiMate element types e.g. ["ApplicationComponent"]
     config = Column(JSON, nullable=False, default=dict) # Columns, filters, metrics, charts definition
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
     package = relationship("AttributePackage", back_populates="views")
+    model_workspace = relationship("ModelWorkspace")
 
 

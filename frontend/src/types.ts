@@ -6,7 +6,7 @@ export interface ActivePackageViewSelection {
   packageId: string;
   viewId: string;
 }
-export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'saved-views' | 'import';
+export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'saved-views' | 'import' | 'business-views';
 export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'apm_config' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
@@ -934,7 +934,33 @@ export interface PackageViewSummary {
   icon?: string;
   sort_order?: number;
   matching_elements_count: number;
+  is_global?: boolean;
+  is_active?: boolean;
+  package_id?: string | null;
+  model_id?: string | null;
+  author?: string | null;
+  target_stereotypes?: string[];
+  target_types?: string[];
+  config?: Record<string, any>;
 }
+
+export interface CustomBusinessViewPayload {
+  name: string;
+  view_key?: string;
+  description?: string;
+  category: string;
+  view_type: 'table' | 'matrix' | 'kpi_dashboard';
+  icon?: string;
+  sort_order?: number;
+  is_global?: boolean;
+  is_active?: boolean;
+  package_id?: string | null;
+  target_stereotypes?: string[];
+  target_types?: string[];
+  config?: Record<string, any>;
+}
+
+export type CustomBusinessViewItem = PackageViewSummary;
 
 export interface PackageWithViews {
   id: string;
