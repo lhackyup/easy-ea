@@ -1,5 +1,13 @@
-import React from 'react';
-import { ModelWorkspace, MainHub, BusinessSubTab, ArchitectureSubTab, AdminSubTab } from '../types';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  ModelWorkspace,
+  MainHub,
+  BusinessSubTab,
+  ArchitectureSubTab,
+  AdminSubTab,
+  PackageWithViews,
+  ActivePackageViewSelection
+} from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -7,7 +15,6 @@ import {
   Database,
   Upload,
   RefreshCw,
-  LayoutGrid,
   Sparkles,
   Box,
   GitMerge,
@@ -20,13 +27,15 @@ import {
   Workflow,
   Globe,
   Boxes,
+  Package,
   LogOut,
   Shield,
   User as UserIcon,
   KeyRound,
   UploadCloud,
   BookmarkCheck,
-  FolderGit2
+  FolderGit2,
+  ChevronDown
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -44,6 +53,9 @@ interface HeaderProps {
   onOpenUpload: () => void;
   onSeedSample: () => void;
   isSeeding: boolean;
+  packagesWithViews?: PackageWithViews[];
+  activePackageView?: ActivePackageViewSelection | null;
+  onSelectPackageView?: (packageId: string, viewId: string) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -60,10 +72,25 @@ export const Header: React.FC<HeaderProps> = ({
   onSelectAdminTab,
   onOpenUpload,
   onSeedSample,
-  isSeeding
+  isSeeding,
+  packagesWithViews = [],
+  activePackageView,
+  onSelectPackageView
 }) => {
   const { language, setLanguage, t } = useLanguage();
   const { user, logout } = useAuth();
+  const [openPackageDropdown, setOpenPackageDropdown] = useState<string | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setOpenPackageDropdown(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const getHubTheme = () => {
     switch (activeHub) {
@@ -262,18 +289,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
-                onClick={() => onSelectBusinessTab('apm')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
-                  businessTab === 'apm'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/60'
-                }`}
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>{t.subtabs.timePortfolio}</span>
-              </button>
-
-              <button
                 onClick={() => onSelectBusinessTab('overlap')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
                   businessTab === 'overlap'
@@ -296,6 +311,81 @@ export const Header: React.FC<HeaderProps> = ({
                 <FileText className="w-3.5 h-3.5" />
                 <span>{t.subtabs.processLineage}</span>
               </button>
+
+              {/* DYNAMIC PACKAGE MENUS WITH SUBMENU OF VIEWS */}
+              {packagesWithViews.filter((p) => p.views && p.views.length > 0).map((pkg) => {
+                const isPkgActive = businessTab === 'package_view' && activePackageView?.packageId === pkg.id;
+                const isOpen = openPackageDropdown === pkg.id;
+
+                return (
+                  <div key={pkg.id} className="relative inline-block" ref={isOpen ? dropdownRef : undefined}>
+                    <button
+                      onClick={() => setOpenPackageDropdown(isOpen ? null : pkg.id)}
+                      className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 border ${
+                        isPkgActive
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-sm'
+                          : 'bg-white text-slate-700 hover:text-indigo-700 hover:bg-indigo-50/60 border-slate-200/90'
+                      }`}
+                    >
+                      <Package className="w-3.5 h-3.5" />
+                      <span>{pkg.name}</span>
+                      <ChevronDown className={`w-3 h-3 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {/* Sottomenù Viste Pacchetto */}
+                    {isOpen && (
+                      <div className="absolute left-0 mt-1.5 w-64 bg-white rounded-2xl shadow-xl border border-slate-200/90 p-1.5 z-50 animate-in fade-in slide-in-from-top-1">
+                        <div className="px-3 py-1.5 text-[10px] font-black uppercase tracking-wider text-slate-400 border-b border-slate-100 flex items-center justify-between">
+                          <span>Viste {pkg.code.toUpperCase()}</span>
+                          <span className="font-mono text-slate-400">v{pkg.version}</span>
+                        </div>
+                        <div className="space-y-0.5 mt-1">
+                          {[...(pkg.views || [])]
+                            .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
+                            .map((v) => {
+                            const isViewActive =
+                              isPkgActive &&
+                              (activePackageView?.viewId === v.id || activePackageView?.viewId === v.view_key);
+
+                            return (
+                              <button
+                                key={v.id}
+                                onClick={() => {
+                                  if (onSelectPackageView) {
+                                    onSelectPackageView(pkg.id, v.id);
+                                  }
+                                  setOpenPackageDropdown(null);
+                                }}
+                                className={`w-full text-left px-2.5 py-2 rounded-xl text-xs font-semibold flex items-center justify-between transition ${
+                                  isViewActive
+                                    ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                                    : 'text-slate-700 hover:bg-indigo-50/70 hover:text-indigo-700'
+                                }`}
+                              >
+                                <div className="min-w-0 pr-2">
+                                  <div className="truncate font-bold">{v.name}</div>
+                                  <div className={`text-[10px] truncate ${isViewActive ? 'text-indigo-100' : 'text-slate-400'}`}>
+                                    {v.category}
+                                  </div>
+                                </div>
+                                {v.matching_elements_count > 0 && (
+                                  <span
+                                    className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold shrink-0 ${
+                                      isViewActive ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-600'
+                                    }`}
+                                  >
+                                    {v.matching_elements_count}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -405,6 +495,18 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Boxes className="w-3.5 h-3.5" />
                 <span>{t.subtabs.metamodelManager}</span>
+              </button>
+
+              <button
+                onClick={() => onSelectAdminTab('packages')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
+                  adminTab === 'packages'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-rose-700 hover:bg-rose-50/60'
+                }`}
+              >
+                <Package className="w-3.5 h-3.5" />
+                <span>{t.subtabs.packagesManager}</span>
               </button>
 
               <button

@@ -50,9 +50,14 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
 
   const handleToggleScope = async (app: ApplicationInfo, e: React.MouseEvent) => {
     e.stopPropagation();
-    const nextScope = app.in_apm_scope === false ? true : false;
+    const isCurrentlyAsset = isAsset(app);
+    const nextScope = !isCurrentlyAsset;
     try {
-      await api.updateApplicationAPM(app.id, { in_apm_scope: nextScope });
+      await api.updateApplicationAPM(app.id, {
+        is_business_app: nextScope,
+        is_enterprise_app: nextScope,
+        in_apm_scope: nextScope
+      });
       await loadData();
     } catch (err) {
       console.error(err);
@@ -61,17 +66,29 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
 
   const handleEditClick = (app: ApplicationInfo) => {
     setEditingApp(app);
+    const assetActive = isAsset(app);
     setEditForm({
       business_fit: app.business_fit,
       technical_fit: app.technical_fit,
+      time_quadrant_override: app.time_quadrant_override || '',
       annual_cost: app.annual_cost,
+      cost_type: app.cost_type || 'OPEX (SaaS / Canone Cloud)',
+      cost_center: app.cost_center || '',
       business_criticality: app.business_criticality,
       lifecycle_status: app.lifecycle_status,
+      live_date: app.live_date || '',
+      retirement_date: app.retirement_date || '',
       business_owner: app.business_owner,
       technical_owner: app.technical_owner,
       vendor: app.vendor,
       hosting_type: app.hosting_type,
-      in_apm_scope: app.in_apm_scope !== false,
+      architecture_type: app.architecture_type || '3-Tier Web App',
+      data_classification: app.data_classification || 'Internal',
+      personal_data: app.personal_data || false,
+      sla_level: app.sla_level || 'Silver (99.0%)',
+      rto_hours: app.rto_hours || '< 4 ore',
+      is_business_app: assetActive,
+      is_enterprise_app: assetActive,
       notes: app.notes,
     });
   };
@@ -103,12 +120,13 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
 
   if (!data) return null;
 
-  const inScopeCount = data.applications.filter((a) => a.in_apm_scope !== false).length;
-  const outScopeCount = data.applications.filter((a) => a.in_apm_scope === false).length;
+  const isAsset = (a: ApplicationInfo) => a.is_business_app !== false && a.is_enterprise_app !== false && a.in_apm_scope !== false;
+  const inScopeCount = data.applications.filter(isAsset).length;
+  const outScopeCount = data.applications.filter((a) => !isAsset(a)).length;
   const totalCount = data.applications.length;
 
   const filteredApps = data.applications.filter((app) => {
-    const isInScope = app.in_apm_scope !== false;
+    const isInScope = isAsset(app);
     if (scopeFilter === 'in_scope' && !isInScope) return false;
     if (scopeFilter === 'out_of_scope' && isInScope) return false;
 
@@ -387,7 +405,14 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                 <tr key={app.id} className="hover:bg-slate-50/80 transition">
                   <td className="py-3.5 px-4 font-bold text-slate-900">
                     <div className="flex flex-col">
-                      <span>{app.name}</span>
+                      <div className="flex items-center space-x-1.5">
+                        <span>{app.name}</span>
+                        {isAsset(app) && (
+                          <span className="px-1.5 py-0.2 text-[9px] font-black rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase tracking-wider">
+                            «Business App»
+                          </span>
+                        )}
+                      </div>
                       <span className="text-[10px] text-slate-400 font-mono font-normal">{app.id}</span>
                     </div>
                   </td>
@@ -396,15 +421,15 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                       type="button"
                       onClick={(e) => handleToggleScope(app, e)}
                       className={`px-2.5 py-1 rounded-xl text-[10px] font-bold border flex items-center space-x-1 transition ${
-                        app.in_apm_scope !== false
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 shadow-sm'
+                        isAsset(app)
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 shadow-xs'
                           : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
                       }`}
                       title={t.apm.toggleScopeTooltip}
                     >
-                      {app.in_apm_scope !== false ? (
+                      {isAsset(app) ? (
                         <>
-                          <Check className="w-3 h-3 text-emerald-600" />
+                          <Check className="w-3 h-3 text-indigo-600" />
                           <span>{t.apm.inScopeBadge}</span>
                         </>
                       ) : (
@@ -475,7 +500,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
       {/* Edit Modal */}
       {editingApp && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setEditingApp(null)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
@@ -484,138 +509,340 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
             </button>
 
             <h3 className="text-lg font-bold text-slate-900 mb-1">{interpolate(t.apm.editModalTitle, { name: editingApp.name })}</h3>
-            <p className="text-xs text-slate-500 mb-6">{t.apm.editModalSubtitle}</p>
+            <p className="text-xs text-slate-500 mb-5">{t.apm.editModalSubtitle}</p>
 
-            <div className="space-y-4">
+            <div className="space-y-5">
               
-              {/* APM Scope Toggle */}
-              <div className="p-3.5 bg-indigo-50/50 border border-indigo-100 rounded-xl flex items-center justify-between">
+              {/* Enterprise Application Stereotype Toggle */}
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/80 rounded-xl flex items-center justify-between">
                 <div>
-                  <label className="text-xs font-bold text-slate-900 block">{t.apm.labelInApmScope}</label>
-                  <p className="text-[11px] text-slate-500 mt-0.5">{t.apm.labelInApmScopeDesc}</p>
+                  <label className="text-xs font-bold text-slate-900 block flex items-center gap-1.5">
+                    <span>{t.apm.labelInApmScope}</span>
+                    <span className="px-1.5 py-0.2 text-[9px] font-black rounded bg-indigo-600 text-white uppercase">
+                      Stereotipo
+                    </span>
+                  </label>
+                  <p className="text-[11px] text-slate-600 mt-0.5">{t.apm.labelInApmScopeDesc}</p>
                 </div>
                 <input
                   type="checkbox"
-                  checked={editForm.in_apm_scope !== false}
-                  onChange={(e) => setEditForm({ ...editForm, in_apm_scope: e.target.checked })}
+                  checked={editForm.is_business_app !== false}
+                  onChange={(e) => setEditForm({ ...editForm, is_business_app: e.target.checked, is_enterprise_app: e.target.checked })}
                   className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelBusinessFit}
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={editForm.business_fit || 3}
-                    onChange={(e) => setEditForm({ ...editForm, business_fit: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  />
+              {/* Sezione: Fit & TIME */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Valutazione Gartner TIME & Fit
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelTechnicalFit}
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5"
-                    value={editForm.technical_fit || 3}
-                    onChange={(e) => setEditForm({ ...editForm, technical_fit: parseInt(e.target.value) || 1 })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelAnnualCost}
-                  </label>
-                  <input
-                    type="number"
-                    value={editForm.annual_cost || 0}
-                    onChange={(e) => setEditForm({ ...editForm, annual_cost: parseFloat(e.target.value) || 0 })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelCriticality}
-                  </label>
-                  <select
-                    value={editForm.business_criticality}
-                    onChange={(e) => setEditForm({ ...editForm, business_criticality: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  >
-                    <option value="Mission Critical">Mission Critical</option>
-                    <option value="Business Critical">Business Critical</option>
-                    <option value="Business Operational">Business Operational</option>
-                    <option value="Administrative">Administrative</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelBusinessFit}
+                    </label>
+                    <select
+                      value={editForm.business_fit || 3}
+                      onChange={(e) => setEditForm({ ...editForm, business_fit: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value={1}>1 - Unreasonable (Inadeguata)</option>
+                      <option value={2}>2 - Insufficient (Lacunosa)</option>
+                      <option value={3}>3 - Appropriate (Adeguata)</option>
+                      <option value={4}>4 - Perfect (Eccellente)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelTechnicalFit}
+                    </label>
+                    <select
+                      value={editForm.technical_fit || 3}
+                      onChange={(e) => setEditForm({ ...editForm, technical_fit: parseInt(e.target.value) || 1 })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value={1}>1 - Unreasonable (Obsoleta)</option>
+                      <option value={2}>2 - Insufficient (Debito Tecnico)</option>
+                      <option value={3}>3 - Appropriate (Stabile/Standard)</option>
+                      <option value={4}>4 - Perfect (Cloud Native)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelTimeOverride}
+                    </label>
+                    <select
+                      value={editForm.time_quadrant_override || ''}
+                      onChange={(e) => setEditForm({ ...editForm, time_quadrant_override: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="">Auto (Calcolato dai Fit)</option>
+                      <option value="Invest">Invest (Alto Valore/Tecnologia)</option>
+                      <option value="Migrate">Migrate (Riprogettare/Cloud)</option>
+                      <option value="Tolerate">Tolerate (Mantenere/Stabile)</option>
+                      <option value="Eliminate">Eliminate (Dismettere)</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelLifecycle}
-                  </label>
-                  <select
-                    value={editForm.lifecycle_status}
-                    onChange={(e) => setEditForm({ ...editForm, lifecycle_status: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  >
-                    <option value="Plan">Plan</option>
-                    <option value="Evaluation">Evaluation</option>
-                    <option value="Live">Live</option>
-                    <option value="Phase-out">Phase-out</option>
-                    <option value="Retired">Retired</option>
-                  </select>
+              {/* Sezione: Ciclo di Vita & Criticità */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Ciclo di Vita & Criticità
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelHosting}
-                  </label>
-                  <select
-                    value={editForm.hosting_type}
-                    onChange={(e) => setEditForm({ ...editForm, hosting_type: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  >
-                    <option value="SaaS">SaaS</option>
-                    <option value="Public Cloud">Public Cloud (AWS/GCP/Azure)</option>
-                    <option value="Private Cloud">Private Cloud</option>
-                    <option value="On-Premise">On-Premise</option>
-                  </select>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelLifecycle}
+                    </label>
+                    <select
+                      value={editForm.lifecycle_status}
+                      onChange={(e) => setEditForm({ ...editForm, lifecycle_status: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="Plan">Plan</option>
+                      <option value="Phase In">Phase In</option>
+                      <option value="Live">Live</option>
+                      <option value="Phase Out">Phase Out</option>
+                      <option value="Retired">Retired</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelCriticality}
+                    </label>
+                    <select
+                      value={editForm.business_criticality}
+                      onChange={(e) => setEditForm({ ...editForm, business_criticality: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="Mission Critical">Mission Critical</option>
+                      <option value="Business Critical">Business Critical</option>
+                      <option value="Business Operational">Business Operational</option>
+                      <option value="Administrative">Administrative</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelGoLiveDate}
+                    </label>
+                    <input
+                      type="date"
+                      value={editForm.live_date || ''}
+                      onChange={(e) => setEditForm({ ...editForm, live_date: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelRetirementDate}
+                    </label>
+                    <input
+                      type="date"
+                      value={editForm.retirement_date || ''}
+                      onChange={(e) => setEditForm({ ...editForm, retirement_date: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelBusinessOwner}
-                  </label>
-                  <input
-                    type="text"
-                    value={editForm.business_owner || ''}
-                    onChange={(e) => setEditForm({ ...editForm, business_owner: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
-                  />
+              {/* Sezione: TCO & Finanza */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Financials & Costi TCO
                 </div>
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1">
-                    {t.apm.labelVendor}
-                  </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelAnnualCost}
+                    </label>
+                    <input
+                      type="number"
+                      value={editForm.annual_cost || 0}
+                      onChange={(e) => setEditForm({ ...editForm, annual_cost: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelCostType}
+                    </label>
+                    <select
+                      value={editForm.cost_type || 'OPEX (SaaS / Canone Cloud)'}
+                      onChange={(e) => setEditForm({ ...editForm, cost_type: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="OPEX (SaaS / Canone Cloud)">OPEX (SaaS / Canone Cloud)</option>
+                      <option value="CAPEX (Licenza Perpetua)">CAPEX (Licenza Perpetua)</option>
+                      <option value="Internal (Sviluppo Interno)">Internal (Sviluppo Interno)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelCostCenter}
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="es. CC-1020"
+                      value={editForm.cost_center || ''}
+                      onChange={(e) => setEditForm({ ...editForm, cost_center: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sezione: Architettura & Hosting */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Architettura Software & Hosting
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelHosting}
+                    </label>
+                    <select
+                      value={editForm.hosting_type}
+                      onChange={(e) => setEditForm({ ...editForm, hosting_type: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="SaaS">SaaS</option>
+                      <option value="Public Cloud">Public Cloud (AWS/GCP/Azure)</option>
+                      <option value="Private Cloud">Private Cloud</option>
+                      <option value="On-Premise">On-Premise</option>
+                      <option value="Hybrid">Hybrid</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelArchitectureType}
+                    </label>
+                    <select
+                      value={editForm.architecture_type || '3-Tier Web App'}
+                      onChange={(e) => setEditForm({ ...editForm, architecture_type: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="SaaS Standard">SaaS Standard</option>
+                      <option value="Microservices / Cloud Native">Microservices / Cloud Native</option>
+                      <option value="3-Tier Web App">3-Tier Web App</option>
+                      <option value="Monolith / Client-Server">Monolith / Client-Server</option>
+                      <option value="Legacy Mainframe">Legacy Mainframe</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sezione: Governance & Ownership */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Governance & Ownership
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelBusinessOwner}
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.business_owner || ''}
+                      onChange={(e) => setEditForm({ ...editForm, business_owner: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelTechnicalOwner}
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.technical_owner || ''}
+                      onChange={(e) => setEditForm({ ...editForm, technical_owner: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelVendor}
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.vendor || ''}
+                      onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sezione: Sicurezza & Resilienza */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
+                <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
+                  Sicurezza, Privacy & SLA
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelDataClassification}
+                    </label>
+                    <select
+                      value={editForm.data_classification || 'Internal'}
+                      onChange={(e) => setEditForm({ ...editForm, data_classification: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="Public">Public</option>
+                      <option value="Internal">Internal</option>
+                      <option value="Confidential">Confidential</option>
+                      <option value="Restricted / GDPR PII">Restricted / GDPR PII</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelSla}
+                    </label>
+                    <select
+                      value={editForm.sla_level || 'Silver (99.0%)'}
+                      onChange={(e) => setEditForm({ ...editForm, sla_level: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="Platinum (99.99%)">Platinum (99.99%)</option>
+                      <option value="Gold (99.9%)">Gold (99.9%)</option>
+                      <option value="Silver (99.0%)">Silver (99.0%)</option>
+                      <option value="Bronze (95.0%)">Bronze (95.0%)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      {t.apm.labelRto}
+                    </label>
+                    <select
+                      value={editForm.rto_hours || '< 4 ore'}
+                      onChange={(e) => setEditForm({ ...editForm, rto_hours: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                    >
+                      <option value="< 1 ora">&lt; 1 ora</option>
+                      <option value="< 4 ore">&lt; 4 ore</option>
+                      <option value="< 24 ore">&lt; 24 ore</option>
+                      <option value="> 24 ore / Best Effort">&gt; 24 ore / Best Effort</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="pt-2 flex items-center space-x-2">
                   <input
-                    type="text"
-                    value={editForm.vendor || ''}
-                    onChange={(e) => setEditForm({ ...editForm, vendor: e.target.value })}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                    type="checkbox"
+                    id="chk_personal_data"
+                    checked={editForm.personal_data || false}
+                    onChange={(e) => setEditForm({ ...editForm, personal_data: e.target.checked })}
+                    className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300 cursor-pointer"
                   />
+                  <label htmlFor="chk_personal_data" className="text-xs font-semibold text-slate-700 cursor-pointer">
+                    {t.apm.labelPersonalData}
+                  </label>
                 </div>
               </div>
 
@@ -627,7 +854,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   rows={2}
                   value={editForm.notes || ''}
                   onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white"
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
@@ -643,10 +870,10 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   type="button"
                   onClick={handleSaveEdit}
                   disabled={saving}
-                  className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition"
+                  className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white shadow-md shadow-indigo-600/20 transition disabled:opacity-50"
                 >
                   <Check className="w-4 h-4" />
-                  <span>{t.common.save}</span>
+                  <span>{saving ? 'Salvataggio...' : t.common.save}</span>
                 </button>
               </div>
             </div>

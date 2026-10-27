@@ -92,6 +92,7 @@ def seed_sample_model(db: Session) -> str:
             type=elem_type,
             layer=layer,
             documentation=doc,
+            stereotype_id="stereo-business-app",
             properties={}
         )
         db.add(el)
@@ -379,4 +380,12 @@ def seed_sample_model(db: Session) -> str:
     db.add(ver_bpmn)
 
     db.commit()
+
+    # 9. Seed comprehensive APM portfolio for EasyBank Global
+    try:
+        from app.services.seed_easybank_apm_data import seed_easybank_apm_portfolio
+        seed_easybank_apm_portfolio(db)
+    except Exception as e:
+        print(f"Warning: could not seed EasyBank APM portfolio: {e}")
+
     return workspace.id

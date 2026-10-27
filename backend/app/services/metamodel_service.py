@@ -10,8 +10,10 @@ from app.models.archimate import (
     AttributePackageItem,
     WorkspaceAttributePackage,
     ArchimateElement,
+    ArchimateRelationship,
     ElementStereotype,
-    StereotypeAttributeLink
+    StereotypeAttributeLink,
+    PackageView
 )
 
 ARCHIMATE_METAMODEL = [
@@ -543,6 +545,14 @@ def get_full_metamodel_with_custom_attributes(db: Session, model_id: Optional[st
     If model_id is specified (and not '*'), includes global attributes, attributes scoped to that model,
     and attributes belonging to packages activated on that model workspace.
     """
+    is_easy = False
+    if model_id and model_id != "*":
+        model_ws = db.query(ModelWorkspace).filter(
+            (ModelWorkspace.id == model_id) | (ModelWorkspace.code == model_id)
+        ).first()
+        if model_ws and ((model_ws.code and model_ws.code.upper() == "EASY") or model_ws.id == "sample-easybank-ea"):
+            is_easy = True
+
     query = db.query(CustomAttributeDefinition)
     if model_id and model_id != "*":
         query = query.filter(
@@ -561,11 +571,14 @@ def get_full_metamodel_with_custom_attributes(db: Session, model_id: Optional[st
         key = ca.element_type
         if key not in custom_map:
             custom_map[key] = []
+        sec = ca.section or "Custom Attributes"
+        if is_easy and (ca.element_type in ("ApplicationComponent", "*") or ca.layer in ("Application", "All")):
+            sec = "Attributi Generici"
         custom_map[key].append({
             "id": ca.id,
             "model_id": ca.model_id,
             "library_code": ca.library_code,
-            "section": ca.section or "Custom Attributes",
+            "section": sec,
             "name": ca.name,
             "label": ca.label,
             "description": ca.description,
@@ -597,11 +610,14 @@ def get_full_metamodel_with_custom_attributes(db: Session, model_id: Optional[st
                 key = item.element_type
                 if key not in custom_map:
                     custom_map[key] = []
+                sec = item.section or pkg.name
+                if is_easy and (item.element_type in ("ApplicationComponent", "*") or item.layer in ("Application", "All")):
+                    sec = f"Package {pkg.code.upper()}"
                 custom_map[key].append({
                     "id": item.id,
                     "model_id": model_id,
                     "library_code": None,
-                    "section": item.section or pkg.name,
+                    "section": sec,
                     "name": item.name,
                     "label": item.label,
                     "description": item.description,
@@ -726,6 +742,14 @@ def get_full_metamodel_with_custom_attributes(db: Session, model_id: Optional[st
     return result
 
 def list_custom_attributes(db: Session, model_id: Optional[str] = None, element_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    is_easy = False
+    if model_id and model_id != "*":
+        model_ws = db.query(ModelWorkspace).filter(
+            (ModelWorkspace.id == model_id) | (ModelWorkspace.code == model_id)
+        ).first()
+        if model_ws and ((model_ws.code and model_ws.code.upper() == "EASY") or model_ws.id == "sample-easybank-ea"):
+            is_easy = True
+
     query = db.query(CustomAttributeDefinition)
     if model_id and model_id != "*":
         query = query.filter(
@@ -746,7 +770,7 @@ def list_custom_attributes(db: Session, model_id: Optional[str] = None, element_
             "id": ca.id,
             "model_id": ca.model_id,
             "library_code": ca.library_code,
-            "section": ca.section or "Custom Attributes",
+            "section": "Attributi Generici" if (is_easy and (ca.element_type in ("ApplicationComponent", "*") or ca.layer in ("Application", "All"))) else (ca.section or "Custom Attributes"),
             "name": ca.name,
             "label": ca.label,
             "description": ca.description,
@@ -781,11 +805,14 @@ def list_custom_attributes(db: Session, model_id: Optional[str] = None, element_
                     (AttributePackageItem.element_type == "*")
                 )
             for item, pkg in p_query.order_by(AttributePackageItem.sort_order).all():
+                sec = item.section or pkg.name
+                if is_easy and (item.element_type in ("ApplicationComponent", "*") or item.layer in ("Application", "All")):
+                    sec = f"Package {pkg.code.upper()}"
                 res.append({
                     "id": item.id,
                     "model_id": model_id,
                     "library_code": None,
-                    "section": item.section or pkg.name,
+                    "section": sec,
                     "name": item.name,
                     "label": item.label,
                     "description": item.description,
@@ -992,7 +1019,7 @@ def delete_custom_attribute(db: Session, attr_id: str) -> bool:
     return True
 
 def seed_default_attribute_packages(db: Session):
-    """Seed or update standard attribute packages (APM, TIME) and auto-migrate legacy eea_ values."""
+    """Seed or update standard APM attribute package according to LeanIX/TOGAF standards and purge deprecated tme_ attributes and pkg-tme."""
     # 1. Package APM (Code: apm, 3 letters)
     apm_pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-apm").first()
     if not apm_pkg:
@@ -1000,8 +1027,10 @@ def seed_default_attribute_packages(db: Session):
             id="pkg-apm",
             code="apm",
             name="Application Portfolio Management",
-            description="Attributi essenziali per APM, TCO, ownership, lifecycle, deployment e conformità applicativa.",
-            icon_color="blue",
+            description="Essential APM framework and attributes for TCO, governance, Business Application stereotypes, lifecycle tracking, and Gartner TIME model aligned with LeanIX and TOGAF standards.",
+            icon_color="indigo",
+            package_type="framework",
+            standard_version="LeanIX / TOGAF / Gartner TIME",
             is_default_active=True,
             is_system=True
         )
@@ -1009,148 +1038,328 @@ def seed_default_attribute_packages(db: Session):
         db.flush()
     else:
         apm_pkg.code = "apm"
+        apm_pkg.name = "Application Portfolio Management"
+        apm_pkg.description = "Essential APM framework and attributes for TCO, governance, Business Application stereotypes, lifecycle tracking, and Gartner TIME model aligned with LeanIX and TOGAF standards."
+        apm_pkg.icon_color = "indigo"
+        apm_pkg.package_type = "framework"
+        apm_pkg.standard_version = "LeanIX / TOGAF / Gartner TIME"
         apm_pkg.is_system = True
 
     apm_items = [
+        # Section 1: Governance & Ownership
         {
-            "id": "item-apm-in-scope",
-            "name": "apm_in_scope",
-            "label": "In APM Scope (Include in TIME & TCO)",
-            "description": "Indica se l'applicazione appartiene al perimetro APM attivo per TCO e matrice TIME.",
+            "id": "item-apm-app-code",
+            "name": "apm_app_code",
+            "label": "Application Code",
+            "description": "Unique alphanumeric application identifier (exactly 6 characters, e.g. APP001, CRMB01).",
             "element_type": "ApplicationComponent",
             "layer": "Application",
-            "data_type": "boolean",
+            "data_type": "string",
             "options": [],
-            "default_value": "true",
-            "is_required": False,
-            "section": "APM Portfolio",
+            "default_value": "",
+            "is_required": True,
+            "section": "Governance & Ownership",
             "sort_order": 1
         },
         {
-            "id": "item-apm-annual-cost",
-            "name": "apm_annual_cost",
-            "label": "Annual Cost / TCO (€)",
-            "description": "Costo totale annuo di possesso (licenze, infrastruttura, manutenzione).",
+            "id": "item-apm-short-name",
+            "name": "apm_short_name",
+            "label": "Short Name",
+            "description": "Concise name of the application for visual diagrams and matrices (maximum 12 characters, e.g. VaultCore).",
             "element_type": "ApplicationComponent",
             "layer": "Application",
-            "data_type": "number",
+            "data_type": "string",
             "options": [],
-            "default_value": "0",
+            "default_value": "",
             "is_required": True,
-            "section": "APM Portfolio",
+            "section": "Governance & Ownership",
             "sort_order": 2
         },
+        {
+            "id": "item-apm-business-owner",
+            "name": "apm_business_owner",
+            "label": "Business Owner",
+            "description": "Business executive or process owner accountable for the application.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Governance & Ownership",
+            "sort_order": 3
+        },
+        {
+            "id": "item-apm-technical-owner",
+            "name": "apm_technical_owner",
+            "label": "Technical Owner",
+            "description": "Lead architect or IT engineering manager responsible for the application.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Governance & Ownership",
+            "sort_order": 2
+        },
+        {
+            "id": "item-apm-vendor",
+            "name": "apm_vendor",
+            "label": "Vendor / Provider",
+            "description": "Software vendor, commercial software house, or in-house development team.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Governance & Ownership",
+            "sort_order": 3
+        },
+        {
+            "id": "item-apm-cost-center",
+            "name": "apm_cost_center",
+            "label": "Cost Center",
+            "description": "Corporate cost center code to which application expenses are allocated.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Governance & Ownership",
+            "sort_order": 4
+        },
+
+        # Section 2: Lifecycle
+        {
+            "id": "item-apm-lifecycle-status",
+            "name": "apm_lifecycle_status",
+            "label": "Lifecycle Status",
+            "description": "Current phase of the application lifecycle compliant with LeanIX / TOGAF.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["Plan", "Phase In", "Live", "Phase Out", "Retired"],
+            "default_value": "Live",
+            "is_required": True,
+            "section": "Lifecycle",
+            "sort_order": 5
+        },
+        {
+            "id": "item-apm-live-date",
+            "name": "apm_live_date",
+            "label": "Go-Live Date",
+            "description": "Actual or planned date of production deployment.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "date",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "Lifecycle",
+            "sort_order": 6
+        },
+        {
+            "id": "item-apm-retirement-date",
+            "name": "apm_retirement_date",
+            "label": "Planned Retirement Date",
+            "description": "Target date for decommissioning or end-of-support.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "date",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "Lifecycle",
+            "sort_order": 7
+        },
+
+        # Section 3: Business Fit & Criticality
         {
             "id": "item-apm-business-criticality",
             "name": "apm_business_criticality",
             "label": "Business Criticality",
-            "description": "Livello di impatto sul business in caso di disservizio o indisponibilità applicativa.",
+            "description": "Level of operational or financial business impact in case of application outage.",
             "element_type": "ApplicationComponent",
             "layer": "Application",
             "data_type": "select",
             "options": ["Mission Critical", "Business Critical", "Business Operational", "Administrative"],
             "default_value": "Business Operational",
             "is_required": True,
-            "section": "APM Portfolio",
-            "sort_order": 3
+            "section": "Business Fit & Criticality",
+            "sort_order": 8
         },
         {
-            "id": "item-apm-lifecycle-status",
-            "name": "apm_lifecycle_status",
-            "label": "Lifecycle Status",
-            "description": "Fase attuale del ciclo di vita dell'applicazione.",
+            "id": "item-apm-functional-fit",
+            "name": "apm_functional_fit",
+            "label": "Business / Functional Fit",
+            "description": "Assessment of functional adequacy and alignment with business requirements (LeanIX 1-4 scale).",
             "element_type": "ApplicationComponent",
             "layer": "Application",
             "data_type": "select",
-            "options": ["Plan", "Evaluation", "Live", "Phase-out", "Retired"],
-            "default_value": "Live",
+            "options": [
+                "1 - Unreasonable",
+                "2 - Insufficient",
+                "3 - Appropriate",
+                "4 - Perfect"
+            ],
+            "default_value": "3 - Appropriate",
             "is_required": True,
-            "section": "APM Portfolio",
-            "sort_order": 4
+            "section": "Business Fit & Criticality",
+            "sort_order": 9
         },
         {
-            "id": "item-apm-business-owner",
-            "name": "apm_business_owner",
-            "label": "Business Owner",
-            "description": "Responsabile business di riferimento per l'applicazione.",
+            "id": "item-apm-time-override",
+            "name": "apm_time_quadrant_override",
+            "label": "TIME Recommendation (Override)",
+            "description": "Optional override of the Gartner TIME quadrant (calculated automatically if blank).",
             "element_type": "ApplicationComponent",
             "layer": "Application",
-            "data_type": "string",
-            "options": [],
+            "data_type": "select",
+            "options": ["", "Invest", "Tolerate", "Migrate", "Eliminate"],
             "default_value": "",
             "is_required": False,
-            "section": "APM Portfolio",
-            "sort_order": 5
+            "section": "Business Fit & Criticality",
+            "sort_order": 10
         },
+
+        # Section 4: Technical Architecture & Fit
         {
-            "id": "item-apm-technical-owner",
-            "name": "apm_technical_owner",
-            "label": "Technical Owner",
-            "description": "Architetto o responsabile tecnico del componente IT.",
+            "id": "item-apm-technical-fit",
+            "name": "apm_technical_fit",
+            "label": "Technical Fit",
+            "description": "Architectural quality, maintainability, and absence of technical debt (LeanIX 1-4 scale).",
             "element_type": "ApplicationComponent",
             "layer": "Application",
-            "data_type": "string",
-            "options": [],
-            "default_value": "",
-            "is_required": False,
-            "section": "APM Portfolio",
-            "sort_order": 6
-        },
-        {
-            "id": "item-apm-vendor",
-            "name": "apm_vendor",
-            "label": "Vendor / Supplier",
-            "description": "Fornitore, software house o team di sviluppo interno.",
-            "element_type": "ApplicationComponent",
-            "layer": "Application",
-            "data_type": "string",
-            "options": [],
-            "default_value": "",
-            "is_required": False,
-            "section": "APM Portfolio",
-            "sort_order": 7
+            "data_type": "select",
+            "options": [
+                "1 - Unreasonable",
+                "2 - Insufficient",
+                "3 - Appropriate",
+                "4 - Perfect"
+            ],
+            "default_value": "3 - Appropriate",
+            "is_required": True,
+            "section": "Technical Architecture & Fit",
+            "sort_order": 11
         },
         {
             "id": "item-apm-hosting-type",
             "name": "apm_hosting_type",
-            "label": "Hosting / Deployment Type",
-            "description": "Modello di erogazione e hosting infrastrutturale.",
+            "label": "Hosting / Delivery Model",
+            "description": "Infrastructure hosting and deployment model.",
             "element_type": "ApplicationComponent",
             "layer": "Application",
             "data_type": "select",
-            "options": ["SaaS", "Public Cloud", "Private Cloud", "On-Premise"],
+            "options": ["SaaS", "Public Cloud", "Private Cloud", "On-Premise", "Hybrid"],
             "default_value": "Public Cloud",
             "is_required": True,
-            "section": "APM Portfolio",
-            "sort_order": 8
+            "section": "Technical Architecture & Fit",
+            "sort_order": 12
         },
+        {
+            "id": "item-apm-architecture-type",
+            "name": "apm_architecture_type",
+            "label": "Architectural Pattern",
+            "description": "Primary software pattern and architectural paradigm.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["SaaS Standard", "Microservices / Cloud Native", "3-Tier Web App", "Monolith / Client-Server", "Legacy Mainframe"],
+            "default_value": "3-Tier Web App",
+            "is_required": False,
+            "section": "Technical Architecture & Fit",
+            "sort_order": 13
+        },
+
+        # Section 5: Financials & TCO
+        {
+            "id": "item-apm-annual-cost",
+            "name": "apm_annual_cost",
+            "label": "Total Annual Cost / TCO (€)",
+            "description": "Total annual cost of ownership (licenses, infrastructure, maintenance, and support).",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": True,
+            "section": "Financials & TCO",
+            "sort_order": 14
+        },
+        {
+            "id": "item-apm-cost-type",
+            "name": "apm_cost_type",
+            "label": "Cost Model",
+            "description": "Primary nature of application expenditure.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["OPEX (SaaS / Cloud Subscription)", "CAPEX (Perpetual License)", "Internal (In-house Development)"],
+            "default_value": "OPEX (SaaS / Cloud Subscription)",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 15
+        },
+
+        # Section 6: Risk, Security & Compliance
         {
             "id": "item-apm-data-classification",
             "name": "apm_data_classification",
             "label": "Data Classification",
-            "description": "Classificazione di riservatezza dei dati gestiti (GDPR / confidenzialità).",
+            "description": "Confidentiality classification of data processed by the application.",
             "element_type": "ApplicationComponent",
             "layer": "Application",
             "data_type": "select",
-            "options": ["Public", "Internal", "Confidential", "Restricted/GDPR"],
+            "options": ["Public", "Internal", "Confidential", "Restricted / GDPR PII"],
             "default_value": "Internal",
             "is_required": False,
-            "section": "APM Portfolio",
-            "sort_order": 9
+            "section": "Risk, Security & Compliance",
+            "sort_order": 16
+        },
+        {
+            "id": "item-apm-personal-data",
+            "name": "apm_personal_data",
+            "label": "Personal Data Processing (GDPR)",
+            "description": "Indicates whether the application collects or processes personally identifiable information (PII) subject to GDPR.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "boolean",
+            "options": [],
+            "default_value": "false",
+            "is_required": False,
+            "section": "Risk, Security & Compliance",
+            "sort_order": 17
         },
         {
             "id": "item-apm-sla-level",
             "name": "apm_sla_level",
-            "label": "SLA Service Level",
-            "description": "Accordo sul livello di servizio contrattuale garantito.",
+            "label": "Service Level Agreement (SLA)",
+            "description": "Contractually guaranteed service availability level.",
             "element_type": "ApplicationComponent",
             "layer": "Application",
             "data_type": "select",
             "options": ["Platinum (99.99%)", "Gold (99.9%)", "Silver (99.0%)", "Bronze (95.0%)"],
             "default_value": "Silver (99.0%)",
             "is_required": False,
-            "section": "APM Portfolio",
-            "sort_order": 10
+            "section": "Risk, Security & Compliance",
+            "sort_order": 18
+        },
+        {
+            "id": "item-apm-rto-hours",
+            "name": "apm_rto_hours",
+            "label": "Recovery Time Objective (RTO)",
+            "description": "Maximum tolerable downtime before application outage causes unacceptable business damage.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["< 1 hour", "< 4 hours", "< 24 hours", "> 24 hours / Best Effort"],
+            "default_value": "< 4 hours",
+            "is_required": False,
+            "section": "Risk, Security & Compliance",
+            "sort_order": 19
         }
     ]
 
@@ -1162,178 +1371,398 @@ def seed_default_attribute_packages(db: Session):
         else:
             db.add(AttributePackageItem(package_id=apm_pkg.id, **it))
 
-    # 2. Package TIME (Code: tme, 3 letters)
-    tme_pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-tme").first()
-    if not tme_pkg:
-        tme_pkg = AttributePackage(
-            id="pkg-tme",
-            code="tme",
-            name="TIME Portfolio Assessment",
-            description="Attributi Gartner TIME per valutazione di adeguatezza aziendale (Business Fit) e tecnica (Technical Fit).",
-            icon_color="indigo",
-            is_default_active=True,
-            is_system=True
-        )
-        db.add(tme_pkg)
-        db.flush()
-    else:
-        tme_pkg.code = "tme"
-        tme_pkg.is_system = True
+    # Delete deprecated item-apm-in-scope if present
+    db.query(AttributePackageItem).filter(AttributePackageItem.id == "item-apm-in-scope").delete(synchronize_session=False)
 
-    tme_items = [
-        {
-            "id": "item-tme-business-fit",
-            "name": "tme_business_fit",
-            "label": "Business Fit Score (1-5)",
-            "description": "Allineamento strategico e valore di business percepito (punteggio 1-5).",
-            "element_type": "ApplicationComponent",
-            "layer": "Application",
-            "data_type": "number",
-            "options": [],
-            "default_value": "3",
-            "is_required": True,
-            "section": "TIME Assessment",
-            "sort_order": 1
-        },
-        {
-            "id": "item-tme-technical-fit",
-            "name": "tme_technical_fit",
-            "label": "Technical Fit Score (1-5)",
-            "description": "Qualità tecnica, manutenibilità e assenza di debito tecnico (punteggio 1-5).",
-            "element_type": "ApplicationComponent",
-            "layer": "Application",
-            "data_type": "number",
-            "options": [],
-            "default_value": "3",
-            "is_required": True,
-            "section": "TIME Assessment",
-            "sort_order": 2
-        },
-        {
-            "id": "item-tme-quadrant",
-            "name": "tme_quadrant",
-            "label": "TIME Decision Quadrant",
-            "description": "Quadrante di decisione Gartner (Invest, Migrate, Tolerate, Eliminate).",
-            "element_type": "ApplicationComponent",
-            "layer": "Application",
-            "data_type": "select",
-            "options": ["Invest", "Migrate", "Tolerate", "Eliminate"],
-            "default_value": "Tolerate",
-            "is_required": True,
-            "section": "TIME Assessment",
-            "sort_order": 3
-        }
-    ]
+    # 2. Complete removal of deprecated pkg-tme and all tme_ attributes
+    db.query(AttributePackageItem).filter(AttributePackageItem.name.like("tme_%")).delete(synchronize_session=False)
+    db.query(WorkspaceAttributePackage).filter(WorkspaceAttributePackage.package_id == "pkg-tme").delete(synchronize_session=False)
+    db.query(AttributePackage).filter(AttributePackage.id == "pkg-tme").delete(synchronize_session=False)
 
-    for it in tme_items:
-        existing_it = db.query(AttributePackageItem).filter(AttributePackageItem.id == it["id"]).first()
-        if existing_it:
-            for k, v in it.items():
-                setattr(existing_it, k, v)
-        else:
-            db.add(AttributePackageItem(package_id=tme_pkg.id, **it))
+    # 2b. Clean up any package attributes erroneously duplicated in global CustomAttributeDefinition
+    db.query(CustomAttributeDefinition).filter(
+        (CustomAttributeDefinition.name.like("it4it_%")) |
+        (CustomAttributeDefinition.name.like("bian_%")) |
+        (CustomAttributeDefinition.name.like("apm_%")) |
+        (CustomAttributeDefinition.name.like("tme_%")),
+        CustomAttributeDefinition.model_id == None
+    ).delete(synchronize_session=False)
 
-    # 3. Ensure both packages are active on all existing model workspaces
+    # 3. Ensure APM package is active on all existing model workspaces
     workspaces = db.query(ModelWorkspace).all()
     for ws in workspaces:
-        for pkg_id in ["pkg-apm", "pkg-tme"]:
-            has_link = db.query(WorkspaceAttributePackage).filter(
-                WorkspaceAttributePackage.model_id == ws.id,
-                WorkspaceAttributePackage.package_id == pkg_id
-            ).first()
-            if not has_link:
-                db.add(WorkspaceAttributePackage(
-                    id=f"wap-{uuid.uuid4().hex[:8]}",
-                    model_id=ws.id,
-                    package_id=pkg_id
-                ))
+        has_link = db.query(WorkspaceAttributePackage).filter(
+            WorkspaceAttributePackage.model_id == ws.id,
+            WorkspaceAttributePackage.package_id == apm_pkg.id
+        ).first()
+        if not has_link:
+            db.add(WorkspaceAttributePackage(
+                id=f"wap-{uuid.uuid4().hex[:8]}",
+                model_id=ws.id,
+                package_id=apm_pkg.id
+            ))
 
-    # 4. Data migration for ArchimateElement properties: eea_ -> apm_ / tme_
-    key_mapping = {
-        "eea_in_apm_scope": "apm_in_scope",
-        "eea_annual_cost": "apm_annual_cost",
-        "eea_business_criticality": "apm_business_criticality",
-        "eea_lifecycle_status": "apm_lifecycle_status",
-        "eea_business_owner": "apm_business_owner",
-        "eea_technical_owner": "apm_technical_owner",
-        "eea_vendor": "apm_vendor",
-        "eea_hosting_type": "apm_hosting_type",
-        "eea_data_classification": "apm_data_classification",
-        "eea_sla_level": "apm_sla_level",
-        "eea_business_fit": "tme_business_fit",
-        "eea_technical_fit": "tme_technical_fit",
-        "eea_time_quadrant": "tme_quadrant"
-    }
+    # 4. Data migration for ArchimateElement properties: tme_ / eea_ -> apm_
+    def map_fit_score(val):
+        if val is None or val == "":
+            return "3 - Appropriate (Adeguata)"
+        s = str(val).strip()
+        if s.startswith("1"):
+            return "1 - Unreasonable (Inadeguata)"
+        elif s.startswith("2"):
+            return "2 - Insufficient (Lacunosa)"
+        elif s.startswith("4") or s.startswith("5"):
+            return "4 - Perfect (Eccellente)"
+        return "3 - Appropriate (Adeguata)"
+
+    def map_tech_fit_score(val):
+        if val is None or val == "":
+            return "3 - Appropriate (Stabile/Standard)"
+        s = str(val).strip()
+        if s.startswith("1"):
+            return "1 - Unreasonable (Obsoleta)"
+        elif s.startswith("2"):
+            return "2 - Insufficient (Debito Tecnico)"
+        elif s.startswith("4") or s.startswith("5"):
+            return "4 - Perfect (Cloud Native)"
+        return "3 - Appropriate (Stabile/Standard)"
 
     elements = db.query(ArchimateElement).all()
     for elem in elements:
         if isinstance(elem.properties, dict) and elem.properties:
             updated = False
             props = dict(elem.properties)
-            for old_k, new_k in key_mapping.items():
-                if old_k in props and new_k not in props:
-                    props[new_k] = props[old_k]
+
+            # Functional Fit migration
+            old_b = props.pop("tme_business_fit", None) or props.pop("eea_business_fit", None)
+            if old_b is not None and "apm_functional_fit" not in props:
+                props["apm_functional_fit"] = map_fit_score(old_b)
+                updated = True
+
+            # Technical Fit migration
+            old_t = props.pop("tme_technical_fit", None) or props.pop("eea_technical_fit", None)
+            if old_t is not None and "apm_technical_fit" not in props:
+                props["apm_technical_fit"] = map_tech_fit_score(old_t)
+                updated = True
+
+            # TIME Quadrant migration
+            old_q = props.pop("tme_quadrant", None) or props.pop("eea_time_quadrant", None)
+            if old_q is not None and "apm_time_quadrant_override" not in props:
+                props["apm_time_quadrant_override"] = str(old_q)
+                updated = True
+
+            # Purge deprecated in_scope from properties
+            if "apm_in_scope" in props:
+                props.pop("apm_in_scope")
+                updated = True
+            if "eea_in_apm_scope" in props:
+                props.pop("eea_in_apm_scope")
+                updated = True
+
+            # Other direct eea_ -> apm_ mappings
+            for k in ["annual_cost", "business_criticality", "lifecycle_status", "business_owner", "technical_owner", "vendor", "hosting_type", "data_classification", "sla_level"]:
+                eea_k = f"eea_{k}"
+                apm_k = f"apm_{k}"
+                if eea_k in props:
+                    val = props.pop(eea_k)
+                    if apm_k not in props:
+                        props[apm_k] = val
                     updated = True
+
             if updated:
                 elem.properties = props
 
-    # 5. Remove legacy eea_ system custom attribute definitions to avoid duplicates
-    db.query(CustomAttributeDefinition).filter(CustomAttributeDefinition.name.like("eea_%")).delete(synchronize_session=False)
+        # If element is an ApplicationComponent with legacy in_apm_scope == True and no stereotype, assign stereo-business-app
+        if elem.type == "ApplicationComponent":
+            if not elem.stereotype_id or elem.stereotype_id == "stereo-enterprise-app":
+                apm_rel = elem.apm_attributes
+                if (apm_rel and apm_rel.in_apm_scope) or (elem.properties and elem.properties.get("apm_annual_cost")):
+                    elem.stereotype_id = "stereo-business-app"
+            elif elem.stereotype_id == "stereo-enterprise-app":
+                elem.stereotype_id = "stereo-business-app"
 
-    # 6. Ensure apm_ and tme_ items are assigned to their dedicated sections
-    db.query(AttributePackageItem).filter(AttributePackageItem.name.like("apm_%")).update(
-        {"section": "APM Portfolio"},
-        synchronize_session=False
-    )
-    db.query(AttributePackageItem).filter(AttributePackageItem.name.like("tme_%")).update(
-        {"section": "TIME Assessment"},
-        synchronize_session=False
-    )
-
-    # 7. Delete any package items and custom attributes not belonging to apm_ or tme_
-    db.query(AttributePackageItem).filter(
-        ~AttributePackageItem.name.like("apm_%"),
-        ~AttributePackageItem.name.like("tme_%")
-    ).delete(synchronize_session=False)
-
+    # 5. Remove legacy eea_ and tme_ system custom attribute definitions
     db.query(CustomAttributeDefinition).filter(
-        ~CustomAttributeDefinition.name.like("apm_%"),
-        ~CustomAttributeDefinition.name.like("tme_%")
+        (CustomAttributeDefinition.name.like("eea_%")) | (CustomAttributeDefinition.name.like("tme_%"))
     ).delete(synchronize_session=False)
 
-    db.query(AttributePackage).filter(
-        ~AttributePackage.id.in_(["pkg-apm", "pkg-tme"])
-    ).delete(synchronize_session=False)
+    # 6. Default Business Views for APM (Application Portfolio Catalog, Lifecycle, Resilience, KPI)
+    apm_views = [
+        {
+            "id": "pkv-apm-business-applications-catalog",
+            "view_key": "apm_business_applications_catalog",
+            "name": "Business Applications Catalog",
+            "description": "Comprehensive enterprise business application portfolio inventory, covering ownership, lifecycle status, business criticality, delivery model, and TCO.",
+            "category": "Portfolio Governance",
+            "view_type": "table",
+            "icon": "Layers",
+            "sort_order": 1,
+            "target_stereotypes": ["Business Application", "stereo-business-app"],
+            "config": {
+                "columns": [
+                    { "field": "name", "label": "Application Name", "type": "string", "sortable": True },
+                    { "field": "apm_app_code", "label": "App Code", "type": "badge", "filterable": True },
+                    { "field": "apm_short_name", "label": "Short Name", "type": "string", "sortable": True },
+                    { "field": "apm_lifecycle_status", "label": "Lifecycle Status", "type": "badge", "filterable": True },
+                    { "field": "apm_business_criticality", "label": "Business Criticality", "type": "badge", "filterable": True },
+                    { "field": "apm_functional_fit", "label": "Functional Fit", "type": "badge", "filterable": True },
+                    { "field": "apm_technical_fit", "label": "Technical Fit", "type": "badge", "filterable": True },
+                    { "field": "apm_annual_cost", "label": "Annual Cost (€)", "type": "currency", "sortable": True },
+                    { "field": "apm_hosting_type", "label": "Hosting Model", "type": "enum", "filterable": True },
+                    { "field": "apm_business_owner", "label": "Business Owner", "type": "string", "sortable": True },
+                    { "field": "apm_technical_owner", "label": "Technical Owner", "type": "string", "sortable": True },
+                    { "field": "apm_vendor", "label": "Vendor", "type": "string", "sortable": True }
+                ],
+                "default_sort": { "field": "name", "direction": "asc" },
+                "filters": []
+            }
+        },
+        {
+            "id": "pkv-apm-executive-kpi",
+            "view_key": "apm_executive_kpi",
+            "name": "Executive Portfolio & TCO Dashboard",
+            "description": "Aggregated governance KPIs, total application TCO, and distribution breakdowns by lifecycle status, business criticality, and hosting model.",
+            "category": "Analytics & TCO",
+            "view_type": "kpi_dashboard",
+            "icon": "BarChart3",
+            "sort_order": 2,
+            "target_stereotypes": ["Business Application", "stereo-business-app"],
+            "config": {
+                "metrics": [
+                    { "id": "total_apps", "label": "Total Business Applications", "type": "count" },
+                    { "id": "total_tco", "label": "Total Annual TCO (€)", "type": "sum", "field": "apm_annual_cost" },
+                    { "id": "mission_critical_count", "label": "Mission Critical Systems", "type": "count", "where": { "apm_business_criticality": "Mission Critical" } },
+                    { "id": "cloud_hosted_count", "label": "Cloud & SaaS Solutions", "type": "count", "where": { "apm_hosting_type": ["SaaS", "Public Cloud"] } }
+                ],
+                "charts": [
+                    { "id": "chart_by_lifecycle", "title": "Lifecycle Distribution", "type": "pie", "group_by": "apm_lifecycle_status" },
+                    { "id": "chart_by_criticality", "title": "Business Criticality", "type": "bar", "group_by": "apm_business_criticality" },
+                    { "id": "chart_by_hosting", "title": "Delivery Model", "type": "pie", "group_by": "apm_hosting_type" },
+                    { "id": "chart_by_vendor", "title": "Top Vendors by Spend (€)", "type": "bar", "group_by": "apm_vendor", "metric": "sum", "metric_field": "apm_annual_cost" }
+                ]
+            }
+        },
+        {
+            "id": "pkv-apm-time-matrix",
+            "view_key": "apm_time_matrix",
+            "name": "Gartner TIME Rationalization Matrix",
+            "description": "Strategic 2x2 matrix of Gartner TIME quadrants (Invest, Tolerate, Migrate, Eliminate) for application rationalization, cost optimization, and technical debt reduction.",
+            "category": "Portfolio Rationalization",
+            "view_type": "matrix",
+            "icon": "Grid",
+            "sort_order": 3,
+            "target_stereotypes": ["Business Application", "stereo-business-app"],
+            "config": {
+                "columns": [
+                    { "field": "name", "label": "Application", "type": "string", "sortable": True },
+                    { "field": "apm_app_code", "label": "Code", "type": "badge", "filterable": True },
+                    { "field": "apm_short_name", "label": "Short Name", "type": "string", "sortable": True },
+                    { "field": "computed_time_quadrant", "label": "TIME Quadrant", "type": "badge", "filterable": True },
+                    { "field": "apm_functional_fit", "label": "Functional Fit", "type": "badge", "filterable": True },
+                    { "field": "apm_technical_fit", "label": "Technical Fit", "type": "badge", "filterable": True },
+                    { "field": "apm_annual_cost", "label": "TCO Cost (€)", "type": "currency", "sortable": True },
+                    { "field": "apm_business_criticality", "label": "Criticality", "type": "badge", "filterable": True },
+                    { "field": "apm_lifecycle_status", "label": "Lifecycle Status", "type": "badge", "filterable": True },
+                    { "field": "apm_business_owner", "label": "Business Owner", "type": "string", "sortable": True }
+                ],
+                "default_sort": { "field": "apm_annual_cost", "direction": "desc" },
+                "filters": []
+            }
+        },
+        {
+            "id": "pkv-apm-resilience-compliance",
+            "view_key": "apm_resilience_compliance",
+            "name": "Operational Resilience & Compliance (DORA/GDPR)",
+            "description": "Regulatory compliance posture, disaster recovery SLA/RTO benchmarks, and data classification governance for security audits.",
+            "category": "Risk & Compliance",
+            "view_type": "table",
+            "icon": "ShieldCheck",
+            "sort_order": 4,
+            "target_stereotypes": ["Business Application", "stereo-business-app"],
+            "config": {
+                "columns": [
+                    { "field": "name", "label": "Application", "type": "string", "sortable": True },
+                    { "field": "apm_business_criticality", "label": "Business Criticality", "type": "badge", "filterable": True },
+                    { "field": "apm_data_classification", "label": "Data Classification", "type": "badge", "filterable": True },
+                    { "field": "apm_personal_data", "label": "GDPR Personal Data", "type": "badge", "filterable": True },
+                    { "field": "apm_sla_level", "label": "Target SLA", "type": "badge", "filterable": True },
+                    { "field": "apm_rto_hours", "label": "Target RTO", "type": "badge", "filterable": True },
+                    { "field": "apm_hosting_type", "label": "Hosting Model", "type": "enum", "filterable": True }
+                ],
+                "default_sort": { "field": "apm_business_criticality", "direction": "asc" },
+                "filters": []
+            }
+        },
+        {
+            "id": "pkv-apm-lifecycle-roadmap",
+            "view_key": "apm_lifecycle_roadmap",
+            "name": "Lifecycle & Obsolescence Roadmap",
+            "description": "Timeline tracking of production applications, retirement scheduling, and technical debt governance to mitigate end-of-support risks.",
+            "category": "Lifecycle & Roadmap",
+            "view_type": "table",
+            "icon": "Clock",
+            "sort_order": 5,
+            "target_stereotypes": ["Business Application", "stereo-business-app"],
+            "config": {
+                "columns": [
+                    { "field": "name", "label": "Application", "type": "string", "sortable": True },
+                    { "field": "apm_app_code", "label": "Code", "type": "badge", "filterable": True },
+                    { "field": "apm_short_name", "label": "Short Name", "type": "string", "sortable": True },
+                    { "field": "apm_lifecycle_status", "label": "Current Status", "type": "badge", "filterable": True },
+                    { "field": "obsolescence_risk", "label": "Obsolescence Risk", "type": "badge", "filterable": True },
+                    { "field": "apm_live_date", "label": "Go-Live Date", "type": "string", "sortable": True },
+                    { "field": "apm_retirement_date", "label": "Planned Retirement", "type": "string", "sortable": True },
+                    { "field": "apm_technical_fit", "label": "Technical Quality / Fit", "type": "badge", "filterable": True },
+                    { "field": "apm_time_quadrant_override", "label": "TIME Strategy", "type": "badge", "filterable": True },
+                    { "field": "apm_vendor", "label": "Vendor / Maintainer", "type": "string", "sortable": True }
+                ],
+                "default_sort": { "field": "apm_retirement_date", "direction": "asc" },
+                "filters": []
+            }
+        }
+    ]
+
+    for v_data in apm_views:
+        existing_v = db.query(PackageView).filter(PackageView.id == v_data["id"]).first()
+        if not existing_v:
+            v = PackageView(
+                id=v_data["id"],
+                package_id=apm_pkg.id,
+                view_key=v_data["view_key"],
+                name=v_data["name"],
+                description=v_data["description"],
+                category=v_data["category"],
+                view_type=v_data["view_type"],
+                icon=v_data["icon"],
+                sort_order=v_data.get("sort_order", 0),
+                target_stereotypes=v_data["target_stereotypes"],
+                config=v_data["config"]
+            )
+            db.add(v)
+        else:
+            existing_v.name = v_data["name"]
+            existing_v.description = v_data["description"]
+            existing_v.category = v_data["category"]
+            existing_v.view_type = v_data["view_type"]
+            existing_v.icon = v_data["icon"]
+            existing_v.sort_order = v_data.get("sort_order", 0)
+            existing_v.target_stereotypes = v_data["target_stereotypes"]
+            existing_v.config = v_data["config"]
+
+    # 7. Delete any orphaned package items and packages not belonging to registered packages or frameworks
+    legacy_pkgs = db.query(AttributePackage).filter(
+        AttributePackage.package_type != "framework",
+        ~AttributePackage.id.in_(["pkg-apm"])
+    ).all()
+    legacy_ids = [p.id for p in legacy_pkgs if not p.id.startswith("pkg-user-")]
+    if legacy_ids:
+        db.query(AttributePackageItem).filter(AttributePackageItem.package_id.in_(legacy_ids)).delete(synchronize_session=False)
+        db.query(AttributePackage).filter(AttributePackage.id.in_(legacy_ids)).delete(synchronize_session=False)
 
     db.commit()
 
 
 def seed_default_custom_attributes(db: Session):
-    """Seed standard attribute packages, default stereotypes, and clean up any non-package attributes."""
+    """Seed standard attribute packages, BIAN and IT4IT frameworks, default stereotypes, and clean up non-package attributes."""
     # First seed attribute packages
     seed_default_attribute_packages(db)
+    # Seed BIAN framework
+    from app.services.bian_seed import seed_bian_framework
+    seed_bian_framework(db)
+    # Seed IT4IT framework
+    from app.services.it4it_seed import seed_it4it_framework
+    seed_it4it_framework(db)
     # Seed default stereotypes
     seed_default_stereotypes(db)
 
-    # Purge any custom attribute definitions not part of apm_ or tme_ packages
-    db.query(CustomAttributeDefinition).filter(
-        ~CustomAttributeDefinition.name.like("apm_%"),
-        ~CustomAttributeDefinition.name.like("tme_%")
-    ).delete(synchronize_session=False)
+    # Purge any custom attribute definitions not matching any registered package code
+    pkg_codes = [p.code for p in db.query(AttributePackage).all()]
+    filters = [~CustomAttributeDefinition.name.like(f"{c}_%") for c in pkg_codes]
+    if filters:
+        db.query(CustomAttributeDefinition).filter(*filters).delete(synchronize_session=False)
     db.commit()
 
 
 def seed_default_stereotypes(db: Session):
     """Seed canonical ArchiMate stereotypes with specialized attribute requirements and defaults."""
+    # Purge any deprecated links to removed tme_ or apm_in_scope attributes
+    db.query(StereotypeAttributeLink).filter(
+        (StereotypeAttributeLink.attribute_name.like("tme_%")) |
+        (StereotypeAttributeLink.attribute_name == "apm_in_scope")
+    ).delete(synchronize_session=False)
+
+    # Migrate legacy stereo-enterprise-app to stereo-business-app
+    db.query(ArchimateElement).filter(ArchimateElement.stereotype_id == "stereo-enterprise-app").update(
+        {"stereotype_id": "stereo-business-app"},
+        synchronize_session=False
+    )
+    db.query(StereotypeAttributeLink).filter(StereotypeAttributeLink.stereotype_id == "stereo-enterprise-app").delete(synchronize_session=False)
+    db.query(ElementStereotype).filter(ElementStereotype.id == "stereo-enterprise-app").delete(synchronize_session=False)
+
     default_stereotypes = [
+        {
+            "id": "stereo-business-app",
+            "base_type": "ApplicationComponent",
+            "name": "Business Application",
+            "label": "«Business Application»",
+            "description": "Enterprise business application managed in the application portfolio (APM governance, TCO budget, SLA, lifecycle, and TIME rationalization matrix).",
+            "icon_color": "indigo",
+            "is_system": True,
+            "package_id": "pkg-apm",
+            "links": [
+                {
+                    "attribute_name": "apm_lifecycle_status",
+                    "is_required": True,
+                    "default_value": "Live",
+                    "section_override": None,
+                    "sort_order": 1
+                },
+                {
+                    "attribute_name": "apm_business_criticality",
+                    "is_required": True,
+                    "default_value": "Business Operational",
+                    "section_override": None,
+                    "sort_order": 2
+                },
+                {
+                    "attribute_name": "apm_functional_fit",
+                    "is_required": True,
+                    "default_value": "3 - Appropriate",
+                    "section_override": None,
+                    "sort_order": 3
+                },
+                {
+                    "attribute_name": "apm_technical_fit",
+                    "is_required": True,
+                    "default_value": "3 - Appropriate",
+                    "section_override": None,
+                    "sort_order": 4
+                },
+                {
+                    "attribute_name": "apm_annual_cost",
+                    "is_required": True,
+                    "default_value": "0",
+                    "section_override": None,
+                    "sort_order": 5
+                },
+                {
+                    "attribute_name": "apm_hosting_type",
+                    "is_required": True,
+                    "default_value": "Public Cloud",
+                    "section_override": None,
+                    "sort_order": 6
+                }
+            ]
+        },
         {
             "id": "stereo-microservice",
             "base_type": "ApplicationComponent",
             "name": "Microservice",
             "label": "«Microservice»",
-            "description": "Componente applicativo a singolo perimetro funzionale, containerizzato ed esposto via REST/gRPC API.",
+            "description": "Single functional bounded-context application component, containerized and exposed via REST/gRPC APIs.",
             "icon_color": "indigo",
             "is_system": True,
+            "package_id": None,
             "links": [
                 {
                     "attribute_name": "apm_hosting_type",
@@ -1343,9 +1772,9 @@ def seed_default_stereotypes(db: Session):
                     "sort_order": 1
                 },
                 {
-                    "attribute_name": "tme_technical_fit",
+                    "attribute_name": "apm_technical_fit",
                     "is_required": True,
-                    "default_value": "4",
+                    "default_value": "4 - Perfect (Cloud Native)",
                     "section_override": None,
                     "sort_order": 2
                 }
@@ -1356,9 +1785,10 @@ def seed_default_stereotypes(db: Session):
             "base_type": "ApplicationComponent",
             "name": "SaaS Application",
             "label": "«SaaS»",
-            "description": "Software-as-a-service erogato e gestito interamente nel cloud da fornitore terzo.",
+            "description": "Software-as-a-service delivered and operated entirely in the cloud by a third-party vendor.",
             "icon_color": "emerald",
             "is_system": True,
+            "package_id": None,
             "links": [
                 {
                     "attribute_name": "apm_vendor",
@@ -1381,9 +1811,10 @@ def seed_default_stereotypes(db: Session):
             "base_type": "ApplicationComponent",
             "name": "Legacy Mainframe",
             "label": "«Legacy Mainframe»",
-            "description": "Applicazione monolitica o sistema core legacy su mainframe on-premise.",
+            "description": "Monolithic application or core legacy system hosted on on-premises mainframe infrastructure.",
             "icon_color": "amber",
             "is_system": True,
+            "package_id": None,
             "links": [
                 {
                     "attribute_name": "apm_hosting_type",
@@ -1393,9 +1824,9 @@ def seed_default_stereotypes(db: Session):
                     "sort_order": 1
                 },
                 {
-                    "attribute_name": "tme_quadrant",
+                    "attribute_name": "apm_technical_fit",
                     "is_required": True,
-                    "default_value": "Migrate",
+                    "default_value": "1 - Unreasonable (Legacy)",
                     "section_override": None,
                     "sort_order": 2
                 }
@@ -1406,9 +1837,10 @@ def seed_default_stereotypes(db: Session):
             "base_type": "BusinessProcess",
             "name": "Automated Process",
             "label": "«Automated»",
-            "description": "Processo operativo completamente automatizzato da sistemi IT o workflow engine (BPMN/Camunda).",
+            "description": "Business process fully automated by IT systems or workflow engines (BPMN / Camunda).",
             "icon_color": "purple",
             "is_system": True,
+            "package_id": None,
             "links": []
         },
         {
@@ -1416,9 +1848,10 @@ def seed_default_stereotypes(db: Session):
             "base_type": "BusinessProcess",
             "name": "Manual Process",
             "label": "«Manual»",
-            "description": "Processo di business eseguito manualmente da personale operativo senza automazione end-to-end.",
+            "description": "Business process executed manually by operational personnel without end-to-end IT automation.",
             "icon_color": "rose",
             "is_system": True,
+            "package_id": None,
             "links": []
         },
         {
@@ -1426,9 +1859,10 @@ def seed_default_stereotypes(db: Session):
             "base_type": "Node",
             "name": "Kubernetes Cluster",
             "label": "«K8s Cluster»",
-            "description": "Piattaforma di orchestrazione container Kubernetes con nodi worker distribuiti.",
+            "description": "Kubernetes container orchestration platform with distributed worker nodes.",
             "icon_color": "blue",
             "is_system": True,
+            "package_id": None,
             "links": []
         }
     ]
@@ -1439,6 +1873,7 @@ def seed_default_stereotypes(db: Session):
             st = ElementStereotype(
                 id=st_data["id"],
                 model_id=None,
+                package_id=st_data.get("package_id"),
                 base_type=st_data["base_type"],
                 name=st_data["name"],
                 label=st_data["label"],
@@ -1461,6 +1896,7 @@ def seed_default_stereotypes(db: Session):
                 db.add(link)
         else:
             existing.base_type = st_data["base_type"]
+            existing.package_id = st_data.get("package_id")
             existing.name = st_data["name"]
             existing.label = st_data["label"]
             existing.description = st_data["description"]
@@ -1501,11 +1937,17 @@ def list_stereotypes(
     base_type: Optional[str] = None,
     model_id: Optional[str] = None
 ) -> List[Dict[str, Any]]:
-    """List stereotypes filtered by base_type and scope."""
+    """List stereotypes filtered by base_type and scope, including active package stereotypes."""
     query = db.query(ElementStereotype)
     if model_id and model_id != "*":
+        active_links = db.query(WorkspaceAttributePackage.package_id).filter(
+            WorkspaceAttributePackage.model_id == model_id
+        ).all()
+        active_pkg_ids = [r[0] for r in active_links]
         query = query.filter(
-            (ElementStereotype.model_id == None) | (ElementStereotype.model_id == model_id)
+            (ElementStereotype.model_id == model_id) |
+            ((ElementStereotype.model_id == None) & (ElementStereotype.package_id == None)) |
+            (ElementStereotype.package_id.in_(active_pkg_ids) if active_pkg_ids else False)
         )
     elif not model_id:
         query = query.filter(ElementStereotype.model_id == None)
@@ -1531,6 +1973,9 @@ def list_stereotypes(
         results.append({
             "id": st.id,
             "model_id": st.model_id,
+            "package_id": st.package_id,
+            "package_name": st.package.name if st.package else None,
+            "package_code": st.package.code if st.package else None,
             "base_type": st.base_type,
             "name": st.name,
             "label": st.label,
@@ -1564,6 +2009,9 @@ def get_stereotype(db: Session, stereotype_id: str) -> Dict[str, Any]:
     return {
         "id": st.id,
         "model_id": st.model_id,
+        "package_id": st.package_id,
+        "package_name": st.package.name if st.package else None,
+        "package_code": st.package.code if st.package else None,
         "base_type": st.base_type,
         "name": st.name,
         "label": st.label,
@@ -1583,6 +2031,7 @@ def create_stereotype(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
         raise HTTPException(status_code=400, detail="Base type and stereotype name are required.")
 
     model_id = data.get("model_id")
+    package_id = data.get("package_id")
     label = (data.get("label") or "").strip()
     if not label:
         label = f"«{name}»"
@@ -1593,6 +2042,7 @@ def create_stereotype(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
     st = ElementStereotype(
         id=st_id,
         model_id=model_id,
+        package_id=package_id,
         base_type=base_type,
         name=name,
         label=label,
@@ -1757,20 +2207,30 @@ def list_attribute_packages(db: Session, model_id: Optional[str] = None) -> List
             "id": pkg.id,
             "code": pkg.code,
             "name": pkg.name,
+            "version": getattr(pkg, "version", "1.0.0") or "1.0.0",
+            "author": getattr(pkg, "author", None),
+            "license": getattr(pkg, "license", None),
             "description": pkg.description,
             "icon_color": pkg.icon_color,
+            "package_type": pkg.package_type or "attribute_only",
+            "standard_version": pkg.standard_version,
+            "website_url": pkg.website_url,
             "is_default_active": pkg.is_default_active,
             "is_system": bool(pkg.is_system),
             "is_active": pkg.id in active_pkg_ids if model_id and model_id != "*" else None,
             "item_count": len(items_data),
             "items": items_data,
+            "stereotypes_count": len(pkg.stereotypes or []),
+            "reference_elements_count": len(pkg.reference_elements or []),
+            "reference_relationships_count": len(pkg.reference_relationships or []),
+            "views_count": len(pkg.views or []),
             "created_at": pkg.created_at.isoformat() if pkg.created_at else None
         })
     return result
 
 
 def get_attribute_package(db: Session, package_id: str) -> Dict[str, Any]:
-    """Get package details and its items."""
+    """Get package details, its items, stereotypes, and canonical reference elements/relationships."""
     pkg = db.query(AttributePackage).filter(AttributePackage.id == package_id).first()
     if not pkg:
         raise HTTPException(status_code=404, detail=f"Attribute package '{package_id}' not found.")
@@ -1779,8 +2239,14 @@ def get_attribute_package(db: Session, package_id: str) -> Dict[str, Any]:
         "id": pkg.id,
         "code": pkg.code,
         "name": pkg.name,
+        "version": getattr(pkg, "version", "1.0.0") or "1.0.0",
+        "author": getattr(pkg, "author", None),
+        "license": getattr(pkg, "license", None),
         "description": pkg.description,
         "icon_color": pkg.icon_color,
+        "package_type": pkg.package_type or "attribute_only",
+        "standard_version": pkg.standard_version,
+        "website_url": pkg.website_url,
         "is_default_active": pkg.is_default_active,
         "is_system": bool(pkg.is_system),
         "items": [
@@ -1802,17 +2268,71 @@ def get_attribute_package(db: Session, package_id: str) -> Dict[str, Any]:
             }
             for it in pkg.items
         ],
+        "stereotypes": [
+            {
+                "id": st.id,
+                "name": st.name,
+                "label": st.label,
+                "base_type": st.base_type,
+                "description": st.description,
+                "icon_color": st.icon_color,
+            }
+            for st in (pkg.stereotypes or [])
+        ],
+        "reference_elements": [
+            {
+                "id": el.id,
+                "name": el.name,
+                "type": el.type,
+                "layer": el.layer,
+                "documentation": el.documentation,
+                "properties": el.properties or {},
+                "stereotype": {
+                    "id": el.stereotype.id,
+                    "name": el.stereotype.name,
+                    "label": el.stereotype.label
+                } if el.stereotype else None
+            }
+            for el in (pkg.reference_elements or [])
+        ],
+        "reference_relationships": [
+            {
+                "id": rel.id,
+                "type": rel.type,
+                "name": rel.name,
+                "source_id": rel.source_id,
+                "source_name": rel.source_element.name if rel.source_element else "",
+                "target_id": rel.target_id,
+                "target_name": rel.target_element.name if rel.target_element else "",
+                "documentation": rel.documentation
+            }
+            for rel in (pkg.reference_relationships or [])
+        ],
+        "views": [
+            {
+                "id": v.id,
+                "view_key": v.view_key,
+                "name": v.name,
+                "description": v.description,
+                "category": v.category or "General",
+                "view_type": v.view_type,
+                "icon": v.icon or "Table",
+                "target_stereotypes": v.target_stereotypes or [],
+                "config": v.config or {}
+            }
+            for v in (pkg.views or [])
+        ],
         "created_at": pkg.created_at.isoformat() if pkg.created_at else None
     }
 
 
 def create_attribute_package(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
-    """Create a new attribute package in the global catalog. Enforces a 3-character unique code."""
+    """Create a new package in the global catalog. Enforces a 3-8 character unique code."""
     raw_code = (data.get("code") or "").strip().lower()
-    if not re.match(r"^[a-z0-9]{3}$", raw_code):
+    if not re.match(r"^[a-z0-9]{3,8}$", raw_code):
         raise HTTPException(
             status_code=400,
-            detail="Il codice del pacchetto deve essere composto esattamente da 3 caratteri alfanumerici (es. 'apm', 'tme', 'sec')."
+            detail="Il codice del pacchetto deve essere composto da 3 a 8 caratteri alfanumerici (es. 'apm', 'tme', 'sec', 'bian', 'rami', 'fhir')."
         )
     
     existing = db.query(AttributePackage).filter(AttributePackage.code == raw_code).first()
@@ -1834,7 +2354,10 @@ def create_attribute_package(db: Session, data: Dict[str, Any]) -> Dict[str, Any
         description=data.get("description"),
         icon_color=data.get("icon_color", "blue"),
         is_default_active=bool(data.get("is_default_active", True)),
-        is_system=False
+        is_system=False,
+        package_type=data.get("package_type", "attribute_only"),
+        standard_version=data.get("standard_version"),
+        website_url=data.get("website_url")
     )
     db.add(pkg)
     db.commit()
@@ -1856,6 +2379,12 @@ def update_attribute_package(db: Session, package_id: str, data: Dict[str, Any])
         pkg.icon_color = data["icon_color"]
     if "is_default_active" in data:
         pkg.is_default_active = bool(data["is_default_active"])
+    if "package_type" in data and data["package_type"]:
+        pkg.package_type = data["package_type"]
+    if "standard_version" in data:
+        pkg.standard_version = data["standard_version"]
+    if "website_url" in data:
+        pkg.website_url = data["website_url"]
 
     db.commit()
     db.refresh(pkg)
@@ -2066,6 +2595,7 @@ def toggle_library_package(
     else:
         # STRICT DEACTIVATION GUARD
         if existing_link:
+            # 1. Check if any element in the library has populated attributes from this package
             pkg_attr_names = [it.name for it in pkg.items]
             elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
             
@@ -2095,6 +2625,44 @@ def toggle_library_package(
                         "affected_elements": populated_elements[:20]
                     }
                 )
+
+            # 2. Check if any local element uses a stereotype provided by this package
+            pkg_stereotype_ids = [st.id for st in (pkg.stereotypes or [])]
+            if pkg_stereotype_ids:
+                elem_with_st = [
+                    {"id": e.id, "name": e.name, "type": e.type}
+                    for e in elements if e.stereotype_id in pkg_stereotype_ids
+                ]
+                if elem_with_st:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "error": "package_deactivation_blocked",
+                            "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(elem_with_st)} elementi nella libreria a cui è applicato uno stereotipo fornito da questo pacchetto.",
+                            "populated_count": len(elem_with_st),
+                            "affected_elements": elem_with_st[:20]
+                        }
+                    )
+
+            # 3. Check if any relationship in this library connects to canonical reference elements of this package
+            pkg_ref_elem_ids = [re_el.id for re_el in (pkg.reference_elements or [])]
+            if pkg_ref_elem_ids:
+                connected_rels = db.query(ArchimateRelationship).filter(
+                    ArchimateRelationship.model_id == model_id,
+                    (ArchimateRelationship.source_id.in_(pkg_ref_elem_ids) | ArchimateRelationship.target_id.in_(pkg_ref_elem_ids))
+                ).all()
+                if connected_rels:
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "error": "package_deactivation_blocked",
+                            "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(connected_rels)} relazioni nella libreria collegate a elementi canonici di questo framework.",
+                            "populated_count": len(connected_rels),
+                            "affected_elements": [
+                                {"id": r.id, "name": r.name, "type": r.type} for r in connected_rels[:20]
+                            ]
+                        }
+                    )
 
             db.delete(existing_link)
             db.commit()

@@ -257,7 +257,7 @@ def test_attribute_packages_and_extension_management():
     assert "documentation" in std_names
     assert "in_apm_scope" not in std_names
     
-    # Custom attributes should contain apm_ and tme_ package attributes
+    # Custom attributes should contain apm_ package attributes
     custom_attrs = app_comp.get("custom_attributes", [])
     apm_annual_cost = next((a for a in custom_attrs if a["name"] == "apm_annual_cost"), None)
     assert apm_annual_cost is not None
@@ -265,9 +265,9 @@ def test_attribute_packages_and_extension_management():
     assert apm_annual_cost["is_package"] is True
     assert apm_annual_cost["package_code"] == "APM"
 
-    tme_fit = next((a for a in custom_attrs if a["name"] == "tme_business_fit"), None)
-    assert tme_fit is not None
-    assert tme_fit["package_code"] == "TME"
+    apm_fit = next((a for a in custom_attrs if a["name"] == "apm_functional_fit"), None)
+    assert apm_fit is not None
+    assert apm_fit["package_code"] == "APM"
 
     # 2. Query packages endpoint
     res_pkgs = client.get("/api/metamodel/packages")
@@ -275,7 +275,6 @@ def test_attribute_packages_and_extension_management():
     pkgs = res_pkgs.json()
     pkg_codes = [p["code"] for p in pkgs]
     assert "apm" in pkg_codes
-    assert "tme" in pkg_codes
 
     # 3. Create a custom attribute package with 3-character code
     res_create = client.post("/api/metamodel/packages", json={
@@ -289,9 +288,9 @@ def test_attribute_packages_and_extension_management():
     sec_pkg = res_create.json()
     assert sec_pkg["code"] == "sec"
 
-    # Enforce 3-character code: code with 2 or 4 chars must fail
+    # Enforce code length constraints (3 to 8 characters): code with >8 chars must fail
     res_fail = client.post("/api/metamodel/packages", json={
-        "code": "failcode",
+        "code": "invalidtoolongcode",
         "name": "Invalid"
     })
     assert res_fail.status_code == 400

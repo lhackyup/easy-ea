@@ -54,17 +54,19 @@ def test_attribute_packages_full_lifecycle():
 
         # 1. Check seeded standard packages
         apm_pkg = db.query(AttributePackage).filter(AttributePackage.code == "apm").first()
-        tme_pkg = db.query(AttributePackage).filter(AttributePackage.code == "tme").first()
         assert apm_pkg is not None
-        assert tme_pkg is not None
         assert apm_pkg.is_system is True
-        assert tme_pkg.is_system is True
 
         # Check that items have 3-letter prefix
         for it in apm_pkg.items:
             assert it.name.startswith("apm_")
-        for it in tme_pkg.items:
-            assert it.name.startswith("tme_")
+
+        # Check that Business Application stereotype is in APM package
+        biz_st = next((s for s in apm_pkg.stereotypes if s.name == "Business Application"), None)
+        assert biz_st is not None
+        assert biz_st.package_id == apm_pkg.id
+        assert biz_st.base_type == "ApplicationComponent"
+        assert biz_st.label == "«Business Application»"
 
         # 2. Test API list packages
         res = client.get("/api/metamodel/packages")
@@ -72,7 +74,6 @@ def test_attribute_packages_full_lifecycle():
         packages = res.json()
         codes = [p["code"] for p in packages]
         assert "apm" in codes
-        assert "tme" in codes
 
         # 3. Create a custom package with exactly 3 letters
         res_create = client.post("/api/metamodel/packages", json={
@@ -86,9 +87,9 @@ def test_attribute_packages_full_lifecycle():
         gov_pkg = res_create.json()
         assert gov_pkg["code"] == "gov"
 
-        # Code with != 3 characters must fail
+        # Code with < 3 or > 8 characters must fail
         res_bad_code = client.post("/api/metamodel/packages", json={
-            "code": "data",
+            "code": "toolongcode",
             "name": "Too long code"
         })
         assert res_bad_code.status_code == 400

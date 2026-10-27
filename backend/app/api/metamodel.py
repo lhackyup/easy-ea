@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -6,6 +6,11 @@ from pydantic import BaseModel
 from app.core.database import get_db
 from app.models.archimate import CustomAttributeDefinition, User
 from app.api.deps import get_current_user, require_admin, require_library_permission
+from app.services.package_manager import (
+    inspect_package_bundle,
+    install_package_bundle,
+    export_package_bundle
+)
 from app.services.metamodel_service import (
     get_full_metamodel_with_custom_attributes,
     list_custom_attributes,
@@ -63,12 +68,18 @@ class AttributePackageCreate(BaseModel):
     description: Optional[str] = None
     icon_color: Optional[str] = "blue"
     is_default_active: Optional[bool] = True
+    package_type: Optional[str] = "attribute_only"
+    standard_version: Optional[str] = None
+    website_url: Optional[str] = None
 
 class AttributePackageUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     icon_color: Optional[str] = None
     is_default_active: Optional[bool] = None
+    package_type: Optional[str] = None
+    standard_version: Optional[str] = None
+    website_url: Optional[str] = None
 
 class PackageItemCreate(BaseModel):
     name: str
@@ -111,6 +122,7 @@ class StereotypeCreate(BaseModel):
     description: Optional[str] = None
     icon_color: Optional[str] = "indigo"
     model_id: Optional[str] = None
+    package_id: Optional[str] = None
     attribute_links: Optional[List[Dict[str, Any]]] = []
 
 class StereotypeUpdate(BaseModel):
@@ -278,6 +290,67 @@ def remove_attribute_package(
     if not success:
         raise HTTPException(status_code=404, detail="Attribute package not found.")
     return {"status": "success", "message": f"Pacchetto {package_id} eliminato con successo."}
+
+
+# --- Package Manager: Inspect, Install & Export (.eap) ---
+
+@router.post("/packages/inspect")
+async def inspect_package_upload(
+    bundle: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Dry-run inspection of an .eap package bundle. Returns verification report, SemVer comparison and diff."""
+    content = await bundle.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="File vuoto o non specificato.")
+    return inspect_package_bundle(content, db)
+
+
+@router.post("/packages/install")
+async def install_package_upload(
+    bundle: UploadFile = File(...),
+    force: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Installs or upgrades an .eap package bundle into the global catalog."""
+    content = await bundle.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="File vuoto o non specificato.")
+    try:
+        installed_pkg = install_package_bundle(content, db, force=force)
+        return {
+            "status": "success",
+            "message": f"Pacchetto '{installed_pkg.name}' ({installed_pkg.code} v{getattr(installed_pkg, 'version', '1.0.0')}) installato con successo.",
+            "package": get_attribute_package(db, installed_pkg.id)
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Errore durante l'installazione del pacchetto: {exc}")
+
+
+@router.get("/packages/{package_id}/export")
+def export_package_archive(
+    package_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Exports an existing attribute package or industry framework into a downloadable .eap bundle."""
+    try:
+        zip_bytes, filename = export_package_bundle(package_id, db)
+        return Response(
+            content=zip_bytes,
+            media_type="application/x-easyea-package",
+            headers={
+                "Content-Disposition": f'attachment; filename="{filename}"'
+            }
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Errore durante l'esportazione del pacchetto: {exc}")
 
 
 @router.post("/packages/{package_id}/items")

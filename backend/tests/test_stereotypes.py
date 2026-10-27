@@ -125,7 +125,7 @@ def test_stereotypes_lifecycle_and_validation():
         })
         assert mismatch_resp.status_code == 400
 
-        # 7. Update element stereotype (switch to Microservice, required: apm_hosting_type & tme_technical_fit)
+        # 7. Update element stereotype (switch to Microservice, required: apm_hosting_type & apm_technical_fit)
         # Attempt update missing microservice required attributes -> 400
         up_fail = client.put(f"/api/elements/{elem_id}", json={
             "stereotype_id": "stereo-microservice",
@@ -138,7 +138,7 @@ def test_stereotypes_lifecycle_and_validation():
             "stereotype_id": "stereo-microservice",
             "properties": {
                 "apm_hosting_type": "Public Cloud",
-                "tme_technical_fit": "4"
+                "apm_technical_fit": "4 - Perfect (Cloud Native)"
             }
         })
         assert up_ok.status_code == 200

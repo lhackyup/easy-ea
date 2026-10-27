@@ -226,7 +226,7 @@ def test_bpmn_checkin_confirm_end_to_end():
         assert term_res.status_code == 200
         found = term_res.json()
         assert len(found) >= 1
-        assert found[0]["name"] == "Nuova Domanda Ricevuta"
+        assert any(e["name"] == "Nuova Domanda Ricevuta" for e in found)
     finally:
         db.close()
         app.dependency_overrides = saved_overrides

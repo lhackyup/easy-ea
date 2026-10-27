@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { MetamodelManager } from './MetamodelManager';
+import { AttributePackagesManager } from './AttributePackagesManager';
 import { RolesManager } from './RolesManager';
 import { AuthConfigManager } from './AuthConfigManager';
 
@@ -55,6 +56,15 @@ export const AdminHub: React.FC<AdminHubProps> = ({
   const [investThreshold, setInvestThreshold] = useState(3);
   const [savingsAlertThreshold, setSavingsAlertThreshold] = useState(50000);
   const [configSaved, setConfigSaved] = useState(false);
+
+  // Scope for Packages
+  const [packagesScope, setPackagesScope] = useState<string>(selectedModelId || 'global');
+
+  useEffect(() => {
+    if (selectedModelId) {
+      setPackagesScope(selectedModelId);
+    }
+  }, [selectedModelId]);
 
   const handleCreateModel = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -381,6 +391,23 @@ export const AdminHub: React.FC<AdminHubProps> = ({
       {/* SubTab: Metamodel Administration */}
       {subTab === 'metamodel' && (
         <MetamodelManager models={models} activeModelId={selectedModelId} />
+      )}
+
+      {/* SubTab: Packages & Reference Frameworks */}
+      {subTab === 'packages' && (
+        <AttributePackagesManager
+          models={models}
+          selectedScope={packagesScope}
+          onSelectScope={(scope) => {
+            setPackagesScope(scope);
+            if (scope !== 'global') {
+              onSelectModel(scope);
+            }
+          }}
+          onPackageUpdated={() => {
+            onRefreshModels();
+          }}
+        />
       )}
 
       {/* SubTab 2: APM & TIME Config */}

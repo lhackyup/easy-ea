@@ -1,8 +1,13 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
-export type BusinessSubTab = 'overview' | 'apm' | 'overlap' | 'processes';
+export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'overlap' | 'processes';
+
+export interface ActivePackageViewSelection {
+  packageId: string;
+  viewId: string;
+}
 export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'saved-views' | 'import';
-export type AdminSubTab = 'models' | 'metamodel' | 'apm_config' | 'roles' | 'auth_config' | 'system';
+export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'apm_config' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
   name: string;
@@ -55,16 +60,69 @@ export interface AttributePackageItem {
 
 export interface AttributePackage {
   id: string;
-  code: string; // 3-character code e.g. "apm", "tme"
+  code: string; // 3-8 character code e.g. "apm", "tme", "bian"
   name: string;
+  version?: string;
+  author?: string;
+  license?: string;
   description?: string;
   icon_color?: string;
+  package_type?: 'attribute_only' | 'framework';
+  standard_version?: string | null;
+  website_url?: string | null;
   is_default_active?: boolean;
   is_system?: boolean;
   is_active?: boolean | null; // Set when queried in the scope of a library workspace
   item_count?: number;
   items?: AttributePackageItem[];
+  stereotypes_count?: number;
+  reference_elements_count?: number;
+  reference_relationships_count?: number;
+  views_count?: number;
+  stereotypes?: ElementStereotype[];
+  reference_elements?: any[];
+  reference_relationships?: any[];
+  views?: any[];
   created_at?: string;
+}
+
+export interface PackageInspectResult {
+  valid: boolean;
+  action: 'new_install' | 'upgrade' | 'reinstall' | 'downgrade' | 'invalid';
+  manifest: {
+    id: string;
+    code: string;
+    name: string;
+    version: string;
+    package_type: 'attribute_only' | 'framework';
+    standard_version?: string;
+    description?: string;
+    author?: string;
+    license?: string;
+    website_url?: string;
+    icon_color?: string;
+    is_default_active?: boolean;
+  };
+  counts: {
+    attributes: number;
+    stereotypes: number;
+    reference_elements: number;
+    reference_relationships: number;
+  };
+  existing_package?: {
+    id: string;
+    code: string;
+    name: string;
+    version: string;
+    package_type: string;
+    items_count: number;
+    stereotypes_count: number;
+    reference_elements_count: number;
+    reference_relationships_count: number;
+  } | null;
+  readme?: string;
+  warnings: string[];
+  errors: string[];
 }
 
 export interface AttributePackageCreatePayload {
@@ -73,6 +131,9 @@ export interface AttributePackageCreatePayload {
   description?: string;
   icon_color?: string;
   is_default_active?: boolean;
+  package_type?: 'attribute_only' | 'framework';
+  standard_version?: string;
+  website_url?: string;
 }
 
 export interface AttributePackageUpdatePayload {
@@ -80,6 +141,9 @@ export interface AttributePackageUpdatePayload {
   description?: string;
   icon_color?: string;
   is_default_active?: boolean;
+  package_type?: 'attribute_only' | 'framework';
+  standard_version?: string;
+  website_url?: string;
 }
 
 export interface PackageItemCreatePayload {
@@ -159,6 +223,9 @@ export interface StereotypeAttributeLink {
 export interface ElementStereotype {
   id: string;
   model_id?: string | null;
+  package_id?: string | null;
+  package_name?: string | null;
+  package_code?: string | null;
   base_type: string;
   name: string;
   label: string;
@@ -176,6 +243,7 @@ export interface StereotypeCreatePayload {
   description?: string;
   icon_color?: string;
   model_id?: string | null;
+  package_id?: string | null;
   attribute_links?: Array<{
     attribute_name: string;
     is_required?: boolean;
@@ -268,17 +336,32 @@ export interface ApplicationInfo {
   documentation?: string;
   business_fit: number;
   technical_fit: number;
+  functional_fit_label?: string;
+  technical_fit_label?: string;
   time_quadrant: 'Invest' | 'Migrate' | 'Tolerate' | 'Eliminate';
+  time_quadrant_override?: string;
   annual_cost: number;
+  cost_type?: string;
+  cost_center?: string;
   business_criticality: string;
   lifecycle_status: string;
+  live_date?: string | null;
+  retirement_date?: string | null;
   business_owner: string;
   technical_owner: string;
   vendor: string;
   hosting_type: string;
+  architecture_type?: string;
   data_classification: string;
+  personal_data?: boolean;
   sla_level: string;
+  rto_hours?: string;
+  is_business_app?: boolean;
+  is_enterprise_app?: boolean;
   in_apm_scope?: boolean;
+  stereotype_id?: string | null;
+  stereotype_name?: string;
+  stereotype_label?: string;
   notes?: string;
 }
 
@@ -497,6 +580,10 @@ export interface DerivedRelationshipItem {
 export interface ArchimateElementItem {
   id: string;
   model_id: string;
+  is_reference?: boolean;
+  package_id?: string | null;
+  package_code?: string | null;
+  package_name?: string | null;
   name: string;
   type: string;
   layer: string;
@@ -512,6 +599,9 @@ export interface ArchimateElementItem {
 export interface ArchimateRelationshipItem {
   id: string;
   model_id: string;
+  is_reference?: boolean;
+  package_id?: string | null;
+  package_code?: string | null;
   type: string;
   name?: string;
   source_id: string;
@@ -833,5 +923,73 @@ export interface SchemaDiffResult {
   xml_content?: string;
   parsed_view_data?: any;
 }
+
+export interface PackageViewSummary {
+  id: string;
+  view_key: string;
+  name: string;
+  description?: string | null;
+  category: string;
+  view_type: 'table' | 'matrix' | 'kpi_dashboard';
+  icon?: string;
+  sort_order?: number;
+  matching_elements_count: number;
+}
+
+export interface PackageWithViews {
+  id: string;
+  code: string;
+  name: string;
+  version: string;
+  icon_color?: string;
+  package_type: string;
+  views: PackageViewSummary[];
+}
+
+export interface PackageViewColumn {
+  field: string;
+  label: string;
+  type: 'string' | 'enum' | 'badge' | 'number' | 'date' | 'currency';
+  sortable?: boolean;
+  filterable?: boolean;
+}
+
+export interface PackageViewKPIMetric {
+  id: string;
+  label: string;
+  value: number;
+  type: string;
+}
+
+export interface PackageViewChartItem {
+  label: string;
+  count: number;
+}
+
+export interface PackageViewChart {
+  id: string;
+  title: string;
+  type: 'bar' | 'pie' | 'donut';
+  group_by: string;
+  data: PackageViewChartItem[];
+}
+
+export interface PackageViewExecuteResponse {
+  view_id: string;
+  view_key: string;
+  name: string;
+  description?: string | null;
+  category: string;
+  view_type: 'table' | 'matrix' | 'kpi_dashboard';
+  icon?: string;
+  columns?: PackageViewColumn[];
+  rows?: Record<string, any>[];
+  total?: number;
+  total_items?: number;
+  metrics?: PackageViewKPIMetric[];
+  charts?: PackageViewChart[];
+  facet_options?: Record<string, string[]>;
+}
+
 
 

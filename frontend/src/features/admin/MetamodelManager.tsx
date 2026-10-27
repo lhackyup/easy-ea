@@ -39,11 +39,9 @@ import {
   Folder,
   FolderPlus,
   Edit3,
-  Pencil,
-  Package
+  Pencil
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
-import { AttributePackagesManager } from './AttributePackagesManager';
 
 const LAYERS = ['All', 'Strategy', 'Business', 'Application', 'Technology', 'Motivation', 'Implementation'];
 
@@ -57,7 +55,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
   activeModelId
 }) => {
   const { t, interpolate } = useLanguage();
-  const [activeTab, setActiveTab] = useState<'types' | 'packages' | 'matrix'>('types');
+  const [activeTab, setActiveTab] = useState<'types' | 'matrix'>('types');
 
   // Active Scope for Metamodel view: 'global' or specific model_id
   const [selectedScope, setSelectedScope] = useState<string>(activeModelId || 'global');
@@ -637,17 +635,6 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
           >
             <Boxes className="w-4 h-4" />
             <span>{t.metamodel.tabObjectTypes}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('packages')}
-            className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-              activeTab === 'packages'
-                ? 'bg-white text-rose-600 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Package className="w-4 h-4" />
-            <span>{t.metamodel.tabAttributePackages}</span>
           </button>
           <button
             onClick={() => setActiveTab('matrix')}
@@ -1251,17 +1238,6 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
             </div>
           )}
         </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* TAB 2: ATTRIBUTE PACKAGES                                */}
-      {/* ======================================================== */}
-      {activeTab === 'packages' && (
-        <AttributePackagesManager
-          models={models}
-          selectedScope={selectedScope}
-          onPackageUpdated={() => loadMetamodel(selectedScope)}
-        />
       )}
 
       {/* ======================================================== */}

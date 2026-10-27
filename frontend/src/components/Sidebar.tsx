@@ -1,11 +1,18 @@
-import React from 'react';
-import { MainHub, BusinessSubTab, ArchitectureSubTab, AdminSubTab } from '../types';
+import React, { useState } from 'react';
+import {
+  MainHub,
+  BusinessSubTab,
+  ArchitectureSubTab,
+  AdminSubTab,
+  PackageWithViews,
+  ActivePackageViewSelection
+} from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import {
   Sparkles,
-  LayoutGrid,
   GitMerge,
   Workflow,
+  Layers,
   Database,
   Boxes,
   Upload,
@@ -14,8 +21,14 @@ import {
   Shield,
   BarChart3,
   Box,
+  Package,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  Table as TableIcon,
+  ShieldAlert,
+  PieChart,
+  Grid,
   Settings,
   Building2,
   KeyRound,
@@ -35,6 +48,9 @@ interface SidebarProps {
   onOpenUpload: () => void;
   isCollapsed: boolean;
   onToggleCollapse: () => void;
+  packagesWithViews?: PackageWithViews[];
+  activePackageView?: ActivePackageViewSelection | null;
+  onSelectPackageView?: (packageId: string, viewId: string) => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -47,20 +63,54 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectAdminTab,
   onOpenUpload,
   isCollapsed,
-  onToggleCollapse
+  onToggleCollapse,
+  packagesWithViews = [],
+  activePackageView,
+  onSelectPackageView
 }) => {
   const { t } = useLanguage();
+  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
+
+  const togglePackageExpand = (pkgId: string) => {
+    setExpandedPackages((prev) => ({
+      ...prev,
+      [pkgId]: prev[pkgId] === undefined ? false : !prev[pkgId]
+    }));
+  };
+
+  const getViewIcon = (iconName?: string, viewType?: string) => {
+    if (viewType === 'kpi_dashboard') return BarChart3;
+    if (viewType === 'matrix') return Grid;
+    if (iconName === 'Layers') return Layers;
+    if (iconName === 'ShieldAlert') return ShieldAlert;
+    if (iconName === 'PieChart') return PieChart;
+    return TableIcon;
+  };
+
+  const getColorClasses = (colorName?: string) => {
+    switch (colorName) {
+      case 'indigo':
+        return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'emerald':
+        return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'purple':
+        return 'bg-purple-50 text-purple-700 border-purple-200';
+      case 'rose':
+        return 'bg-rose-50 text-rose-700 border-rose-200';
+      case 'amber':
+        return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'teal':
+        return 'bg-teal-50 text-teal-700 border-teal-200';
+      default:
+        return 'bg-blue-50 text-blue-700 border-blue-200';
+    }
+  };
 
   const businessItems = [
     {
       id: 'overview' as BusinessSubTab,
       label: t.subtabs.executiveOverview,
       icon: Sparkles
-    },
-    {
-      id: 'apm' as BusinessSubTab,
-      label: t.subtabs.timePortfolio,
-      icon: LayoutGrid
     },
     {
       id: 'overlap' as BusinessSubTab,
@@ -112,6 +162,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'metamodel' as AdminSubTab,
       label: t.subtabs.metamodelManager,
       icon: Box
+    },
+    {
+      id: 'packages' as AdminSubTab,
+      label: t.subtabs.packagesManager,
+      icon: Package
     },
     {
       id: 'apm_config' as AdminSubTab,
@@ -194,6 +249,110 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 );
               })}
             </div>
+
+            {/* DYNAMIC PACKAGE VIEWS SECTION */}
+            {packagesWithViews.filter((p) => p.views && p.views.length > 0).length > 0 && (
+              <div className="pt-3 mt-2 border-t border-slate-100">
+                {!isCollapsed && (
+                  <div className="px-3 pb-1.5 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <span>Pacchetti & Viste</span>
+                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded-full font-bold">
+                      {packagesWithViews.filter((p) => p.views && p.views.length > 0).length}
+                    </span>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  {packagesWithViews
+                    .filter((p) => p.views && p.views.length > 0)
+                    .map((pkg) => {
+                      const isExpanded = expandedPackages[pkg.id] ?? true;
+
+                      return (
+                        <div key={pkg.id} className="space-y-0.5">
+                          {/* Package Header button */}
+                          <button
+                            onClick={() => togglePackageExpand(pkg.id)}
+                            title={isCollapsed ? pkg.name : undefined}
+                            className={`w-full flex items-center justify-between rounded-xl text-xs font-bold transition-all duration-150 ${
+                              isCollapsed ? 'justify-center p-2' : 'px-2.5 py-1.5 text-left'
+                            } text-slate-700 hover:text-indigo-600 hover:bg-slate-50`}
+                          >
+                            <div className="flex items-center space-x-2 min-w-0">
+                              <span
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border shrink-0 ${getColorClasses(
+                                  pkg.icon_color
+                                )}`}
+                              >
+                                {pkg.code}
+                              </span>
+                              {!isCollapsed && (
+                                <span className="truncate text-xs font-bold text-slate-800" title={pkg.name}>
+                                  {pkg.name}
+                                </span>
+                              )}
+                            </div>
+                            {!isCollapsed && (
+                              <ChevronDown
+                                className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                                  isExpanded ? 'rotate-180' : ''
+                                }`}
+                              />
+                            )}
+                          </button>
+
+                          {/* Submenu of views */}
+                          {(!isCollapsed && isExpanded) && (
+                            <div className="pl-3.5 pr-1 space-y-0.5 border-l-2 border-slate-100 ml-3.5 my-1">
+                              {[...(pkg.views || [])]
+                                .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
+                                .map((v) => {
+                                const Icon = getViewIcon(v.icon, v.view_type);
+                                const isViewActive =
+                                  businessTab === 'package_view' &&
+                                  activePackageView?.packageId === pkg.id &&
+                                  (activePackageView?.viewId === v.id || activePackageView?.viewId === v.view_key);
+
+                                return (
+                                  <button
+                                    key={v.id}
+                                    onClick={() => onSelectPackageView && onSelectPackageView(pkg.id, v.id)}
+                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                      isViewActive
+                                        ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                                        : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/60'
+                                    }`}
+                                  >
+                                    <div className="flex items-center space-x-2 min-w-0">
+                                      <Icon
+                                        className={`w-3.5 h-3.5 shrink-0 ${
+                                          isViewActive ? 'text-white' : 'text-slate-400'
+                                        }`}
+                                      />
+                                      <span className="truncate">{v.name}</span>
+                                    </div>
+                                    {v.matching_elements_count > 0 && (
+                                      <span
+                                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1 shrink-0 ${
+                                          isViewActive
+                                            ? 'bg-white/20 text-white'
+                                            : 'bg-slate-100 text-slate-500'
+                                        }`}
+                                      >
+                                        {v.matching_elements_count}
+                                      </span>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

@@ -1,10 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { ModelWorkspace, MainHub, BusinessSubTab, ArchitectureSubTab, AdminSubTab, SavedFilterView } from './types';
+import {
+  ModelWorkspace,
+  MainHub,
+  BusinessSubTab,
+  ArchitectureSubTab,
+  AdminSubTab,
+  SavedFilterView,
+  PackageWithViews,
+  ActivePackageViewSelection
+} from './types';
 import { api } from './lib/api';
 import { TopBar } from './components/TopBar';
 import { Sidebar } from './components/Sidebar';
 import { UploadModal } from './components/UploadModal';
 import { ExecutiveOverview } from './features/business/ExecutiveOverview';
+import { FrameworkInsights } from './features/business/FrameworkInsights';
 import { APMDashboard } from './features/apm/APMDashboard';
 import { OverlapMatrix } from './features/overlap/OverlapMatrix';
 import { ProcessNavigator } from './features/processes/ProcessNavigator';
@@ -31,6 +41,37 @@ export function App() {
   const [architectureTab, setArchitectureTab] = useState<ArchitectureSubTab>('repository');
   const [adminTab, setAdminTab] = useState<AdminSubTab>('models');
   const [selectedSavedView, setSelectedSavedView] = useState<SavedFilterView | null>(null);
+
+  // Dynamic Package Views State
+  const [packagesWithViews, setPackagesWithViews] = useState<PackageWithViews[]>([]);
+  const [activePackageView, setActivePackageView] = useState<ActivePackageViewSelection | null>(null);
+
+  const loadPackageViews = async (modelId: string) => {
+    if (!modelId) {
+      setPackagesWithViews([]);
+      return;
+    }
+    try {
+      const res = await api.getPackageViews(modelId);
+      setPackagesWithViews(res.packages || []);
+    } catch (err) {
+      console.error('Failed to load package views', err);
+      setPackagesWithViews([]);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedModelId) {
+      loadPackageViews(selectedModelId);
+    }
+  }, [selectedModelId]);
+
+  const handleSelectPackageView = (packageId: string, viewId: string) => {
+    setActiveHub('business');
+    setBusinessTab('package_view');
+    setActivePackageView({ packageId, viewId });
+    setIsMobileSidebarOpen(false);
+  };
 
   // Sidebar Collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -160,6 +201,9 @@ export function App() {
             }}
             isCollapsed={isSidebarCollapsed}
             onToggleCollapse={toggleSidebarCollapse}
+            packagesWithViews={packagesWithViews}
+            activePackageView={activePackageView}
+            onSelectPackageView={handleSelectPackageView}
           />
         </div>
 
@@ -183,6 +227,14 @@ export function App() {
                       <ExecutiveOverview
                         modelId={selectedModelId}
                         onNavigateTab={(tab) => setBusinessTab(tab)}
+                      />
+                    )}
+                    {(businessTab === 'package_view' || businessTab === 'insights') && (
+                      <FrameworkInsights
+                        modelId={selectedModelId}
+                        packages={packagesWithViews}
+                        activePackageView={activePackageView}
+                        onSelectPackageView={handleSelectPackageView}
                       />
                     )}
                     {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} />}

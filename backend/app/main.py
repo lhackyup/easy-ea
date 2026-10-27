@@ -24,6 +24,7 @@ from app.api.data_import import router as data_import_router
 from app.api.saved_views import router as saved_views_router
 from app.api.schemas import router as schemas_router
 from app.api.plugin_api import router as plugin_router
+from app.api.business_views import router as business_views_router
 
 from sqlalchemy import text
 
@@ -62,6 +63,99 @@ _safe_add_column("users", "auth_provider VARCHAR DEFAULT 'local'")
 _safe_add_column("users", "external_id VARCHAR")
 _safe_add_column("system_auth_settings", "max_schema_versions INTEGER DEFAULT 10")
 _safe_add_column("archimate_elements", "stereotype_id VARCHAR")
+_safe_add_column("archimate_elements", "is_reference BOOLEAN DEFAULT FALSE")
+_safe_add_column("archimate_elements", "package_id VARCHAR")
+_safe_add_column("archimate_relationships", "is_reference BOOLEAN DEFAULT FALSE")
+_safe_add_column("archimate_relationships", "package_id VARCHAR")
+_safe_add_column("attribute_packages", "package_type VARCHAR(32) DEFAULT 'attribute_only'")
+_safe_add_column("attribute_packages", "standard_version VARCHAR(32)")
+_safe_add_column("attribute_packages", "website_url VARCHAR(255)")
+_safe_add_column("attribute_packages", "version VARCHAR(32) DEFAULT '1.0.0'")
+_safe_add_column("attribute_packages", "author VARCHAR(255)")
+_safe_add_column("attribute_packages", "license VARCHAR(64)")
+_safe_add_column("element_stereotypes", "package_id VARCHAR")
+_safe_add_column("package_views", "sort_order INTEGER DEFAULT 0")
+
+def _safe_alter_column(table_name: str, sql_action: str):
+    with engine.connect() as conn:
+        try:
+            if engine.dialect.name == "postgresql":
+                conn.execute(text(f"ALTER TABLE {table_name} {sql_action};"))
+                conn.commit()
+        except Exception as exc:
+            print(f"Migration note ({table_name} {sql_action}): {exc}")
+
+_safe_alter_column("attribute_packages", "ALTER COLUMN code TYPE VARCHAR(32)")
+_safe_alter_column("archimate_elements", "ALTER COLUMN model_id DROP NOT NULL")
+_safe_alter_column("archimate_relationships", "ALTER COLUMN model_id DROP NOT NULL")
+
+# Ensure model_id is nullable on SQLite for reference elements/relationships
+if engine.dialect.name == "sqlite":
+    with engine.connect() as conn:
+        try:
+            res = conn.execute(text("PRAGMA table_info(archimate_elements);")).fetchall()
+            for col in res:
+                if col[1] == "model_id" and col[3] == 1:
+                    conn.execute(text("PRAGMA foreign_keys=OFF;"))
+                    conn.execute(text("""
+                        CREATE TABLE archimate_elements_dg_tmp (
+                            id VARCHAR NOT NULL PRIMARY KEY,
+                            model_id VARCHAR,
+                            name VARCHAR NOT NULL,
+                            type VARCHAR NOT NULL,
+                            layer VARCHAR NOT NULL,
+                            documentation TEXT,
+                            properties JSON,
+                            stereotype_id VARCHAR,
+                            is_reference BOOLEAN DEFAULT FALSE,
+                            package_id VARCHAR,
+                            FOREIGN KEY(model_id) REFERENCES model_workspaces (id) ON DELETE CASCADE
+                        );
+                    """))
+                    conn.execute(text("INSERT INTO archimate_elements_dg_tmp SELECT id, model_id, name, type, layer, documentation, properties, stereotype_id, is_reference, package_id FROM archimate_elements;"))
+                    conn.execute(text("DROP TABLE archimate_elements;"))
+                    conn.execute(text("ALTER TABLE archimate_elements_dg_tmp RENAME TO archimate_elements;"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_elements_model_id ON archimate_elements (model_id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_elements_layer ON archimate_elements (layer);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_elements_id ON archimate_elements (id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_elements_name ON archimate_elements (name);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_elements_type ON archimate_elements (type);"))
+                    conn.commit()
+                    break
+
+            res_rel = conn.execute(text("PRAGMA table_info(archimate_relationships);")).fetchall()
+            for col in res_rel:
+                if col[1] == "model_id" and col[3] == 1:
+                    conn.execute(text("PRAGMA foreign_keys=OFF;"))
+                    conn.execute(text("""
+                        CREATE TABLE archimate_relationships_dg_tmp (
+                            id VARCHAR NOT NULL PRIMARY KEY,
+                            model_id VARCHAR,
+                            source_id VARCHAR NOT NULL,
+                            target_id VARCHAR NOT NULL,
+                            type VARCHAR NOT NULL,
+                            name VARCHAR,
+                            documentation TEXT,
+                            properties JSON,
+                            is_reference BOOLEAN DEFAULT FALSE,
+                            package_id VARCHAR,
+                            FOREIGN KEY(model_id) REFERENCES model_workspaces (id) ON DELETE CASCADE,
+                            FOREIGN KEY(source_id) REFERENCES archimate_elements (id) ON DELETE CASCADE,
+                            FOREIGN KEY(target_id) REFERENCES archimate_elements (id) ON DELETE CASCADE
+                        );
+                    """))
+                    conn.execute(text("INSERT INTO archimate_relationships_dg_tmp SELECT id, model_id, source_id, target_id, type, name, documentation, properties, is_reference, package_id FROM archimate_relationships;"))
+                    conn.execute(text("DROP TABLE archimate_relationships;"))
+                    conn.execute(text("ALTER TABLE archimate_relationships_dg_tmp RENAME TO archimate_relationships;"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_relationships_target_id ON archimate_relationships (target_id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_relationships_id ON archimate_relationships (id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_relationships_source_id ON archimate_relationships (source_id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_relationships_model_id ON archimate_relationships (model_id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_relationships_type ON archimate_relationships (type);"))
+                    conn.commit()
+                    break
+        except Exception as exc:
+            print(f"Migration note (nullable model_id): {exc}")
 
 
 # Auto-seed sample model, backfill codes and default custom attributes if needed
@@ -142,6 +236,7 @@ app.include_router(data_import_router, prefix=settings.API_V1_STR)
 app.include_router(saved_views_router, prefix=settings.API_V1_STR)
 app.include_router(schemas_router, prefix=settings.API_V1_STR)
 app.include_router(plugin_router, prefix=settings.API_V1_STR)
+app.include_router(business_views_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 

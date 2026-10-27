@@ -32,13 +32,15 @@ class ArchimateElement(Base):
     __tablename__ = "archimate_elements"
 
     id = Column(String, primary_key=True, index=True)
-    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=True, index=True) # Nullable for framework reference elements
     name = Column(String, nullable=False, index=True)
     type = Column(String, nullable=False, index=True) # e.g. ApplicationComponent, BusinessProcess
     layer = Column(String, nullable=False, index=True) # Strategy, Business, Application, Technology, Motivation, Implementation
     documentation = Column(Text, nullable=True)
     properties = Column(JSON, default=dict)
     stereotype_id = Column(String, ForeignKey("element_stereotypes.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_reference = Column(Boolean, default=False, nullable=False, server_default='0', index=True) # True for immutable industry standard elements (BIAN, RAMI, etc.)
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=True, index=True)
 
     workspace = relationship("ModelWorkspace", back_populates="elements")
     outgoing_relations = relationship("ArchimateRelationship", foreign_keys="ArchimateRelationship.source_id", back_populates="source_element", cascade="all, delete-orphan")
@@ -47,22 +49,27 @@ class ArchimateElement(Base):
     # Optional 1-to-1 APM business attributes
     apm_attributes = relationship("ApplicationBusinessAttributes", back_populates="element", uselist=False, cascade="all, delete-orphan")
     stereotype = relationship("ElementStereotype", back_populates="elements")
+    package = relationship("AttributePackage", back_populates="reference_elements")
 
 
 class ArchimateRelationship(Base):
     __tablename__ = "archimate_relationships"
 
     id = Column(String, primary_key=True, index=True)
-    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=True, index=True) # Nullable for framework reference relationships
     source_id = Column(String, ForeignKey("archimate_elements.id", ondelete="CASCADE"), nullable=False, index=True)
     target_id = Column(String, ForeignKey("archimate_elements.id", ondelete="CASCADE"), nullable=False, index=True)
     type = Column(String, nullable=False, index=True) # e.g. ServingRelationship, RealizationRelationship
     name = Column(String, nullable=True)
     documentation = Column(Text, nullable=True)
     properties = Column(JSON, default=dict)
+    is_reference = Column(Boolean, default=False, nullable=False, server_default='0', index=True)
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=True, index=True)
 
     workspace = relationship("ModelWorkspace", back_populates="relationships")
     source_element = relationship("ArchimateElement", foreign_keys=[source_id], back_populates="outgoing_relations")
+    target_element = relationship("ArchimateElement", foreign_keys=[target_id], back_populates="incoming_relations")
+    package = relationship("AttributePackage", back_populates="reference_relationships")
     target_element = relationship("ArchimateElement", foreign_keys=[target_id], back_populates="incoming_relations")
 
 
@@ -128,10 +135,16 @@ class AttributePackage(Base):
     __tablename__ = "attribute_packages"
 
     id = Column(String, primary_key=True, index=True)
-    code = Column(String(3), unique=True, index=True, nullable=False) # 3-letter lowercase/uppercase code (e.g. "apm", "tme")
+    code = Column(String(32), unique=True, index=True, nullable=False) # lowercase/uppercase code (e.g. "apm", "tme", "bian", "it4it", "rami", "fhir")
     name = Column(String, nullable=False)
+    version = Column(String(32), default="1.0.0", nullable=False, server_default='1.0.0') # SemVer package version
+    author = Column(String(255), nullable=True) # Author or Organization
+    license = Column(String(64), nullable=True) # e.g. "Apache-2.0", "MIT", "Open Standard"
     description = Column(Text, nullable=True)
-    icon_color = Column(String, default="blue") # e.g. "blue", "emerald", "amber", "purple", "rose"
+    icon_color = Column(String, default="blue") # e.g. "blue", "emerald", "amber", "purple", "rose", "cyan"
+    package_type = Column(String(32), default="attribute_only", nullable=False, server_default='attribute_only', index=True) # 'attribute_only', 'framework'
+    standard_version = Column(String(32), nullable=True) # e.g. "12.0", "4.0", "R5", "v3.0"
+    website_url = Column(String(255), nullable=True)
     is_default_active = Column(Boolean, default=True) # Activated by default on newly created libraries
     is_system = Column(Boolean, default=False, nullable=False, server_default='0', index=True)
     created_at = Column(DateTime, default=utc_now)
@@ -139,6 +152,10 @@ class AttributePackage(Base):
 
     items = relationship("AttributePackageItem", back_populates="package", cascade="all, delete-orphan", order_by="AttributePackageItem.sort_order")
     workspace_links = relationship("WorkspaceAttributePackage", back_populates="package", cascade="all, delete-orphan")
+    stereotypes = relationship("ElementStereotype", back_populates="package", cascade="all, delete-orphan")
+    reference_elements = relationship("ArchimateElement", back_populates="package", cascade="all, delete-orphan")
+    reference_relationships = relationship("ArchimateRelationship", back_populates="package", cascade="all, delete-orphan")
+    views = relationship("PackageView", back_populates="package", cascade="all, delete-orphan")
 
 
 class AttributePackageItem(Base):
@@ -181,6 +198,7 @@ class ElementStereotype(Base):
 
     id = Column(String, primary_key=True, index=True) # e.g. "stereo-microservice"
     model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=True, index=True) # None = Global, or library-scoped
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=True, index=True) # None = Standalone, or framework-scoped
     base_type = Column(String, nullable=False, index=True) # e.g. "ApplicationComponent", "BusinessProcess", "Node"
     name = Column(String, nullable=False, index=True) # e.g. "Microservice"
     label = Column(String, nullable=False) # e.g. "«Microservice»"
@@ -193,6 +211,7 @@ class ElementStereotype(Base):
     attribute_links = relationship("StereotypeAttributeLink", back_populates="stereotype", cascade="all, delete-orphan", order_by="StereotypeAttributeLink.sort_order")
     elements = relationship("ArchimateElement", back_populates="stereotype")
     workspace = relationship("ModelWorkspace", foreign_keys=[model_id])
+    package = relationship("AttributePackage", back_populates="stereotypes")
 
 
 class StereotypeAttributeLink(Base):
@@ -353,4 +372,25 @@ class SchemaVersionHistory(Base):
     created_at = Column(DateTime, default=utc_now)
 
     schema = relationship("ArchiSchema", back_populates="versions")
+
+
+class PackageView(Base):
+    __tablename__ = "package_views"
+
+    id = Column(String, primary_key=True, index=True) # e.g. "pkv-uuid"
+    package_id = Column(String, ForeignKey("attribute_packages.id", ondelete="CASCADE"), nullable=False, index=True)
+    view_key = Column(String(64), nullable=False, index=True) # Technical key within package e.g. "it4it_digital_portfolio"
+    name = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(64), nullable=True, default="General")
+    view_type = Column(String(32), nullable=False, default="table") # "table" | "matrix" | "kpi_dashboard"
+    icon = Column(String(32), nullable=True, default="Table")
+    target_stereotypes = Column(JSON, default=list) # List of stereotype keys/names
+    config = Column(JSON, nullable=False, default=dict) # Columns, filters, metrics, charts definition
+    sort_order = Column(Integer, default=0, nullable=False)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    package = relationship("AttributePackage", back_populates="views")
+
 

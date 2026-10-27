@@ -27,6 +27,7 @@ import {
   X,
   Folder,
   Tag,
+  Lock,
   AlertCircle,
   CheckCircle2,
   Sliders,
@@ -1278,6 +1279,40 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     const st = stereotypeId ? typeInfo.stereotypes?.find((s) => s.id === stereotypeId) : undefined;
     const linkMap = new Map((st?.attribute_links || []).map((l) => [l.attribute_name, l]));
 
+    const isEasyModel = Boolean(
+      modelId && (modelId === 'sample-easybank-ea' || modelId.toLowerCase().includes('easy'))
+    );
+    const isEasyApp = isEasyModel && typeInfo.type === 'ApplicationComponent';
+
+    if (isEasyApp) {
+      const grouped: Record<string, CustomAttributeDefinition[]> = {
+        'Attributi Generici': [],
+        'Package APM': []
+      };
+      typeInfo.custom_attributes.forEach((attr) => {
+        const isApm = attr.is_package || attr.package_code === 'APM' || attr.name.startsWith('apm_');
+        if (isApm) {
+          grouped['Package APM'].push({
+            ...attr,
+            section: 'Package APM'
+          });
+        } else {
+          grouped['Attributi Generici'].push({
+            ...attr,
+            section: 'Attributi Generici'
+          });
+        }
+      });
+      const res: Record<string, CustomAttributeDefinition[]> = {};
+      if (grouped['Attributi Generici'].length > 0) {
+        res['Attributi Generici'] = grouped['Attributi Generici'];
+      }
+      if (grouped['Package APM'].length > 0) {
+        res['Package APM'] = grouped['Package APM'];
+      }
+      return res;
+    }
+
     return typeInfo.custom_attributes.reduce((acc, attr) => {
       const link = linkMap.get(attr.name);
       const sec = (link?.section_override || attr.section || 'Custom Attributes').trim() || 'Custom Attributes';
@@ -2167,6 +2202,12 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <h4 className="text-xs font-bold text-slate-900">{el.name}</h4>
+                          {el.is_reference && (
+                            <span className="text-[9px] font-extrabold px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-300 flex items-center gap-1 shadow-2xs">
+                              <span>🏛️</span>
+                              <span>{el.package_code?.toUpperCase() || 'REF'}</span>
+                            </span>
+                          )}
                           {el.stereotype && (
                             <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md border font-mono ${getStereotypeBadgeClass(el.stereotype.icon_color)}`}>
                               {el.stereotype.label || `«${el.stereotype.name}»`}
@@ -2202,6 +2243,12 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${getLayerColor(selectedElement.layer)}`}>
                       {selectedElement.layer} Layer • {selectedElement.type}
                     </span>
+                    {selectedElement.is_reference && (
+                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border bg-emerald-50 text-emerald-800 border-emerald-300 flex items-center gap-1 shadow-2xs">
+                        <span>🏛️</span>
+                        <span>{selectedElement.package_name || selectedElement.package_code?.toUpperCase() || 'Standard Framework'} (Canonico)</span>
+                      </span>
+                    )}
                     {selectedElement.stereotype && (
                       <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full border font-mono ${getStereotypeBadgeClass(selectedElement.stereotype.icon_color)}`}>
                         {selectedElement.stereotype.label || `«${selectedElement.stereotype.name}»`}
@@ -2211,21 +2258,33 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   </div>
 
                   <div className="flex items-center space-x-2 self-start sm:self-auto">
-                    <button
-                      onClick={handleOpenEditModal}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
-                      title={t.architect.editObjectBtn}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                      <span>{t.architect.editObjectBtn}</span>
-                    </button>
-                    <button
-                      onClick={() => setIsDeleteModalOpen(true)}
-                      className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
-                      title={t.architect.deleteObjectBtn}
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {selectedElement.is_reference ? (
+                      <span
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-xl text-xs font-semibold select-none cursor-not-allowed"
+                        title="Elemento canonico di riferimento dello standard industriale (Protetto / Sola Lettura)"
+                      >
+                        <Lock className="w-3.5 h-3.5 text-slate-400" />
+                        <span>Standard Protetto</span>
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          onClick={handleOpenEditModal}
+                          className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                          title={t.architect.editObjectBtn}
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>{t.architect.editObjectBtn}</span>
+                        </button>
+                        <button
+                          onClick={() => setIsDeleteModalOpen(true)}
+                          className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 border border-rose-200 rounded-xl transition cursor-pointer"
+                          title={t.architect.deleteObjectBtn}
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -2375,20 +2434,31 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                           </div>
 
                           <div className="flex items-center space-x-1 self-end sm:self-auto">
-                            <button
-                              onClick={() => handleOpenEditRelationModal(rel)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                              title={t.architect.editRelationBtn}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenDeleteRelationModal(rel)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                              title={t.architect.deleteRelationBtn}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {rel.is_reference ? (
+                              <span
+                                className="p-1.5 text-slate-400 select-none cursor-not-allowed"
+                                title="Relazione canonica dello standard industriale (Protetta / Sola Lettura)"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleOpenEditRelationModal(rel)}
+                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title={t.architect.editRelationBtn}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenDeleteRelationModal(rel)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title={t.architect.deleteRelationBtn}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))
@@ -2431,20 +2501,31 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                           </div>
 
                           <div className="flex items-center space-x-1 self-end sm:self-auto">
-                            <button
-                              onClick={() => handleOpenEditRelationModal(rel)}
-                              className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                              title={t.architect.editRelationBtn}
-                            >
-                              <Pencil className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => handleOpenDeleteRelationModal(rel)}
-                              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                              title={t.architect.deleteRelationBtn}
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {rel.is_reference ? (
+                              <span
+                                className="p-1.5 text-slate-400 select-none cursor-not-allowed"
+                                title="Relazione canonica dello standard industriale (Protetta / Sola Lettura)"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                              </span>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleOpenEditRelationModal(rel)}
+                                  className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                                  title={t.architect.editRelationBtn}
+                                >
+                                  <Pencil className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenDeleteRelationModal(rel)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                                  title={t.architect.deleteRelationBtn}
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </>
+                            )}
                           </div>
                         </div>
                       ))

@@ -5,7 +5,13 @@ from pydantic import BaseModel
 import uuid
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateElement, ApplicationBusinessAttributes, User, ElementStereotype
+from app.models.archimate import (
+    ArchimateElement,
+    ApplicationBusinessAttributes,
+    User,
+    ElementStereotype,
+    WorkspaceAttributePackage
+)
 from app.api.deps import get_current_user, require_library_permission
 from app.parsers.archi_parser import detect_layer
 
@@ -55,12 +61,16 @@ def validate_and_apply_stereotype(
     return st
 
 def sync_apm_from_properties(apm: ApplicationBusinessAttributes, props: Dict[str, Any]):
-    """Helper to update APM attributes from properties dict (supporting eea_ prefix or direct keys)."""
+    """Helper to update APM attributes from properties dict (supporting apm_ prefix, eea_ prefix or direct keys)."""
     if not apm or not props:
         return
     
-    # Helper to get value from props with or without eea_ prefix
+    import re
+
+    # Helper to get value from props with apm_ prefix, eea_ prefix, or direct key
     def get_val(key):
+        if f"apm_{key}" in props:
+            return props[f"apm_{key}"]
         if key in props:
             return props[key]
         eea_key = f"eea_{key}"
@@ -68,22 +78,26 @@ def sync_apm_from_properties(apm: ApplicationBusinessAttributes, props: Dict[str
             return props[eea_key]
         return None
 
-    b_fit = get_val("business_fit")
+    def parse_score(val):
+        if val is None or val == "":
+            return None
+        if isinstance(val, (int, float)):
+            return int(val)
+        m = re.search(r'\d+', str(val))
+        return int(m.group(0)) if m else None
+
+    raw_b = props.get("apm_functional_fit") or get_val("business_fit")
+    b_fit = parse_score(raw_b)
     if b_fit is not None:
-        try:
-            apm.business_fit = int(b_fit)
-        except (ValueError, TypeError):
-            pass
+        apm.business_fit = b_fit
 
-    t_fit = get_val("technical_fit")
+    raw_t = props.get("apm_technical_fit") or get_val("technical_fit")
+    t_fit = parse_score(raw_t)
     if t_fit is not None:
-        try:
-            apm.technical_fit = int(t_fit)
-        except (ValueError, TypeError):
-            pass
+        apm.technical_fit = t_fit
 
-    time_q = get_val("time_quadrant")
-    if time_q is not None:
+    time_q = props.get("apm_time_quadrant_override") or get_val("time_quadrant")
+    if time_q is not None and str(time_q).strip() != "":
         apm.time_quadrant = str(time_q)
 
     ann_cost = get_val("annual_cost")
@@ -147,8 +161,20 @@ def list_elements(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List elements of a model filtered by Layer, Type, Stereotype, or Search query."""
-    query = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id)
+    """List elements of a model filtered by Layer, Type, Stereotype, or Search query, including active framework elements."""
+    active_links = db.query(WorkspaceAttributePackage.package_id).filter(
+        WorkspaceAttributePackage.model_id == model_id
+    ).all()
+    active_pkg_ids = [r[0] for r in active_links]
+
+    if active_pkg_ids:
+        query = db.query(ArchimateElement).filter(
+            (ArchimateElement.model_id == model_id) |
+            ((ArchimateElement.is_reference == True) & (ArchimateElement.package_id.in_(active_pkg_ids)))
+        )
+    else:
+        query = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id)
+
     if layer:
         query = query.filter(ArchimateElement.layer == layer)
     if type:
@@ -186,6 +212,10 @@ def list_elements(
         results.append({
             "id": e.id,
             "model_id": e.model_id,
+            "is_reference": bool(e.is_reference),
+            "package_id": e.package_id,
+            "package_code": e.package.code if e.package else None,
+            "package_name": e.package.name if e.package else None,
             "name": e.name,
             "type": e.type,
             "layer": e.layer,
@@ -229,7 +259,17 @@ def search_elements(
     """Search elements across models or within a model by name, documentation, type, or layer."""
     db_query = db.query(ArchimateElement)
     if model_id:
-        db_query = db_query.filter(ArchimateElement.model_id == model_id)
+        active_links = db.query(WorkspaceAttributePackage.package_id).filter(
+            WorkspaceAttributePackage.model_id == model_id
+        ).all()
+        active_pkg_ids = [r[0] for r in active_links]
+        if active_pkg_ids:
+            db_query = db_query.filter(
+                (ArchimateElement.model_id == model_id) |
+                ((ArchimateElement.is_reference == True) & (ArchimateElement.package_id.in_(active_pkg_ids)))
+            )
+        else:
+            db_query = db_query.filter(ArchimateElement.model_id == model_id)
     if layer and layer.lower() != "all":
         db_query = db_query.filter(ArchimateElement.layer.ilike(layer))
     if type and type.lower() != "all":
@@ -255,6 +295,10 @@ def search_elements(
         results.append({
             "id": e.id,
             "model_id": e.model_id,
+            "is_reference": bool(e.is_reference),
+            "package_id": e.package_id,
+            "package_code": e.package.code if e.package else None,
+            "package_name": e.package.name if e.package else None,
             "name": e.name,
             "type": e.type,
             "layer": e.layer,
@@ -305,6 +349,10 @@ def get_element(
     return {
         "id": e.id,
         "model_id": e.model_id,
+        "is_reference": bool(e.is_reference),
+        "package_id": e.package_id,
+        "package_code": e.package.code if e.package else None,
+        "package_name": e.package.name if e.package else None,
         "name": e.name,
         "type": e.type,
         "layer": e.layer,
@@ -426,6 +474,11 @@ def update_element(
     el = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
     if not el:
         raise HTTPException(status_code=404, detail="Element not found")
+    if el.is_reference:
+        raise HTTPException(
+            status_code=403,
+            detail="Gli elementi canonici di riferimento forniti da uno standard industriale non possono essere modificati direttamente."
+        )
     require_library_permission(db, current_user, "edit_element", el.model_id)
 
     target_type = payload.type or el.type
@@ -490,6 +543,11 @@ def delete_element(
     el = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
     if not el:
         raise HTTPException(status_code=404, detail="Element not found")
+    if el.is_reference:
+        raise HTTPException(
+            status_code=403,
+            detail="Gli elementi canonici di riferimento forniti da uno standard industriale non possono essere eliminati."
+        )
     require_library_permission(db, current_user, "delete_element", el.model_id)
     db.delete(el)
     db.commit()

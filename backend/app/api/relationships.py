@@ -5,7 +5,7 @@ from pydantic import BaseModel
 import uuid
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateRelationship, ArchimateElement, User
+from app.models.archimate import ArchimateRelationship, ArchimateElement, User, WorkspaceAttributePackage
 from app.api.deps import get_current_user, require_library_permission
 from app.services.metamodel_service import (
     ARCHIMATE_RELATIONSHIP_RULES,
@@ -80,6 +80,22 @@ def get_allowed_relationship_types(
             results.append(rel_meta)
     return results
 
+def get_element_in_library(db: Session, element_id: str, model_id: str) -> Optional[ArchimateElement]:
+    """Helper to find an element accessible in model_id (local or from an active framework package)."""
+    elem = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
+    if not elem:
+        return None
+    if elem.model_id == model_id:
+        return elem
+    if elem.is_reference and elem.package_id:
+        is_active = db.query(WorkspaceAttributePackage).filter(
+            WorkspaceAttributePackage.model_id == model_id,
+            WorkspaceAttributePackage.package_id == elem.package_id
+        ).first()
+        if is_active:
+            return elem
+    return None
+
 @router.get("", response_model=List[Dict[str, Any]])
 def list_relationships(
     model_id: Optional[str] = None,
@@ -91,7 +107,17 @@ def list_relationships(
     """List relationships for a model or element, optionally filtered by relationship type."""
     query = db.query(ArchimateRelationship)
     if model_id:
-        query = query.filter(ArchimateRelationship.model_id == model_id)
+        active_links = db.query(WorkspaceAttributePackage.package_id).filter(
+            WorkspaceAttributePackage.model_id == model_id
+        ).all()
+        active_pkg_ids = [r[0] for r in active_links]
+        if active_pkg_ids:
+            query = query.filter(
+                (ArchimateRelationship.model_id == model_id) |
+                ((ArchimateRelationship.is_reference == True) & (ArchimateRelationship.package_id.in_(active_pkg_ids)))
+            )
+        else:
+            query = query.filter(ArchimateRelationship.model_id == model_id)
     if element_id:
         query = query.filter(
             (ArchimateRelationship.source_id == element_id) | (ArchimateRelationship.target_id == element_id)
@@ -105,6 +131,9 @@ def list_relationships(
         results.append({
             "id": r.id,
             "model_id": r.model_id,
+            "is_reference": bool(r.is_reference),
+            "package_id": r.package_id,
+            "package_code": r.package.code if r.package else None,
             "type": r.type,
             "name": r.name,
             "source_id": r.source_id,
@@ -126,10 +155,13 @@ def create_relationship(
 ):
     """Creates a relationship between two ArchiMate elements after validating ArchiMate constraints."""
     require_library_permission(db, current_user, "create_relationship", model_id)
-    src = db.query(ArchimateElement).filter(ArchimateElement.id == payload.source_id, ArchimateElement.model_id == model_id).first()
-    tgt = db.query(ArchimateElement).filter(ArchimateElement.id == payload.target_id, ArchimateElement.model_id == model_id).first()
+    src = get_element_in_library(db, payload.source_id, model_id)
+    tgt = get_element_in_library(db, payload.target_id, model_id)
     if not src or not tgt:
-        raise HTTPException(status_code=400, detail="Source or target element does not exist in this model workspace.")
+        raise HTTPException(
+            status_code=400,
+            detail="Source or target element does not exist or its framework package is not active in this model workspace."
+        )
 
     # Validate ArchiMate Metamodel constraints
     if not is_rel_type_allowed(src.type, tgt.type, payload.type):
@@ -150,7 +182,9 @@ def create_relationship(
         target_id=payload.target_id,
         type=normalized_type,
         name=payload.name or "",
-        documentation=payload.documentation or ""
+        documentation=payload.documentation or "",
+        is_reference=False,
+        package_id=None
     )
     db.add(rel)
     db.commit()
@@ -179,6 +213,11 @@ def update_relationship(
     rel = db.query(ArchimateRelationship).filter(ArchimateRelationship.id == relationship_id).first()
     if not rel:
         raise HTTPException(status_code=404, detail="Relationship not found")
+    if rel.is_reference:
+        raise HTTPException(
+            status_code=403,
+            detail="Le relazioni canoniche di riferimento di uno standard industriale non possono essere modificate."
+        )
     require_library_permission(db, current_user, "write_architecture", rel.model_id)
 
     if payload.type is not None:
@@ -222,6 +261,11 @@ def delete_relationship(
     rel = db.query(ArchimateRelationship).filter(ArchimateRelationship.id == relationship_id).first()
     if not rel:
         raise HTTPException(status_code=404, detail="Relationship not found")
+    if rel.is_reference:
+        raise HTTPException(
+            status_code=403,
+            detail="Le relazioni canoniche di riferimento di uno standard industriale non possono essere eliminate."
+        )
     require_library_permission(db, current_user, "delete_relationship", rel.model_id)
     db.delete(rel)
     db.commit()
