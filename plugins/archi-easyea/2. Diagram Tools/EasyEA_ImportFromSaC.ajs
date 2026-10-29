@@ -1,0 +1,279 @@
+/**
+ * EasyEA - Import Schema-as-Code (.eac) into Archi (jArchi)
+ * 
+ * Allows the architect to select a '.eac' code file, compiles it into a native
+ * ArchiMate model (.archimate) via EasyEA compiler, and immediately opens it in Archi.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Import Schema-as-Code (.eac) ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var SCHEMAS_CODE_DIR = new File(CONFIG_DIR, "schemas_code");
+    var TEMP_DIR = new File(CONFIG_DIR, "imported_sac");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    try {
+        var config = loadConfig();
+        if (!TEMP_DIR.exists()) {
+            TEMP_DIR.mkdirs();
+        }
+
+        // List available .eac files in schemas_code
+        var availableFiles = [];
+        if (SCHEMAS_CODE_DIR.exists()) {
+            var files = SCHEMAS_CODE_DIR.listFiles();
+            if (files) {
+                for (var i = 0; i < files.length; i++) {
+                    var f = files[i];
+                    if (f.getName().toLowerCase().endsWith(".eac")) {
+                        availableFiles.push(f);
+                    }
+                }
+            }
+        }
+
+        var selectedFile = null;
+
+        if (availableFiles.length > 0) {
+            var fileChoices = [];
+            for (var a = 0; a < availableFiles.length; a++) {
+                fileChoices.push((a + 1) + ". " + availableFiles[a].getName());
+            }
+            fileChoices.push((availableFiles.length + 1) + ". Specify custom absolute file path...");
+
+            var choice = window.promptSelection(
+                "Select a Schema-as-Code (.eac) file to compile and open in Archi:",
+                fileChoices
+            );
+
+            if (!choice) return;
+            choice = ("" + choice).trim();
+
+            var choiceIdx = parseInt(choice.split(".")[0], 10) - 1;
+            if (choiceIdx >= 0 && choiceIdx < availableFiles.length) {
+                selectedFile = availableFiles[choiceIdx];
+            } else {
+                var customPath = window.prompt("Enter absolute path to .eac file:", SCHEMAS_CODE_DIR.getAbsolutePath() + File.separator + "schema.eac");
+                if (customPath && customPath.trim().length > 0) {
+                    selectedFile = new File(customPath.trim());
+                }
+            }
+        } else {
+            var inputPath = window.prompt(
+                "No .eac files found in ~/.easyea/schemas_code/.\n\nEnter absolute path to your .eac file:",
+                SCHEMAS_CODE_DIR.getAbsolutePath() + File.separator + "sample.eac"
+            );
+            if (inputPath && inputPath.trim().length > 0) {
+                selectedFile = new File(inputPath.trim());
+            }
+        }
+
+        if (!selectedFile || !selectedFile.exists()) {
+            window.alert("File not found or selection cancelled:\n" + (selectedFile ? selectedFile.getAbsolutePath() : "No file specified"));
+            return;
+        }
+
+        console.log("Reading Schema-as-Code file: " + selectedFile.getName() + "...");
+        var sc = new Scanner(selectedFile).useDelimiter("\\A");
+        var sacCode = sc.hasNext() ? sc.next() : "";
+        sc.close();
+
+        if (!sacCode || sacCode.trim().length === 0) {
+            window.alert("Selected .eac file is empty.");
+            return;
+        }
+
+        console.log("Compiling SaC code into ArchiMate model via EasyEA API (" + config.server_url + ")...");
+
+        var client = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
+            .build();
+
+        var payload = JSON.stringify({
+            code: sacCode,
+            model_id: config.model_id || ""
+        });
+
+        var req = HttpRequest.newBuilder()
+            .uri(URI.create(config.server_url + "/api/schemas/sac/to-archimate"))
+            .version(HttpClient.Version.HTTP_1_1)
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(payload))
+            .build();
+
+        var resp = client.send(req, HttpResponse.BodyHandlers.ofString());
+
+        if (resp.statusCode() !== 200) {
+            var errMsg = resp.body();
+            try {
+                var errObj = JSON.parse(errMsg);
+                if (errObj.detail) errMsg = errObj.detail;
+            } catch(e) {}
+            window.alert("Error compiling Schema-as-Code:\n" + errMsg);
+            return;
+        }
+
+        var xmlContent = resp.body();
+
+        // Extract schema name and model_id from sac code if present
+        var schemaNameMatch = sacCode.match(/schema\s+["']([^"']+)["']/i);
+        var schemaNameParsed = schemaNameMatch ? schemaNameMatch[1] : baseName;
+        var modelIdMatch = sacCode.match(/model_id:\s*["']([^"']+)["']/i);
+        var sacModelId = modelIdMatch ? modelIdMatch[1] : (config.model_id || "");
+
+        var SCHEMAS_DIR = new File(CONFIG_DIR, "checked_out");
+        var baseName = selectedFile.getName().replace(/\.eac$/i, "");
+        var targetModelFile = new File(TEMP_DIR, baseName + ".archimate");
+        var activeTargetFile = targetModelFile;
+        var isCheckedOut = false;
+        var matchedRepoSchema = null;
+
+        // Try to find matching schema in repository
+        if (config.token && config.server_url && sacModelId) {
+            try {
+                var reqList = HttpRequest.newBuilder()
+                    .uri(URI.create(config.server_url + "/api/schemas/" + encodeURIComponent(sacModelId) + "/list"))
+                    .version(HttpClient.Version.HTTP_1_1)
+                    .header("Authorization", "Bearer " + config.token)
+                    .GET()
+                    .build();
+                var respList = client.send(reqList, HttpResponse.BodyHandlers.ofString());
+                if (respList.statusCode() === 200) {
+                    var sList = JSON.parse(respList.body()) || [];
+                    for (var sIdx = 0; sIdx < sList.length; sIdx++) {
+                        if (sList[sIdx].name.toLowerCase() === schemaNameParsed.toLowerCase()) {
+                            matchedRepoSchema = sList[sIdx];
+                            break;
+                        }
+                    }
+                }
+            } catch(lErr) {}
+        }
+
+        if (matchedRepoSchema) {
+            var promptCheckout = window.promptSelection(
+                "The imported Schema-as-Code matches EasyEA Schema '" + matchedRepoSchema.name + "'.\n\n" +
+                "Do you want to lock and check out this schema on EasyEA repository?",
+                [
+                    "1. Yes - Lock & Check out on EasyEA (enables EasyEA_Checkin directly)",
+                    "2. No - Open as a standalone local model"
+                ]
+            );
+
+            if (promptCheckout && promptCheckout.indexOf("1.") === 0) {
+                try {
+                    var reqChk = HttpRequest.newBuilder()
+                        .uri(URI.create(config.server_url + "/api/schemas/" + matchedRepoSchema.id + "/checkout"))
+                        .version(HttpClient.Version.HTTP_1_1)
+                        .header("Authorization", "Bearer " + config.token)
+                        .POST(HttpRequest.BodyPublishers.noBody())
+                        .build();
+                    var respChk = client.send(reqChk, HttpResponse.BodyHandlers.ofString());
+                    if (respChk.statusCode() === 200) {
+                        if (!SCHEMAS_DIR.exists()) SCHEMAS_DIR.mkdirs();
+                        var cleanName = matchedRepoSchema.name.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+                        var checkedOutFile = new File(SCHEMAS_DIR, matchedRepoSchema.id + "_" + cleanName + ".archimate");
+                        var chkWriter = new FileWriter(checkedOutFile);
+                        chkWriter.write(xmlContent);
+                        chkWriter.close();
+
+                        var metaFile = new File(SCHEMAS_DIR, checkedOutFile.getName() + ".meta.json");
+                        var metaWriter = new FileWriter(metaFile);
+                        metaWriter.write(JSON.stringify({
+                            schema_id: matchedRepoSchema.id,
+                            model_id: sacModelId,
+                            library_name: config.library_name || "",
+                            library_code: config.library_code || "",
+                            schema_name: matchedRepoSchema.name,
+                            version: matchedRepoSchema.current_version,
+                            checked_out_at: new Date().toISOString()
+                        }, null, 2));
+                        metaWriter.close();
+
+                        activeTargetFile = checkedOutFile;
+                        isCheckedOut = true;
+                        console.log("✓ Schema locked and checked out: " + checkedOutFile.getAbsolutePath());
+                    } else {
+                        console.log("Note on locking schema: " + respChk.body());
+                    }
+                } catch(chkEx) {
+                    console.log("Error during auto-checkout: " + chkEx);
+                }
+            }
+        }
+
+        if (!isCheckedOut) {
+            var writer = new FileWriter(targetModelFile);
+            writer.write(xmlContent);
+            writer.close();
+        }
+
+        console.log("Opening compiled model in Archi: " + activeTargetFile.getAbsolutePath() + "...");
+        var loadedModel = IEditorModelManager.INSTANCE.openModel(activeTargetFile);
+
+        try {
+            if (typeof $ !== "undefined" && loadedModel) {
+                if (matchedRepoSchema) {
+                    $(loadedModel).prop("EasyEA_Schema_ID", matchedRepoSchema.id);
+                    $(loadedModel).prop("EasyEA_Model_ID", sacModelId);
+                    $(loadedModel).prop("EasyEA_Library_Name", config.library_name || "");
+                    $(loadedModel).prop("EasyEA_Library_Code", config.library_code || "");
+                    $(loadedModel).prop("EasyEA_Schema_Name", matchedRepoSchema.name);
+                }
+            }
+        } catch(pErr) {}
+
+        var statusMsg = isCheckedOut
+            ? "• Checkout Status: 🔒 LOCKED (ready for Check-in with EasyEA_Checkin.ajs)\n"
+            : "• Checkout Status: Local standalone model\n";
+
+        window.alert(
+            "Schema-as-Code Imported Successfully!\n\n" +
+            "• Source: " + selectedFile.getName() + "\n" +
+            "• Model: " + (loadedModel ? loadedModel.name : schemaNameParsed) + "\n" +
+            statusMsg + "\n" +
+            "The model has been opened in Archi with layers, elements, relationships and layout fully generated."
+        );
+
+    } catch (e) {
+        var errStr = "Error during Import from SaC:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

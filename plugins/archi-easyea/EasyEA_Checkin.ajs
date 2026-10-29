@@ -80,6 +80,29 @@
         return "Schema";
     }
 
+    function getModelProperty(m, key) {
+        if (!m) return null;
+        try {
+            if (typeof $ !== "undefined") {
+                var v = $(m).prop(key);
+                if (v) return ("" + v).trim();
+            }
+        } catch(e) {}
+        try {
+            var raw = getRawModel(m);
+            if (raw && typeof raw.getProperties === "function") {
+                var props = raw.getProperties();
+                for (var i = 0; i < props.size(); i++) {
+                    var p = props.get(i);
+                    if (p && p.getKey && p.getKey() === key) {
+                        return ("" + p.getValue()).trim();
+                    }
+                }
+            }
+        } catch(e2) {}
+        return null;
+    }
+
     try {
         var config = loadConfig();
         if (!config.token) {
@@ -153,14 +176,9 @@
         if (currentActiveModel) {
             var rawActive = getRawModel(currentActiveModel);
             var activeFile = getModelFile(currentActiveModel);
-            var activePropId = null;
-            var activePropModelId = null;
-            try {
-                if (typeof $ !== "undefined") {
-                    activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
-                    activePropModelId = $(currentActiveModel).prop("EasyEA_Model_ID");
-                }
-            } catch(e) {}
+            var activePropId = getModelProperty(currentActiveModel, "EasyEA_Schema_ID");
+            var activePropModelId = getModelProperty(currentActiveModel, "EasyEA_Model_ID");
+            var mName = getModelName(currentActiveModel);
 
             // Validate library if active model has a model_id prop
             if (activePropModelId && activeModelId && activePropModelId !== activeModelId) {
@@ -176,10 +194,21 @@
                 var cs = checkedOutSchemas[m];
                 if ((activePropId && activePropId === cs.schema_id) ||
                     (activeFile && cs.archimate_file.getAbsolutePath() === activeFile.getAbsolutePath()) ||
-                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : ""))) {
+                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : "")) ||
+                    (activeFile && activeFile.getName().indexOf(cs.schema_id) !== -1) ||
+                    (mName && cs.schema_name && mName.trim().toLowerCase() === cs.schema_name.trim().toLowerCase()) ||
+                    (mName && cs.schema_name && (mName.toLowerCase().indexOf(cs.schema_name.toLowerCase()) !== -1 || cs.schema_name.toLowerCase().indexOf(mName.toLowerCase()) !== -1))) {
                     selectedEntry = cs;
                     break;
                 }
+            }
+
+            if (selectedEntry && typeof $ !== "undefined") {
+                try {
+                    $(currentActiveModel).prop("EasyEA_Schema_ID", selectedEntry.schema_id);
+                    $(currentActiveModel).prop("EasyEA_Model_ID", selectedEntry.model_id);
+                    $(currentActiveModel).prop("EasyEA_Schema_Name", selectedEntry.schema_name);
+                } catch(pe) {}
             }
         }
 

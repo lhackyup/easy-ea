@@ -1662,6 +1662,287 @@ def seed_default_attribute_packages(db: Session):
     db.commit()
 
 
+def seed_default_archimate_views(db: Session):
+    """Seed standard out-of-the-box ArchiMate business views (activatable by the Enterprise Architect)."""
+    default_views = [
+        {
+            "id": "pkv-archimate-app-landscape",
+            "view_key": "archimate_app_landscape",
+            "name": "Application Landscape Catalog",
+            "description": "Comprehensive catalog of all application components, services, and interfaces defined in the ArchiMate model.",
+            "category": "ArchiMate Core",
+            "view_type": "table",
+            "icon": "Building2",
+            "sort_order": 1,
+            "target_types": ["ApplicationComponent", "ApplicationService", "ApplicationInterface"],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Component / Service Name", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "documentation", "label": "Documentation", "type": "string", "sortable": False, "filterable": False}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "Application",
+                    "selectedType": "All",
+                    "relationshipFilter": "all",
+                    "documentationFilter": "all",
+                    "sortBy": "name_asc"
+                }
+            }
+        },
+        {
+            "id": "pkv-archimate-process-catalog",
+            "view_key": "archimate_process_catalog",
+            "name": "Business Process & Capability Inventory",
+            "description": "Inventory of enterprise business processes, capabilities, functions, and value streams.",
+            "category": "ArchiMate Core",
+            "view_type": "table",
+            "icon": "Workflow",
+            "sort_order": 2,
+            "target_types": ["BusinessProcess", "Capability", "BusinessFunction", "ValueStream", "BusinessService"],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Process / Capability Name", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "documentation", "label": "Documentation", "type": "string", "sortable": False, "filterable": False}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "All",
+                    "selectedType": "All",
+                    "relationshipFilter": "all",
+                    "documentationFilter": "all",
+                    "sortBy": "name_asc"
+                }
+            }
+        },
+        {
+            "id": "pkv-archimate-infra-landscape",
+            "view_key": "archimate_infra_landscape",
+            "name": "Technology & Infrastructure Landscape",
+            "description": "Physical, cloud, and system software infrastructure nodes and technology services hosting applications.",
+            "category": "ArchiMate Core",
+            "view_type": "table",
+            "icon": "Server",
+            "sort_order": 3,
+            "target_types": ["Node", "Device", "SystemSoftware", "TechnologyService", "Artifact", "CommunicationNetwork"],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Infrastructure Node / Service", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "documentation", "label": "Documentation", "type": "string", "sortable": False, "filterable": False}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "Technology",
+                    "selectedType": "All",
+                    "relationshipFilter": "all",
+                    "documentationFilter": "all",
+                    "sortBy": "name_asc"
+                }
+            }
+        },
+        {
+            "id": "pkv-archimate-data-catalog",
+            "view_key": "archimate_data_catalog",
+            "name": "Information & Data Objects Catalog",
+            "description": "Business and application data structures, information concepts, and digital representations.",
+            "category": "ArchiMate Core",
+            "view_type": "table",
+            "icon": "Package",
+            "sort_order": 4,
+            "target_types": ["DataObject", "BusinessObject", "Representation"],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Data Object Name", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "documentation", "label": "Documentation", "type": "string", "sortable": False, "filterable": False}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "All",
+                    "selectedType": "All",
+                    "relationshipFilter": "all",
+                    "documentationFilter": "all",
+                    "sortBy": "name_asc"
+                }
+            }
+        },
+        {
+            "id": "pkv-archimate-strategy-portfolio",
+            "view_key": "archimate_strategy_portfolio",
+            "name": "Strategy, Goals & Requirements",
+            "description": "Strategic drivers, goals, outcomes, principles, and architectural requirements.",
+            "category": "ArchiMate Core",
+            "view_type": "table",
+            "icon": "Sparkles",
+            "sort_order": 5,
+            "target_types": ["Goal", "Outcome", "Principle", "Requirement", "Constraint", "Driver", "Assessment"],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Element Name", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "documentation", "label": "Documentation", "type": "string", "sortable": False, "filterable": False}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "All",
+                    "selectedType": "All",
+                    "relationshipFilter": "all",
+                    "documentationFilter": "all",
+                    "sortBy": "name_asc"
+                }
+            }
+        },
+        {
+            "id": "pkv-archimate-model-health",
+            "view_key": "archimate_model_health",
+            "name": "Model Health & Hygiene Dashboard",
+            "description": "Architectural metrics, element distribution across layers, and top ArchiMate types in the library.",
+            "category": "Model Governance",
+            "view_type": "kpi_dashboard",
+            "icon": "BarChart3",
+            "sort_order": 6,
+            "target_types": [],
+            "target_stereotypes": [],
+            "config": {
+                "metrics": [
+                    {"id": "total_elements", "label": "Total Elements", "type": "count"},
+                    {"id": "apps_count", "label": "Applications", "type": "count", "where": {"type": ["ApplicationComponent", "ApplicationService"]}},
+                    {"id": "processes_count", "label": "Business Processes", "type": "count", "where": {"type": ["BusinessProcess", "BusinessFunction"]}},
+                    {"id": "infra_nodes_count", "label": "Infrastructure Nodes", "type": "count", "where": {"type": ["Node", "Device", "SystemSoftware"]}}
+                ],
+                "charts": [
+                    {"id": "by_layer", "title": "Elements by ArchiMate Layer", "type": "pie", "group_by": "layer"},
+                    {"id": "by_type", "title": "Top Element Types", "type": "bar", "group_by": "type"}
+                ],
+                "filter_config": {}
+            }
+        },
+        {
+            "id": "pkv-archimate-cross-layer-matrix",
+            "view_key": "archimate_cross_layer_matrix",
+            "name": "Cross-Layer Distribution Matrix",
+            "description": "2D pivot matrix analyzing the distribution of architectural elements across Layers and Types.",
+            "category": "Model Governance",
+            "view_type": "matrix",
+            "icon": "Grid",
+            "sort_order": 7,
+            "target_types": [],
+            "target_stereotypes": [],
+            "config": {
+                "matrix": {
+                    "x_axis": {"field": "layer", "label": "ArchiMate Layer"},
+                    "y_axis": {"field": "type", "label": "Element Type"}
+                },
+                "filter_config": {}
+            }
+        },
+        {
+            "id": "pkv-archimate-orphan-audit",
+            "view_key": "archimate_orphan_audit",
+            "name": "Orphan Elements Audit",
+            "description": "Quality audit listing all elements in the model that have no relationships (inbound or outbound).",
+            "category": "Model Governance",
+            "view_type": "table",
+            "icon": "ShieldAlert",
+            "sort_order": 8,
+            "target_types": [],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Element Name", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "documentation", "label": "Documentation", "type": "string", "sortable": False, "filterable": False}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "All",
+                    "selectedType": "All",
+                    "relationshipFilter": "orphan",
+                    "documentationFilter": "all",
+                    "sortBy": "name_asc"
+                }
+            }
+        },
+        {
+            "id": "pkv-archimate-undocumented-audit",
+            "view_key": "archimate_undocumented_audit",
+            "name": "Undocumented Elements Checklist",
+            "description": "Checklist of architectural elements missing documentation descriptions.",
+            "category": "Model Governance",
+            "view_type": "table",
+            "icon": "Table",
+            "sort_order": 9,
+            "target_types": [],
+            "target_stereotypes": [],
+            "config": {
+                "columns": [
+                    {"field": "name", "label": "Element Name", "type": "string", "sortable": True, "filterable": True},
+                    {"field": "type", "label": "ArchiMate Type", "type": "badge", "sortable": True, "filterable": True},
+                    {"field": "layer", "label": "Layer", "type": "badge", "sortable": True, "filterable": True}
+                ],
+                "default_sort": {"field": "name", "direction": "asc"},
+                "filter_config": {
+                    "selectedLayer": "All",
+                    "selectedType": "All",
+                    "relationshipFilter": "all",
+                    "documentationFilter": "no_doc",
+                    "sortBy": "name_asc"
+                }
+            }
+        }
+    ]
+
+    for v_data in default_views:
+        existing_v = db.query(PackageView).filter(PackageView.id == v_data["id"]).first()
+        if not existing_v:
+            v = PackageView(
+                id=v_data["id"],
+                package_id=None,
+                model_id=None,
+                view_key=v_data["view_key"],
+                name=v_data["name"],
+                description=v_data["description"],
+                category=v_data["category"],
+                view_type=v_data["view_type"],
+                icon=v_data["icon"],
+                sort_order=v_data.get("sort_order", 0),
+                is_global=True,
+                is_active=False,  # Activatable by the EA
+                target_stereotypes=v_data.get("target_stereotypes", []),
+                target_types=v_data.get("target_types", []),
+                config=v_data["config"]
+            )
+            db.add(v)
+        else:
+            existing_v.name = v_data["name"]
+            existing_v.description = v_data["description"]
+            existing_v.category = v_data["category"]
+            existing_v.view_type = v_data["view_type"]
+            existing_v.icon = v_data["icon"]
+            existing_v.sort_order = v_data.get("sort_order", 0)
+            existing_v.target_stereotypes = v_data.get("target_stereotypes", [])
+            existing_v.target_types = v_data.get("target_types", [])
+            existing_v.config = v_data["config"]
+            existing_v.is_global = True
+            # Preserves existing_v.is_active
+
+    db.commit()
+
+
 def seed_default_custom_attributes(db: Session):
     """Seed standard attribute packages, BIAN and IT4IT frameworks, default stereotypes, and clean up non-package attributes."""
     # First seed attribute packages
@@ -1674,6 +1955,8 @@ def seed_default_custom_attributes(db: Session):
     seed_it4it_framework(db)
     # Seed default stereotypes
     seed_default_stereotypes(db)
+    # Seed default ArchiMate core business views
+    seed_default_archimate_views(db)
 
     # Purge any custom attribute definitions not matching any registered package code
     pkg_codes = [p.code for p in db.query(AttributePackage).all()]

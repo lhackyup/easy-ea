@@ -95,11 +95,36 @@ def fetch_model_info(server_url, token, model_id):
 
 
 def download_schema_content(server_url, token, schema_id):
-    """Downloads schema file content without re-locking (since web already checked it out)."""
+    """Downloads schema file content without re-locking (fallback)."""
     url = f"{server_url.rstrip('/')}/api/schemas/{schema_id}/download"
     req = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
     with urllib.request.urlopen(req) as resp:
         return resp.read()
+
+
+def checkout_schema_content(server_url, token, schema_id):
+    """
+    Performs official lock & check-out on EasyEA server and returns the standalone XML content
+    along with updated schema metadata. Falls back to /download if checkout fails.
+    """
+    url = f"{server_url.rstrip('/')}/api/schemas/{schema_id}/checkout"
+    req = urllib.request.Request(url, data=b"", headers={
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    })
+    try:
+        with urllib.request.urlopen(req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            xml_str = data.get("xml_content", "")
+            return xml_str.encode("utf-8"), data.get("schema", {})
+    except urllib.error.HTTPError as he:
+        log(f"Checkout API returned HTTP {he.code}: {he.read().decode('utf-8', errors='ignore')}")
+        fallback_content = download_schema_content(server_url, token, schema_id)
+        return fallback_content, {}
+    except Exception as e:
+        log(f"Checkout exception: {e}")
+        fallback_content = download_schema_content(server_url, token, schema_id)
+        return fallback_content, {}
 
 
 def sync_drawio_plugin_config(server_url, token, username, full_name, active_schema):
@@ -171,7 +196,7 @@ def handle_archi(server_url, token, schema_id, model_id):
         "library_code": library_code
     })
 
-    # 3. Download content into ~/.easyea/checked_out/
+    # 3. Perform official checkout and download content into ~/.easyea/checked_out/
     checked_out_dir = os.path.expanduser("~/.easyea/checked_out")
     os.makedirs(checked_out_dir, exist_ok=True)
 
@@ -179,7 +204,11 @@ def handle_archi(server_url, token, schema_id, model_id):
     file_name = f"{schema_id}_{clean_name}.archimate"
     file_path = os.path.join(checked_out_dir, file_name)
 
-    content = download_schema_content(server_url, token, schema_id)
+    content, updated_schema = checkout_schema_content(server_url, token, schema_id)
+    if updated_schema:
+        schema_data.update(updated_schema)
+        version = schema_data.get("current_version", version)
+
     with open(file_path, "wb") as f:
         f.write(content)
     log(f"Saved .archimate file to {file_path}")
@@ -210,7 +239,7 @@ def handle_archi(server_url, token, schema_id, model_id):
         start_new_session=True,
         close_fds=True
     )
-    notify("EasyEA - Archi", f"Modello '{schema_name}' aperto in Archi!")
+    notify("EasyEA - Archi", f"Modello '{schema_name}' bloccato (check-out) e aperto in Archi!")
 
 
 def handle_drawio(server_url, token, schema_id, model_id):

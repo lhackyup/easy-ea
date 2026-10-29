@@ -52,11 +52,6 @@ export const AdminHub: React.FC<AdminHubProps> = ({
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // APM Config states
-  const [investThreshold, setInvestThreshold] = useState(3);
-  const [savingsAlertThreshold, setSavingsAlertThreshold] = useState(50000);
-  const [configSaved, setConfigSaved] = useState(false);
-
   // Scope for Packages
   const [packagesScope, setPackagesScope] = useState<string>(selectedModelId || 'global');
 
@@ -408,71 +403,6 @@ export const AdminHub: React.FC<AdminHubProps> = ({
             onRefreshModels();
           }}
         />
-      )}
-
-      {/* SubTab 2: APM & TIME Config */}
-      {subTab === 'apm_config' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6 max-w-3xl">
-          <div className="border-b border-slate-100 pb-3">
-            <h3 className="text-base font-bold text-slate-900">{t.admin.apmConfigTitle}</h3>
-            <p className="text-xs text-slate-500">{t.admin.apmConfigSubtitle}</p>
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {t.admin.investThresholdLabel}
-              </label>
-              <input
-                type="range"
-                min="2"
-                max="4"
-                step="1"
-                value={investThreshold}
-                onChange={(e) => setInvestThreshold(parseInt(e.target.value))}
-                className="w-full accent-rose-600"
-              />
-              <div className="flex justify-between text-[11px] text-slate-500 font-bold mt-1">
-                <span>{t.admin.thresholdScaleMin}</span>
-                <span className="text-rose-700 font-bold">{interpolate(t.admin.thresholdScaleCurrent, { val: investThreshold })}</span>
-                <span>{t.admin.thresholdScaleMax}</span>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-slate-700 mb-1">
-                {t.admin.savingsThresholdLabel}
-              </label>
-              <input
-                type="number"
-                value={savingsAlertThreshold}
-                onChange={(e) => setSavingsAlertThreshold(parseFloat(e.target.value) || 0)}
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-rose-500 focus:bg-white"
-              />
-              <p className="text-[11px] text-slate-500 mt-1">
-                {t.admin.savingsThresholdHint}
-              </p>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
-              {configSaved ? (
-                <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
-                  <CheckCircle2 className="w-4 h-4" /> {t.admin.paramsSavedSuccess}
-                </span>
-              ) : <span />}
-              <button
-                type="button"
-                onClick={() => {
-                  setConfigSaved(true);
-                  setTimeout(() => setConfigSaved(false), 3000);
-                }}
-                className="px-5 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition"
-              >
-                {t.admin.saveParamsBtn}
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* SubTab 3: Roles & Permissions */}

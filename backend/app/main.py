@@ -160,8 +160,50 @@ if engine.dialect.name == "sqlite":
                     conn.execute(text("CREATE INDEX IF NOT EXISTS ix_archimate_relationships_type ON archimate_relationships (type);"))
                     conn.commit()
                     break
+
+            res_pv = conn.execute(text("PRAGMA table_info(package_views);")).fetchall()
+            for col in res_pv:
+                if col[1] == "package_id" and col[3] == 1:
+                    conn.execute(text("PRAGMA foreign_keys=OFF;"))
+                    conn.execute(text("""
+                        CREATE TABLE package_views_dg_tmp (
+                            id VARCHAR NOT NULL PRIMARY KEY,
+                            package_id VARCHAR,
+                            model_id VARCHAR,
+                            view_key VARCHAR(64) NOT NULL,
+                            name VARCHAR NOT NULL,
+                            description TEXT,
+                            category VARCHAR(64),
+                            view_type VARCHAR(32) NOT NULL,
+                            icon VARCHAR(32),
+                            target_stereotypes JSON,
+                            target_types JSON DEFAULT '[]',
+                            config JSON NOT NULL,
+                            sort_order INTEGER DEFAULT 0,
+                            is_global BOOLEAN DEFAULT FALSE,
+                            is_active BOOLEAN DEFAULT TRUE,
+                            author VARCHAR,
+                            created_at DATETIME,
+                            updated_at DATETIME,
+                            FOREIGN KEY(package_id) REFERENCES attribute_packages (id) ON DELETE CASCADE,
+                            FOREIGN KEY(model_id) REFERENCES model_workspaces (id) ON DELETE CASCADE
+                        );
+                    """))
+                    conn.execute(text("""
+                        INSERT INTO package_views_dg_tmp
+                        SELECT id, package_id, model_id, view_key, name, description, category, view_type, icon, target_stereotypes, target_types, config, sort_order, is_global, is_active, author, created_at, updated_at
+                        FROM package_views;
+                    """))
+                    conn.execute(text("DROP TABLE package_views;"))
+                    conn.execute(text("ALTER TABLE package_views_dg_tmp RENAME TO package_views;"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_package_views_id ON package_views (id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_package_views_package_id ON package_views (package_id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_package_views_model_id ON package_views (model_id);"))
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_package_views_view_key ON package_views (view_key);"))
+                    conn.commit()
+                    break
         except Exception as exc:
-            print(f"Migration note (nullable model_id): {exc}")
+            print(f"Migration note (nullable model_id/package_id): {exc}")
 
 
 # Auto-seed sample model, backfill codes and default custom attributes if needed

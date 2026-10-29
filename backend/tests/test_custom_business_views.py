@@ -287,3 +287,92 @@ def test_custom_business_view_filter_config_preservation():
     # Cleanup
     client.delete(f"/api/business/package-views/custom/{view_id}")
     db.close()
+
+
+def test_default_archimate_views_seeding_and_execution():
+    db = TestingSessionLocal()
+    model = db.query(ModelWorkspace).first()
+    assert model is not None
+    model_id = model.id
+
+    # 1. Verify default views seeded
+    from app.services.metamodel_service import seed_default_archimate_views
+    seed_default_archimate_views(db)
+
+    list_resp = client.get(f"/api/business/package-views/custom?model_id={model_id}")
+    assert list_resp.status_code == 200
+    views = list_resp.json().get("views", [])
+
+    archimate_keys = {
+        "archimate_app_landscape",
+        "archimate_process_catalog",
+        "archimate_infra_landscape",
+        "archimate_data_catalog",
+        "archimate_strategy_portfolio",
+        "archimate_model_health",
+        "archimate_cross_layer_matrix",
+        "archimate_orphan_audit",
+        "archimate_undocumented_audit"
+    }
+
+    found_keys = {v["view_key"] for v in views}
+    assert archimate_keys.issubset(found_keys), f"Missing keys: {archimate_keys - found_keys}"
+
+    # Verify they are inactive (draft) initially and global
+    for v in views:
+        if v["view_key"] in archimate_keys:
+            assert v["is_global"] is True
+            assert v["is_active"] is False
+
+    # 2. Activate Application Landscape Catalog
+    app_v = next(v for v in views if v["view_key"] == "archimate_app_landscape")
+    status_resp = client.patch(f"/api/business/package-views/custom/{app_v['id']}/status", json={"is_active": True})
+    assert status_resp.status_code == 200
+    assert status_resp.json()["is_active"] is True
+
+    # 3. Verify it is now visible in Business hub
+    hub_resp = client.get(f"/api/business/package-views?model_id={model_id}")
+    assert hub_resp.status_code == 200
+    pkgs = hub_resp.json().get("packages", [])
+    biz_views_pkg = next((p for p in pkgs if p["id"] == "custom-business-views"), None)
+    assert biz_views_pkg is not None
+    assert any(v["id"] == app_v["id"] for v in biz_views_pkg["views"])
+
+    # 4. Execute Application Landscape Catalog
+    exec_app = client.post(f"/api/business/package-views/{app_v['id']}/execute?model_id={model_id}", json={})
+    assert exec_app.status_code == 200
+    data_app = exec_app.json()
+    assert data_app["view_type"] == "table"
+    assert data_app["total"] > 0
+    for r in data_app["rows"]:
+        assert r["type"] in ["ApplicationComponent", "ApplicationService", "ApplicationInterface"]
+
+    # 5. Execute Model Health KPI Dashboard
+    health_v = next(v for v in views if v["view_key"] == "archimate_model_health")
+    exec_health = client.post(f"/api/business/package-views/{health_v['id']}/execute?model_id={model_id}", json={})
+    assert exec_health.status_code == 200
+    data_health = exec_health.json()
+    assert data_health["view_type"] == "kpi_dashboard"
+    assert "metrics" in data_health
+    assert "charts" in data_health
+    assert any(m["id"] == "total_elements" for m in data_health["metrics"])
+
+    # 6. Execute Cross-Layer Matrix
+    matrix_v = next(v for v in views if v["view_key"] == "archimate_cross_layer_matrix")
+    exec_mat = client.post(f"/api/business/package-views/{matrix_v['id']}/execute?model_id={model_id}", json={})
+    assert exec_mat.status_code == 200
+    data_mat = exec_mat.json()
+    assert data_mat["view_type"] == "matrix"
+    assert "matrix_summary" in data_mat
+    assert "grid" in data_mat["matrix_summary"]
+
+    # 7. Execute Orphan Audit
+    orphan_v = next(v for v in views if v["view_key"] == "archimate_orphan_audit")
+    exec_orphan = client.post(f"/api/business/package-views/{orphan_v['id']}/execute?model_id={model_id}", json={})
+    assert exec_orphan.status_code == 200
+    data_orphan = exec_orphan.json()
+    assert data_orphan["view_type"] == "table"
+
+    # Reset status back to False
+    client.patch(f"/api/business/package-views/custom/{app_v['id']}/status", json={"is_active": False})
+    db.close()

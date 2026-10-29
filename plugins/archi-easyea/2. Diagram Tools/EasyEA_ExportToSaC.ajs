@@ -1,0 +1,283 @@
+/**
+ * EasyEA - Export Diagram to Schema-as-Code (.eac) (jArchi)
+ * 
+ * Exports the active ArchiMate diagram view or model into clean, readable
+ * EasyEA Schema-as-Code (SaC) DSL, including APM attributes, layers and layout.
+ */
+
+(function() {
+    if (typeof console !== "undefined") {
+        console.show();
+        console.clear();
+        console.log("== EasyEA Export to Schema-as-Code (.eac) ==");
+    }
+
+    var System = Java.type("java.lang.System");
+    var File = Java.type("java.io.File");
+    var FileWriter = Java.type("java.io.FileWriter");
+    var Scanner = Java.type("java.util.Scanner");
+    var URI = Java.type("java.net.URI");
+    var HttpClient = Java.type("java.net.http.HttpClient");
+    var HttpRequest = Java.type("java.net.http.HttpRequest");
+    var HttpResponse = Java.type("java.net.http.HttpResponse");
+
+    var IEditorModelManager = Java.type("com.archimatetool.editor.model.IEditorModelManager");
+
+    var CONFIG_DIR = new File(System.getProperty("user.home") + File.separator + ".easyea");
+    var CONFIG_FILE = new File(CONFIG_DIR, "config.json");
+    var EXPORT_DIR = new File(CONFIG_DIR, "schemas_code");
+
+    function loadConfig() {
+        var config = { server_url: "http://localhost:8000", token: "", username: "", model_id: "", library_id: "", library_name: "", library_code: "" };
+        if (CONFIG_FILE.exists()) {
+            try {
+                var scanner = new Scanner(CONFIG_FILE).useDelimiter("\\A");
+                var content = scanner.hasNext() ? scanner.next() : "{}";
+                scanner.close();
+                var parsed = JSON.parse(content);
+                if (parsed.server_url) config.server_url = parsed.server_url;
+                if (parsed.token) config.token = parsed.token;
+                if (parsed.username) config.username = parsed.username;
+                if (parsed.model_id) config.model_id = parsed.model_id;
+                if (parsed.library_id) config.library_id = parsed.library_id;
+                if (parsed.library_name) config.library_name = parsed.library_name;
+                if (parsed.library_code) config.library_code = parsed.library_code;
+            } catch (e) {}
+        }
+        return config;
+    }
+
+    function sanitizeAlias(name, usedMap) {
+        if (!name) name = "element";
+        var clean = ("" + name).replace(/[^a-zA-Z0-9_]/g, "_").replace(/^([0-9])/, "elem_$1");
+        if (!clean) clean = "elem";
+        var base = clean;
+        var counter = 1;
+        while (usedMap[clean.toLowerCase()]) {
+            clean = base + "_" + counter;
+            counter++;
+        }
+        usedMap[clean.toLowerCase()] = true;
+        return clean;
+    }
+
+    function getLayerForType(t) {
+        if (!t) return "application";
+        var clean = ("" + t).replace(/^archimate:/i, "").toLowerCase();
+        if (clean.indexOf("actor") !== -1 || clean.indexOf("role") !== -1 || clean.indexOf("process") !== -1 ||
+            clean.indexOf("function") !== -1 || clean.indexOf("event") !== -1 || clean.indexOf("business") !== -1) {
+            return "business";
+        }
+        if (clean.indexOf("node") !== -1 || clean.indexOf("device") !== -1 || clean.indexOf("system") !== -1 ||
+            clean.indexOf("network") !== -1 || clean.indexOf("technology") !== -1) {
+            return "technology";
+        }
+        if (clean.indexOf("goal") !== -1 || clean.indexOf("driver") !== -1 || clean.indexOf("requirement") !== -1 ||
+            clean.indexOf("principle") !== -1 || clean.indexOf("stakeholder") !== -1 || clean.indexOf("capability") !== -1) {
+            return "strategy";
+        }
+        if (clean.indexOf("work-package") !== -1 || clean.indexOf("deliverable") !== -1 || clean.indexOf("plateau") !== -1) {
+            return "implementation";
+        }
+        return "application";
+    }
+
+    function getKeywordForType(t) {
+        var clean = ("" + t).replace(/^archimate:/i, "").replace(/relationship/i, "").toLowerCase();
+        if (clean === "application-component" || clean === "applicationcomponent") return "component";
+        if (clean === "application-service" || clean === "applicationservice" || clean === "business-service") return "service";
+        if (clean === "data-object" || clean === "dataobject") return "data";
+        if (clean === "business-actor" || clean === "businessactor") return "actor";
+        if (clean === "business-role" || clean === "businessrole") return "role";
+        if (clean === "business-process" || clean === "businessprocess") return "process";
+        if (clean === "business-event" || clean === "businessevent") return "event";
+        if (clean === "system-software" || clean === "systemsoftware") return "system_software";
+        return clean.replace(/-/g, "_");
+    }
+
+    try {
+        if (typeof model === "undefined" || !model) {
+            window.alert("Please open an ArchiMate model in Archi first.");
+            return;
+        }
+
+        var activeView = null;
+        if (typeof selection !== "undefined" && selection && selection.view) {
+            activeView = selection.view;
+        }
+        if (!activeView) {
+            $(model).find("archimate-diagram-model").each(function(v) {
+                if (!activeView) activeView = v;
+            });
+        }
+
+        var schemaName = activeView ? activeView.name : model.name;
+        var config = loadConfig();
+
+        if (!EXPORT_DIR.exists()) {
+            EXPORT_DIR.mkdirs();
+        }
+
+        console.log("Exporting schema '" + schemaName + "' to Schema-as-Code (.eac)...");
+
+        // Collect elements and layout from active view or model
+        var elemMap = {}; // id -> { concept, visual, alias }
+        var usedAliases = {};
+        var layerBuckets = {
+            strategy: [],
+            business: [],
+            application: [],
+            technology: [],
+            implementation: [],
+            other: []
+        };
+
+        if (activeView) {
+            $(activeView).children().each(function(v) {
+                if (v && v.concept && typeof v.concept.type !== "undefined" && v.concept.type.indexOf("relationship") === -1) {
+                    var cid = v.concept.id;
+                    if (!elemMap[cid]) {
+                        var alias = sanitizeAlias(v.concept.name, usedAliases);
+                        var item = {
+                            id: cid,
+                            concept: v.concept,
+                            visual: v,
+                            alias: alias,
+                            name: v.concept.name,
+                            type: v.concept.type
+                        };
+                        elemMap[cid] = item;
+                        var lay = getLayerForType(v.concept.type);
+                        if (!layerBuckets[lay]) layerBuckets[lay] = [];
+                        layerBuckets[lay].push(item);
+                    }
+                }
+            });
+        } else {
+            $(model).find("element").each(function(e) {
+                var cid = e.id;
+                var alias = sanitizeAlias(e.name, usedAliases);
+                var item = {
+                    id: cid,
+                    concept: e,
+                    visual: null,
+                    alias: alias,
+                    name: e.name,
+                    type: e.type
+                };
+                elemMap[cid] = item;
+                var lay = getLayerForType(e.type);
+                if (!layerBuckets[lay]) layerBuckets[lay] = [];
+                layerBuckets[lay].push(item);
+            });
+        }
+
+        // Build Code
+        var lines = [];
+        lines.push('schema "' + schemaName + '" {');
+        if (config.model_id) lines.push('    model_id: "' + config.model_id + '"');
+        lines.push('    version: "1.0"');
+        lines.push('');
+
+        // Layers
+        var layerKeys = ["strategy", "business", "application", "technology", "implementation", "other"];
+        for (var lk = 0; lk < layerKeys.length; lk++) {
+            var lName = layerKeys[lk];
+            var items = layerBuckets[lName];
+            if (!items || items.length === 0) continue;
+
+            lines.push('    ' + lName + ' {');
+            for (var it = 0; it < items.length; it++) {
+                var elObj = items[it];
+                var kw = getKeywordForType(elObj.type);
+                var pList = [];
+
+                var repoId = $(elObj.concept).prop("EasyEA_Element_ID");
+                if (repoId) pList.push('id: "' + repoId + '"');
+
+                // Read props
+                var apmKeys = ["TIME_Quadrant", "Lifecycle_Status", "Business_Criticality", "Hosting_Type", "Data_Classification", "SLA_Level", "Business_Owner", "Technical_Owner", "Annual_Cost_EUR"];
+                for (var pk = 0; pk < apmKeys.length; pk++) {
+                    var val = $(elObj.concept).prop(apmKeys[pk]);
+                    if (val) pList.push(apmKeys[pk] + ': "' + ("" + val).replace(/"/g, '\\"') + '"');
+                }
+
+                var pStr = pList.length > 0 ? ' [' + pList.join(', ') + ']' : '';
+                lines.push('        ' + kw + ' ' + elObj.alias + ' "' + elObj.name + '"' + pStr);
+            }
+            lines.push('    }');
+            lines.push('');
+        }
+
+        // Relationships
+        var relLines = [];
+        var processedRels = {};
+
+        $(model).find("relationship").each(function(r) {
+            if (r.source && r.target && elemMap[r.source.id] && elemMap[r.target.id]) {
+                var rKey = r.source.id + "->" + r.type + "->" + r.target.id;
+                if (!processedRels[rKey]) {
+                    processedRels[rKey] = true;
+                    var sAlias = elemMap[r.source.id].alias;
+                    var tAlias = elemMap[r.target.id].alias;
+                    var rKw = getKeywordForType(r.type);
+                    var rLabel = r.name ? ' "' + r.name + '"' : '';
+                    relLines.push('        ' + sAlias + ' -> ' + tAlias + ' : ' + rKw + rLabel);
+                }
+            }
+        });
+
+        if (relLines.length > 0) {
+            lines.push('    relationships {');
+            for (var rl = 0; rl < relLines.length; rl++) {
+                lines.push(relLines[rl]);
+            }
+            lines.push('    }');
+            lines.push('');
+        }
+
+        // Layout Block
+        var layoutLines = [];
+        for (var eid in elemMap) {
+            var item = elemMap[eid];
+            if (item.visual && item.visual.bounds) {
+                var b = item.visual.bounds;
+                layoutLines.push('        ' + item.alias + ': @pos(' + b.x + ', ' + b.y + ', ' + b.width + ', ' + b.height + ')');
+            }
+        }
+
+        if (layoutLines.length > 0) {
+            lines.push('    layout {');
+            for (var ll = 0; ll < layoutLines.length; ll++) {
+                lines.push(layoutLines[ll]);
+            }
+            lines.push('    }');
+            lines.push('');
+        }
+
+        lines.push('}');
+        var fullSacCode = lines.join('\n');
+
+        // Save to disk
+        var safeFileName = ("" + schemaName).replace(/[^a-zA-Z0-9_-]/g, "_") + ".eac";
+        var outputFile = new File(EXPORT_DIR, safeFileName);
+        var writer = new FileWriter(outputFile);
+        writer.write(fullSacCode);
+        writer.close();
+
+        console.log("✓ Exported successfully to: " + outputFile.getAbsolutePath());
+        window.alert(
+            "Schema-as-Code Exported Successfully!\n\n" +
+            "• File: " + safeFileName + "\n" +
+            "• Path: " + outputFile.getAbsolutePath() + "\n" +
+            "• Elements: " + Object.keys(elemMap).length + "\n" +
+            "• Relationships: " + relLines.length + "\n\n" +
+            "You can edit this .eac file in any text editor, commit it to Git, or import it back into EasyEA."
+        );
+
+    } catch (e) {
+        var errStr = "Error during Export to SaC:\n" + e;
+        console.error(errStr);
+        window.alert(errStr);
+    }
+})();

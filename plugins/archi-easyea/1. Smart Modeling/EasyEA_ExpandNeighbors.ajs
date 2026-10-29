@@ -125,13 +125,45 @@
             return;
         }
 
-        var activeCheckedOut = checkedOutSchemas[0];
-        var targetModelId = activeCheckedOut.model_id || activeModelId || "sample-easybank-ea";
-
-        if (!model) {
+        var currentActiveModel = (typeof model !== "undefined" && model) ? model : null;
+        if (!currentActiveModel) {
             window.alert("No active Archi model open.");
             return;
         }
+
+        var activeCheckedOut = null;
+        var activeFile = getModelFile(currentActiveModel);
+        var activePropId = null;
+        try {
+            if (typeof $ !== "undefined") activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+        } catch(e) {}
+        var mName = getModelName(currentActiveModel);
+
+        for (var m = 0; m < checkedOutSchemas.length; m++) {
+            var cs = checkedOutSchemas[m];
+            if ((activePropId && activePropId === cs.schema_id) ||
+                (activeFile && cs.archimate_file.getAbsolutePath() === activeFile.getAbsolutePath()) ||
+                (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : "")) ||
+                (activeFile && activeFile.getName().indexOf(cs.schema_id) !== -1) ||
+                (mName && cs.schema_name && mName.trim().toLowerCase() === cs.schema_name.trim().toLowerCase()) ||
+                (mName && cs.schema_name && (mName.toLowerCase().indexOf(cs.schema_name.toLowerCase()) !== -1 || cs.schema_name.toLowerCase().indexOf(mName.toLowerCase()) !== -1))) {
+                activeCheckedOut = cs;
+                break;
+            }
+        }
+        if (!activeCheckedOut && checkedOutSchemas.length > 0) {
+            activeCheckedOut = checkedOutSchemas[0];
+        }
+
+        if (activeCheckedOut && typeof $ !== "undefined") {
+            try {
+                $(currentActiveModel).prop("EasyEA_Schema_ID", activeCheckedOut.schema_id);
+                $(currentActiveModel).prop("EasyEA_Model_ID", activeCheckedOut.model_id);
+                $(currentActiveModel).prop("EasyEA_Schema_Name", activeCheckedOut.schema_name);
+            } catch(pErr) {}
+        }
+
+        var targetModelId = (activeCheckedOut ? activeCheckedOut.model_id : null) || activeModelId || "sample-easybank-ea";
 
         // Locate diagram view
         var diagramViewsCollection = $(model).find("archimate-diagram-model");

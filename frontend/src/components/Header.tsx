@@ -510,19 +510,6 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
-                onClick={() => onSelectAdminTab('apm_config')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
-                  adminTab === 'apm_config'
-                    ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-rose-700 hover:bg-rose-50/60'
-                }`}
-              >
-                <Sliders className="w-3.5 h-3.5" />
-                <span>{t.subtabs.apmTimeParams}</span>
-              </button>
-
-
-              <button
                 onClick={() => onSelectAdminTab('roles')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
                   adminTab === 'roles'

@@ -7,6 +7,7 @@ import { SchemaPreviewModal } from './SchemaPreviewModal';
 import { CheckinDiffModal } from './CheckinDiffModal';
 import { SchemaVersionHistoryModal } from './SchemaVersionHistoryModal';
 import { CreateSchemaModal } from './CreateSchemaModal';
+import { SchemaAsCodeModal } from './SchemaAsCodeModal';
 import { ArchiPluginModal } from './ArchiPluginModal';
 import { DrawioPaletteModal } from './DrawioPaletteModal';
 import { CamundaPluginModal } from './CamundaPluginModal';
@@ -15,6 +16,7 @@ import {
   FolderPlus,
   FolderOpen,
   FileCode,
+  FileCode2,
   Lock,
   Unlock,
   Download,
@@ -64,6 +66,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   const [previewSchema, setPreviewSchema] = useState<ArchiSchema | null>(null);
   const [checkinSchema, setCheckinSchema] = useState<ArchiSchema | null>(null);
   const [historySchema, setHistorySchema] = useState<ArchiSchema | null>(null);
+  const [sacModalSchema, setSacModalSchema] = useState<ArchiSchema | null>(null);
+  const [isNewSacOpen, setIsNewSacOpen] = useState(false);
 
   // Folder Operations State
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
@@ -664,6 +668,17 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <span>Plugin Camunda</span>
             </button>
 
+            {/* Schema as Code Button */}
+            <button
+              type="button"
+              onClick={() => setIsNewSacOpen(true)}
+              title="Crea uno schema scrivendo codice con Schema-as-Code (.eac)"
+              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-indigo-300 border border-slate-700 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
+            >
+              <FileCode2 className="w-4 h-4 text-indigo-400" />
+              <span>Schema as Code</span>
+            </button>
+
             {/* New Schema Button */}
             <button
               type="button"
@@ -818,6 +833,15 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                           <span>Anteprima</span>
                         </button>
 
+                        <button
+                          type="button"
+                          onClick={() => setSacModalSchema(schema)}
+                          title="Visualizza e modifica sorgente Schema-as-Code (.eac)"
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
+                        >
+                          <FileCode2 className="w-4 h-4" />
+                        </button>
+
                         <a
                           href={api.downloadSchemaXmlUrl(schema.id)}
                           download={`${schema.name}.${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
@@ -947,6 +971,30 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             setSchemas((prev) => prev.map((s) => (s.id === updatedSchema.id ? updatedSchema : s)));
             setHistorySchema(null);
             showToast(`Ripristino completato con successo (${updatedSchema.current_version}).`);
+          }}
+        />
+      )}
+      {(sacModalSchema || isNewSacOpen) && (
+        <SchemaAsCodeModal
+          schema={sacModalSchema}
+          activeModelId={modelId}
+          folderId={selectedFolderId && selectedFolderId !== '__root__' ? selectedFolderId : undefined}
+          onClose={() => {
+            setSacModalSchema(null);
+            setIsNewSacOpen(false);
+          }}
+          onSaveSuccess={(updatedSchema) => {
+            setSchemas((prev) => {
+              const exists = prev.some((s) => s.id === updatedSchema.id);
+              if (exists) {
+                return prev.map((s) => (s.id === updatedSchema.id ? updatedSchema : s));
+              } else {
+                return [updatedSchema, ...prev];
+              }
+            });
+            setSacModalSchema(null);
+            setIsNewSacOpen(false);
+            showToast(`Schema "${updatedSchema.name}" salvato da Schema-as-Code.`);
           }}
         />
       )}

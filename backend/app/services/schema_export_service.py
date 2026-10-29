@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 from app.models.archimate import (
     ArchiSchema,
     ArchimateElement,
-    ArchimateRelationship
+    ArchimateRelationship,
+    ModelWorkspace
 )
 from app.parsers.archi_parser import LAYER_MAPPING
 
@@ -19,13 +20,76 @@ def _clean_str(val: Any) -> str:
     return str(val)
 
 
+def _inject_easyea_root_properties(xml_str: str, schema: ArchiSchema, db: Session) -> str:
+    """Ensures standard EasyEA tracking properties exist on the root <archimate:model> tag without namespace prefix corruption."""
+    try:
+        from defusedxml.minidom import parseString as safe_minidom_parse_string
+
+        dom = safe_minidom_parse_string(
+            xml_str.strip().encode("utf-8"),
+            forbid_dtd=True,
+            forbid_entities=True,
+            forbid_external=True
+        )
+        root = dom.documentElement
+        if root is None:
+            return xml_str
+
+        # Ensure standard namespaces are explicitly preserved
+        if not root.getAttribute("xmlns:archimate"):
+            root.setAttribute("xmlns:archimate", "http://www.archimatetool.com/archimate")
+        if not root.getAttribute("xmlns:xsi"):
+            root.setAttribute("xmlns:xsi", "http://www.w3.org/2001/XMLSchema-instance")
+
+        ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first() if db and schema.model_id else None
+        lib_name = ws.name if ws else "Enterprise Architecture Library"
+        lib_code = (ws.code or "") if ws else ""
+
+        required_props = [
+            ("EasyEA_Schema_ID", schema.id),
+            ("EasyEA_Model_ID", schema.model_id or ""),
+            ("EasyEA_Schema_Name", schema.name or "Schema"),
+            ("EasyEA_Library_Name", lib_name),
+            ("EasyEA_Library_Code", lib_code)
+        ]
+
+        # Find existing root properties
+        existing_keys = set()
+        for child in list(root.childNodes):
+            if child.nodeType == child.ELEMENT_NODE and child.tagName.endswith("property"):
+                pk = child.getAttribute("key")
+                if pk:
+                    existing_keys.add(pk)
+
+        # Append missing properties
+        for key, val in required_props:
+            if key not in existing_keys and val:
+                p_elem = dom.createElement("property")
+                p_elem.setAttribute("key", key)
+                p_elem.setAttribute("value", str(val))
+                root.appendChild(p_elem)
+
+        # Remove empty text nodes to prevent blank line accumulation
+        def clean_whitespace_nodes(node):
+            for child in list(node.childNodes):
+                if child.nodeType == child.TEXT_NODE and child.data.strip() == "":
+                    node.removeChild(child)
+                elif child.nodeType == child.ELEMENT_NODE:
+                    clean_whitespace_nodes(child)
+
+        clean_whitespace_nodes(root)
+        return dom.toprettyxml(indent="  ", encoding="utf-8").decode("utf-8")
+    except Exception:
+        return xml_str
+
+
 def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
     """
     Generates a valid, complete standalone Archi XML model (.archimate format)
     containing the specific diagram view, its nodes/connections, and the definitions
     for all referenced elements and relationships.
     """
-    # 1. If raw_xml is already present, valid and non-empty, use it directly
+    # 1. If raw_xml is already present, valid and non-empty, enrich with EasyEA properties and use it
     if schema.raw_xml and schema.raw_xml.strip().startswith("<?xml") or (schema.raw_xml and "<archimate:model" in schema.raw_xml):
         try:
             # Validate it's well-formed XML and safe against DTD/entity expansion
@@ -35,7 +99,7 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
                 forbid_entities=True,
                 forbid_external=True,
             )
-            return schema.raw_xml.strip()
+            return _inject_easyea_root_properties(schema.raw_xml.strip(), schema, db)
         except Exception:
             pass
 
@@ -296,6 +360,18 @@ def generate_standalone_archi_xml(schema: ArchiSchema, db: Session) -> str:
                 if rel_id and rel_id in found_rel_ids:
                     conn_attrs["archimateRelationship"] = rel_id
                 SubElement(child_el, "sourceConnection", conn_attrs)
+
+    # Root model tracking properties for EasyEA integration
+    ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first() if db and schema.model_id else None
+    lib_name = ws.name if ws else "Enterprise Architecture Library"
+    lib_code = (ws.code or "") if ws else ""
+    SubElement(root, "property", {"key": "EasyEA_Schema_ID", "value": str(schema.id)})
+    if schema.model_id:
+        SubElement(root, "property", {"key": "EasyEA_Model_ID", "value": str(schema.model_id)})
+    SubElement(root, "property", {"key": "EasyEA_Schema_Name", "value": str(schema.name or "Schema")})
+    SubElement(root, "property", {"key": "EasyEA_Library_Name", "value": str(lib_name)})
+    if lib_code:
+        SubElement(root, "property", {"key": "EasyEA_Library_Code", "value": str(lib_code)})
 
     # Format pretty XML
     rough_str = tostring(root, encoding="utf-8")

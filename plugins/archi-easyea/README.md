@@ -23,7 +23,9 @@ This package enables enterprise architects to manage the entire ArchiMate modeli
 │
 └── 📁 2. Diagram Tools/
     ├── 📐 EasyEA_AutoLayoutLayers.ajs           Auto-aligns diagram views into clean ArchiMate 3 layered architecture
-    └── 🏷️ EasyEA_BatchPropertyEditor.ajs        Bulk-assigns APM attributes (TIME, Lifecycle, SLA, etc.) to multiple elements
+    ├── 🏷️ EasyEA_BatchPropertyEditor.ajs        Bulk-assigns APM attributes (TIME, Lifecycle, SLA, etc.) to multiple elements
+    ├── 📄 EasyEA_ExportToSaC.ajs                Exports active diagram or model into clean Schema-as-Code (.eac) DSL
+    └── 📥 EasyEA_ImportFromSaC.ajs              Selects a .eac code file, compiles it via EasyEA and opens it in Archi
 ```
 
 ---

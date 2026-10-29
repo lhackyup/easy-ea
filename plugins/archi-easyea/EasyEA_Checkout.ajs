@@ -400,44 +400,172 @@
             return;
         }
 
-        // 3. Selection list
-        var schemaLabels = [];
-        for (var i = 0; i < schemasList.length; i++) {
-            var s = schemasList[i];
-            var statusStr = (s.status === "checked_out")
-                ? " [🔒 CHECKED OUT by " + (s.locked_by_username || "Architect") + "]"
-                : " [🟢 AVAILABLE]";
-            schemaLabels.push((i + 1) + ". " + s.name + " (" + s.current_version + ")" + statusStr);
-        }
+        // 3. Inspect currently active/open model in Archi
+        var currentActiveModel = (typeof model !== "undefined" && model) ? model : null;
+        var matchedOpenSchema = null;
 
-        var selectedLabel = null;
-        if (typeof window.promptSelection === "function") {
-            selectedLabel = window.promptSelection("Select the EasyEA schema to download and lock:", schemaLabels);
-        } else {
-            var promptMsg = "Select the EasyEA schema to download and lock:\n\n" + schemaLabels.join("\n") + "\n\nEnter number (1 - " + schemasList.length + "):";
-            var choice = window.prompt(promptMsg, "1");
-            if (choice !== null) {
-                var idx = parseInt(("" + choice).trim(), 10) - 1;
-                if (!isNaN(idx) && idx >= 0 && idx < schemasList.length) {
-                    selectedLabel = schemaLabels[idx];
+        if (currentActiveModel) {
+            var activePropId = null;
+            var activePropModelId = null;
+            var activePropName = null;
+            try {
+                if (typeof $ !== "undefined") {
+                    activePropId = $(currentActiveModel).prop("EasyEA_Schema_ID");
+                    activePropModelId = $(currentActiveModel).prop("EasyEA_Model_ID");
+                    activePropName = $(currentActiveModel).prop("EasyEA_Schema_Name");
+                }
+            } catch(e) {}
+
+            var openModelName = ("" + (currentActiveModel.name || "")).trim();
+
+            for (var si = 0; si < schemasList.length; si++) {
+                var cand = schemasList[si];
+                if (activePropId && cand.id === activePropId) {
+                    matchedOpenSchema = cand;
+                    break;
+                }
+                if (openModelName && (cand.name.toLowerCase() === openModelName.toLowerCase() ||
+                    openModelName.indexOf(cand.name) !== -1 || cand.name.indexOf(openModelName) !== -1)) {
+                    matchedOpenSchema = cand;
+                    break;
                 }
             }
         }
 
-        if (!selectedLabel) {
-            console.log("Check-out cancelled.");
-            return;
-        }
+        var selectedSchema = null;
 
-        var selectedIndex = 0;
-        for (var k = 0; k < schemaLabels.length; k++) {
-            if (schemaLabels[k] === selectedLabel) {
-                selectedIndex = k;
-                break;
+        if (matchedOpenSchema) {
+            var isLockedByCurrentUser = (matchedOpenSchema.status === "checked_out" &&
+                (matchedOpenSchema.locked_by_username === config.username || matchedOpenSchema.locked_by_user_id === config.username));
+
+            // Check if local meta file exists
+            var localMetaFound = false;
+            if (SCHEMAS_DIR.exists()) {
+                var localFiles = SCHEMAS_DIR.listFiles();
+                if (localFiles) {
+                    for (var lf = 0; lf < localFiles.length; lf++) {
+                        if (localFiles[lf].getName().indexOf(matchedOpenSchema.id) !== -1 && localFiles[lf].getName().endsWith(".meta.json")) {
+                            localMetaFound = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (isLockedByCurrentUser || (matchedOpenSchema.status === "checked_out" && localMetaFound)) {
+                var promptAlready = window.promptSelection(
+                    "The currently open diagram '" + matchedOpenSchema.name + "' is ALREADY CHECKED OUT by you!\n\n" +
+                    "• Schema: " + matchedOpenSchema.name + "\n" +
+                    "• Version: " + matchedOpenSchema.current_version + "\n" +
+                    "• Lock Status: 🔒 Locked\n\n" +
+                    "What would you like to do?",
+                    [
+                        "1. Continue working on this schema (Check-out already active)",
+                        "2. Re-lock / Refresh check-out lock on EasyEA repository",
+                        "3. Select and check out a DIFFERENT schema from repository..."
+                    ]
+                );
+
+                if (!promptAlready || promptAlready.indexOf("1.") === 0) {
+                    // Ensure metadata and properties are properly attached to current model
+                    if (typeof $ !== "undefined" && currentActiveModel) {
+                        try {
+                            $(currentActiveModel).prop("EasyEA_Schema_ID", matchedOpenSchema.id);
+                            $(currentActiveModel).prop("EasyEA_Model_ID", activeModelId);
+                            $(currentActiveModel).prop("EasyEA_Library_Name", activeLibraryName);
+                            $(currentActiveModel).prop("EasyEA_Library_Code", activeLibraryCode);
+                            $(currentActiveModel).prop("EasyEA_Schema_Name", matchedOpenSchema.name);
+                        } catch(pe) {}
+                    }
+                    if (!localMetaFound && SCHEMAS_DIR.exists()) {
+                        try {
+                            var cleanNameQuick = matchedOpenSchema.name.replace(/[^a-zA-Z0-9_\-\.]/g, "_");
+                            var qFile = new File(SCHEMAS_DIR, matchedOpenSchema.id + "_" + cleanNameQuick + ".archimate.meta.json");
+                            var qWriter = new FileWriter(qFile);
+                            qWriter.write(JSON.stringify({
+                                schema_id: matchedOpenSchema.id,
+                                model_id: activeModelId,
+                                library_name: activeLibraryName,
+                                library_code: activeLibraryCode,
+                                schema_name: matchedOpenSchema.name,
+                                version: matchedOpenSchema.current_version,
+                                checked_out_at: new Date().toISOString()
+                            }, null, 2));
+                            qWriter.close();
+                        } catch(qErr) {}
+                    }
+                    console.log("✓ Active checkout session validated and attached for schema: " + matchedOpenSchema.name);
+                    window.alert("Check-out is ACTIVE and connected for '" + matchedOpenSchema.name + "'.\n\nYou can edit your diagram and run 'EasyEA_Checkin.ajs' anytime to commit changes.");
+                    return;
+                } else if (promptAlready.indexOf("2.") === 0) {
+                    selectedSchema = matchedOpenSchema;
+                }
+                // If option 3, fall through to selection list
+            } else {
+                var promptConfirmOpen = window.promptSelection(
+                    "The model currently open in Archi matches EasyEA Schema:\n\n" +
+                    "• Name: " + matchedOpenSchema.name + " (" + matchedOpenSchema.current_version + ")\n" +
+                    "• Status: " + (matchedOpenSchema.status === "checked_out" ? "🔒 Locked by " + matchedOpenSchema.locked_by_username : "🟢 Available") + "\n\n" +
+                    "Do you want to check out and lock this schema now?",
+                    [
+                        "1. Yes - Lock and Check-out '" + matchedOpenSchema.name + "'",
+                        "2. Select a DIFFERENT schema from repository..."
+                    ]
+                );
+
+                if (!promptConfirmOpen) {
+                    console.log("Check-out cancelled.");
+                    return;
+                }
+
+                if (promptConfirmOpen.indexOf("1.") === 0) {
+                    selectedSchema = matchedOpenSchema;
+                }
+                // If option 2, fall through to selection list
             }
         }
 
-        var selectedSchema = schemasList[selectedIndex];
+        // If not selected from open model, prompt from full list
+        if (!selectedSchema) {
+            var schemaLabels = [];
+            for (var i = 0; i < schemasList.length; i++) {
+                var s = schemasList[i];
+                var statusStr = (s.status === "checked_out")
+                    ? " [🔒 CHECKED OUT by " + (s.locked_by_username || "Architect") + "]"
+                    : " [🟢 AVAILABLE]";
+                schemaLabels.push((i + 1) + ". " + s.name + " (" + s.current_version + ")" + statusStr);
+            }
+
+            var selectedLabel = null;
+            if (typeof window.promptSelection === "function") {
+                selectedLabel = window.promptSelection("Select the EasyEA schema to download and lock:", schemaLabels);
+            } else {
+                var promptMsg = "Select the EasyEA schema to download and lock:\n\n" + schemaLabels.join("\n") + "\n\nEnter number (1 - " + schemasList.length + "):";
+                var choice = window.prompt(promptMsg, "1");
+                if (choice !== null) {
+                    var idx = parseInt(("" + choice).trim(), 10) - 1;
+                    if (!isNaN(idx) && idx >= 0 && idx < schemasList.length) {
+                        selectedLabel = schemaLabels[idx];
+                    }
+                }
+            }
+
+            if (!selectedLabel) {
+                console.log("Check-out cancelled.");
+                return;
+            }
+
+            var selectedIndex = 0;
+            for (var k = 0; k < schemaLabels.length; k++) {
+                if (schemaLabels[k] === selectedLabel) {
+                    selectedIndex = k;
+                    break;
+                }
+            }
+
+            selectedSchema = schemasList[selectedIndex];
+        }
+
         console.log("Requesting lock (check-out) for: " + selectedSchema.name + " (ID: " + selectedSchema.id + ")...");
 
         // 4. Perform checkout on EasyEA
@@ -505,16 +633,30 @@
         console.log("✓ Schema file saved: " + localFile.getAbsolutePath());
         console.log("Opening schema in Archi...");
 
-        // 7. Open model in Archi
-        var loadedModel = IEditorModelManager.INSTANCE.openModel(localFile);
+        // 7. Open model in Archi if not already opened
+        var loadedModel = null;
+        try {
+            loadedModel = IEditorModelManager.INSTANCE.openModel(localFile);
+        } catch(openErr) {
+            console.log("Note opening model file: " + openErr);
+        }
 
         try {
-            if (typeof $ !== "undefined" && loadedModel) {
-                $(loadedModel).prop("EasyEA_Schema_ID", selectedSchema.id);
-                $(loadedModel).prop("EasyEA_Model_ID", activeModelId);
-                $(loadedModel).prop("EasyEA_Library_Name", activeLibraryName);
-                $(loadedModel).prop("EasyEA_Library_Code", activeLibraryCode);
-                $(loadedModel).prop("EasyEA_Schema_Name", selectedSchema.name);
+            if (typeof $ !== "undefined") {
+                if (loadedModel) {
+                    $(loadedModel).prop("EasyEA_Schema_ID", selectedSchema.id);
+                    $(loadedModel).prop("EasyEA_Model_ID", activeModelId);
+                    $(loadedModel).prop("EasyEA_Library_Name", activeLibraryName);
+                    $(loadedModel).prop("EasyEA_Library_Code", activeLibraryCode);
+                    $(loadedModel).prop("EasyEA_Schema_Name", selectedSchema.name);
+                }
+                if (currentActiveModel) {
+                    $(currentActiveModel).prop("EasyEA_Schema_ID", selectedSchema.id);
+                    $(currentActiveModel).prop("EasyEA_Model_ID", activeModelId);
+                    $(currentActiveModel).prop("EasyEA_Library_Name", activeLibraryName);
+                    $(currentActiveModel).prop("EasyEA_Library_Code", activeLibraryCode);
+                    $(currentActiveModel).prop("EasyEA_Schema_Name", selectedSchema.name);
+                }
             }
         } catch(propErr) {}
 

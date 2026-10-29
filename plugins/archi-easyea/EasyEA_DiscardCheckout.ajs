@@ -166,11 +166,15 @@
                 return;
             }
 
+            var mName = getModelName(currentActiveModel);
             for (var m = 0; m < checkedOutSchemas.length; m++) {
                 var cs = checkedOutSchemas[m];
                 if ((activePropId && activePropId === cs.schema_id) ||
                     (activeFile && cs.archimate_file.getAbsolutePath() === activeFile.getAbsolutePath()) ||
-                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : ""))) {
+                    (cs.archimate_file.getName() === (activeFile ? activeFile.getName() : "")) ||
+                    (activeFile && activeFile.getName().indexOf(cs.schema_id) !== -1) ||
+                    (mName && cs.schema_name && mName.trim().toLowerCase() === cs.schema_name.trim().toLowerCase()) ||
+                    (mName && cs.schema_name && (mName.toLowerCase().indexOf(cs.schema_name.toLowerCase()) !== -1 || cs.schema_name.toLowerCase().indexOf(mName.toLowerCase()) !== -1))) {
                     selectedEntry = cs;
                     break;
                 }

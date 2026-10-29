@@ -44,7 +44,10 @@ import {
   Coins,
   Cloud,
   Server,
-  Building2
+  Building2,
+  Workflow,
+  Sparkles,
+  Database
 } from 'lucide-react';
 
 interface FrameworkInsightsProps {
@@ -77,8 +80,27 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
-  // Matrix View Mode (Matrice 2x2 a Bolle vs Quadranti vs Tabella)
-  const [matrixViewMode, setMatrixViewMode] = useState<'bubble' | 'cards' | 'table'>('bubble');
+  // Matrix View Mode (Matrice 2x2 a Bolle vs Quadranti vs Tabella vs Pivot 2D)
+  const [matrixViewMode, setMatrixViewMode] = useState<'bubble' | 'cards' | 'table' | 'pivot'>('bubble');
+
+  const isTimeMatrix = useMemo(() => {
+    if (!selectedView) return false;
+    return (
+      selectedView.view_key === 'apm_time_matrix' ||
+      (selectedView as any).config?.matrix_type === 'time' ||
+      (viewData as any)?.config?.matrix_type === 'time'
+    );
+  }, [selectedView, viewData]);
+
+  useEffect(() => {
+    if (selectedView?.view_type === 'matrix') {
+      if (selectedView.view_key === 'apm_time_matrix' || (selectedView as any).config?.matrix_type === 'time') {
+        setMatrixViewMode('bubble');
+      } else {
+        setMatrixViewMode('pivot');
+      }
+    }
+  }, [selectedView?.id, selectedView?.view_key, selectedView?.view_type]);
 
   const formatEUR = (amount: number | string | undefined | null) => {
     const num = Number(amount) || 0;
@@ -457,9 +479,16 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
   const getViewIcon = (iconName?: string, viewType?: string) => {
     if (viewType === 'kpi_dashboard') return BarChart3;
     if (viewType === 'matrix') return Grid;
+    if (iconName === 'Building2') return Building2;
+    if (iconName === 'Workflow') return Workflow;
+    if (iconName === 'Server') return Server;
+    if (iconName === 'Sparkles') return Sparkles;
+    if (iconName === 'Package') return Package;
+    if (iconName === 'Database') return Database;
     if (iconName === 'Layers') return Layers;
     if (iconName === 'ShieldAlert') return ShieldAlert;
     if (iconName === 'PieChart') return PieChart;
+    if (iconName === 'Clock') return Clock;
     return TableIcon;
   };
 
@@ -1196,45 +1225,78 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                   <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
                     {(selectedView.view_type === 'matrix' || selectedView.view_key === 'apm_time_matrix') && (
                       <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
-                        <button
-                          type="button"
-                          onClick={() => setMatrixViewMode('bubble')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                            matrixViewMode === 'bubble'
-                              ? 'bg-white text-indigo-700 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                          title="Visualizzazione cartesiana 2x2 a bolle proporzionali al TCO"
-                        >
-                          <CircleDot className="w-3.5 h-3.5" />
-                          <span>Matrice a Bolle</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMatrixViewMode('cards')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                            matrixViewMode === 'cards'
-                              ? 'bg-white text-indigo-700 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                          title="Visualizzazione classica a schede nei 4 quadranti"
-                        >
-                          <LayoutGrid className="w-3.5 h-3.5" />
-                          <span>Quadranti</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMatrixViewMode('table')}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                            matrixViewMode === 'table'
-                              ? 'bg-white text-indigo-700 shadow-2xs'
-                              : 'text-slate-600 hover:text-slate-900'
-                          }`}
-                          title="Elenco tabellare con filtri e ordinamento"
-                        >
-                          <TableIcon className="w-3.5 h-3.5" />
-                          <span>Tabella</span>
-                        </button>
+                        {isTimeMatrix ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setMatrixViewMode('bubble')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                matrixViewMode === 'bubble'
+                                  ? 'bg-white text-indigo-700 shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Visualizzazione cartesiana 2x2 a bolle proporzionali al TCO"
+                            >
+                              <CircleDot className="w-3.5 h-3.5" />
+                              <span>Matrice a Bolle</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMatrixViewMode('cards')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                matrixViewMode === 'cards'
+                                  ? 'bg-white text-indigo-700 shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Visualizzazione classica a schede nei 4 quadranti"
+                            >
+                              <LayoutGrid className="w-3.5 h-3.5" />
+                              <span>Quadranti</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMatrixViewMode('table')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                matrixViewMode === 'table'
+                                  ? 'bg-white text-indigo-700 shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Elenco tabellare con filtri e ordinamento"
+                            >
+                              <TableIcon className="w-3.5 h-3.5" />
+                              <span>Tabella</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setMatrixViewMode('pivot')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                matrixViewMode === 'pivot'
+                                  ? 'bg-white text-indigo-700 shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Griglia pivot bidimensionale di incrocio dati"
+                            >
+                              <Grid className="w-3.5 h-3.5" />
+                              <span>Matrice Pivot 2D</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMatrixViewMode('table')}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                                matrixViewMode === 'table'
+                                  ? 'bg-white text-indigo-700 shadow-2xs'
+                                  : 'text-slate-600 hover:text-slate-900'
+                              }`}
+                              title="Elenco tabellare con filtri e ordinamento"
+                            >
+                              <TableIcon className="w-3.5 h-3.5" />
+                              <span>Tabella</span>
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -1392,7 +1454,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                 )}
 
                 {/* GARTNER TIME 2X2 VISUAL MATRIX (VISTA B) */}
-                {(selectedView.view_type === 'matrix' || selectedView.view_key === 'apm_time_matrix') && (matrixViewMode === 'bubble' || matrixViewMode === 'cards') && viewData?.rows && viewData.rows.length > 0 ? (
+                {(selectedView.view_type === 'matrix' || selectedView.view_key === 'apm_time_matrix') && isTimeMatrix && (matrixViewMode === 'bubble' || matrixViewMode === 'cards') && viewData?.rows && viewData.rows.length > 0 ? (
                   <div className="space-y-4">
                     {/* Summary 4 Quadrants Cards */}
                     {timeSummary && (
@@ -1762,287 +1824,346 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                       </div>
                     )}
                   </div>
+                ) : (selectedView.view_type === 'matrix' && !isTimeMatrix && matrixViewMode !== 'table') ? (
+                  /* GENERIC 2D PIVOT MATRIX VIEW */
+                  (() => {
+                    const matrixCfg = (viewData?.config?.matrix || (selectedView as any)?.config?.matrix) || {};
+                    const matrixXField = matrixCfg.x_axis?.field || 'layer';
+                    const matrixXLabel = matrixCfg.x_axis?.label || matrixCfg.x_axis?.field || 'Dimensione X';
+                    const matrixYField = matrixCfg.y_axis?.field || 'type';
+                    const matrixYLabel = matrixCfg.y_axis?.label || matrixCfg.y_axis?.field || 'Dimensione Y';
+
+                    const grid = (viewData?.matrix_summary?.grid || {}) as Record<string, Record<string, number>>;
+                    const rowKeys = Object.keys(grid).sort();
+                    const colKeys = Array.from(new Set(rowKeys.flatMap((rk) => Object.keys(grid[rk])))).sort();
+
+                    const colTotals: Record<string, number> = {};
+                    const rowTotals: Record<string, number> = {};
+                    let grandTotal = 0;
+
+                    rowKeys.forEach((rk) => {
+                      let rowSum = 0;
+                      colKeys.forEach((ck) => {
+                        const val = grid[rk]?.[ck] || 0;
+                        rowSum += val;
+                        colTotals[ck] = (colTotals[ck] || 0) + val;
+                      });
+                      rowTotals[rk] = rowSum;
+                      grandTotal += rowSum;
+                    });
+
+                    return (
+                      <div className="space-y-4">
+                        {/* Matrix Header Banner */}
+                        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                <Grid className="w-4 h-4" />
+                              </span>
+                              <h3 className="text-sm font-extrabold text-slate-900">
+                                Matrice Pivot 2D: {matrixYLabel} × {matrixXLabel}
+                              </h3>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">
+                              Incrocio bidimensionale e distribuzione degli elementi del modello ArchiMate ({matrixYLabel} sulle righe, {matrixXLabel} sulle colonne).
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 text-xs font-mono">
+                            <span className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-700">
+                              <strong>{rowKeys.length}</strong> {matrixYLabel}
+                            </span>
+                            <span className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-slate-700">
+                              <strong>{colKeys.length}</strong> {matrixXLabel}
+                            </span>
+                            <span className="bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl text-indigo-900 font-bold">
+                              <strong>{grandTotal || viewData?.total || 0}</strong> Totale
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Matrix Table */}
+                        {rowKeys.length === 0 ? (
+                          <div className="bg-white border border-slate-200 rounded-2xl p-12 text-center space-y-3">
+                            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                              <Grid className="w-6 h-6" />
+                            </div>
+                            <h4 className="text-sm font-extrabold text-slate-800">Nessun dato nella matrice</h4>
+                            <p className="text-xs text-slate-500 max-w-md mx-auto">
+                              Non sono stati trovati elementi nel modello che incrocino le dimensioni {matrixYLabel} e {matrixXLabel} con i filtri attuali.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="bg-white border border-slate-200/90 rounded-2xl shadow-sm overflow-hidden">
+                            <div className="overflow-x-auto">
+                              <table className="w-full text-xs text-left border-collapse">
+                                <thead>
+                                  <tr className="border-b border-slate-200">
+                                    <th className="p-3.5 font-black text-slate-800 bg-slate-100 sticky left-0 z-10 select-none uppercase tracking-wider text-[11px] border-r border-slate-200">
+                                      {matrixYLabel} \ {matrixXLabel}
+                                    </th>
+                                    {colKeys.map((ck) => (
+                                      <th
+                                        key={ck}
+                                        className="p-3.5 font-bold text-indigo-900 bg-indigo-50/70 border-l border-slate-200 text-center whitespace-nowrap min-w-[110px]"
+                                      >
+                                        <div className="flex items-center justify-center gap-1.5">
+                                          {matrixXField === 'layer' ? (
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getLayerColor(ck)}`}>
+                                              {ck}
+                                            </span>
+                                          ) : (
+                                            <span>{ck}</span>
+                                          )}
+                                        </div>
+                                      </th>
+                                    ))}
+                                    <th className="p-3.5 font-black text-slate-900 bg-slate-100/90 border-l-2 border-slate-300 text-center uppercase tracking-wider text-[11px] min-w-[90px]">
+                                      Totale Riga
+                                    </th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {rowKeys.map((rk) => (
+                                    <tr key={rk} className="hover:bg-slate-50/80 transition-colors">
+                                      <td className="p-3.5 font-bold text-slate-800 bg-slate-50/60 sticky left-0 z-10 border-r border-slate-200 whitespace-nowrap">
+                                        <div className="flex items-center gap-2">
+                                          {matrixYField === 'layer' ? (
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getLayerColor(rk)}`}>
+                                              {rk}
+                                            </span>
+                                          ) : (
+                                            <span>{rk}</span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      {colKeys.map((ck) => {
+                                        const count = grid[rk]?.[ck] || 0;
+                                        return (
+                                          <td key={ck} className="p-3 border-l border-slate-100 text-center">
+                                            {count > 0 ? (
+                                              <span className="inline-flex items-center justify-center min-w-[28px] h-7 px-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-mono font-black text-xs shadow-2xs">
+                                                {count}
+                                              </span>
+                                            ) : (
+                                              <span className="text-slate-300 text-xs select-none">—</span>
+                                            )}
+                                          </td>
+                                        );
+                                      })}
+                                      <td className="p-3 border-l-2 border-slate-300 bg-slate-50/80 text-center font-mono font-black text-slate-900">
+                                        {rowTotals[rk] || 0}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                                <tfoot>
+                                  <tr className="border-t-2 border-slate-300 bg-slate-100/90 font-black text-slate-900">
+                                    <td className="p-3.5 sticky left-0 z-10 bg-slate-200/90 border-r border-slate-300 uppercase tracking-wider text-[11px]">
+                                      Totale Colonne
+                                    </td>
+                                    {colKeys.map((ck) => (
+                                      <td key={ck} className="p-3 border-l border-slate-200 text-center font-mono text-indigo-950 font-black bg-indigo-50/40">
+                                        {colTotals[ck] || 0}
+                                      </td>
+                                    ))}
+                                    <td className="p-3 border-l-2 border-slate-300 bg-indigo-600 text-white text-center font-mono font-black text-sm shadow-xs">
+                                      {grandTotal}
+                                    </td>
+                                  </tr>
+                                </tfoot>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()
                 ) : (selectedView.view_type === 'kpi_dashboard' || viewData?.view_type === 'kpi_dashboard') ? (
-                  /* VISTA C: DASHBOARD ESECUTIVA PORTFOLIO & TCO (KPI_DASHBOARD) */
+                  /* DYNAMIC KPI DASHBOARD VIEW */
                   <div className="space-y-6">
-                    {/* 1. Executive Top KPI Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      {/* Metric 1: Total Apps */}
-                      <div className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                            {viewData.metrics?.find((m: any) => m.id === 'total_apps')?.label || 'Totale Business Application'}
-                          </span>
-                          <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600">
-                            <Layers className="w-4 h-4" />
-                          </span>
-                        </div>
-                        <div className="mt-3">
-                          <div className="text-3xl font-black text-slate-900 font-mono">
-                            {viewData.metrics?.find((m: any) => m.id === 'total_apps')?.value ?? viewData.rows?.length ?? 0}
-                          </div>
-                          <p className="text-xs text-slate-500 mt-1">Applicazioni censite nel portfolio</p>
-                        </div>
-                      </div>
+                    {/* 1. Dynamic Top KPI Cards */}
+                    {(() => {
+                      const metrics = (viewData.metrics && viewData.metrics.length > 0)
+                        ? viewData.metrics
+                        : [
+                            { id: 'total_elements', label: 'Totale Elementi', value: viewData.rows?.length ?? 0, type: 'count' }
+                          ];
 
-                      {/* Metric 2: Total TCO */}
-                      <div className="bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-white border border-amber-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900">
-                            {viewData.metrics?.find((m: any) => m.id === 'total_tco')?.label || 'TCO Annuo Complessivo'}
-                          </span>
-                          <span className="p-2 rounded-xl bg-amber-100 text-amber-700">
-                            <Coins className="w-4 h-4" />
-                          </span>
-                        </div>
-                        <div className="mt-3">
-                          <div className="text-2xl sm:text-3xl font-black text-amber-950 font-mono">
-                            {formatEUR(viewData.metrics?.find((m: any) => m.id === 'total_tco')?.value)}
-                          </div>
-                          <p className="text-xs text-amber-800/80 mt-1">Costo totale di esercizio annuo</p>
-                        </div>
-                      </div>
+                      const getMetricIcon = (m: any) => {
+                        const id = (m.id || '').toLowerCase();
+                        const lbl = (m.label || '').toLowerCase();
+                        if (id.includes('app') || lbl.includes('app')) return Building2;
+                        if (id.includes('process') || lbl.includes('process') || id.includes('flow')) return Workflow;
+                        if (id.includes('infra') || id.includes('node') || id.includes('server') || id.includes('device')) return Server;
+                        if (id.includes('data') || lbl.includes('data')) return Database;
+                        if (id.includes('cost') || id.includes('tco') || lbl.includes('€') || lbl.includes('tco') || id.includes('spend')) return Coins;
+                        if (id.includes('critical') || id.includes('risk') || id.includes('audit')) return ShieldAlert;
+                        if (id.includes('cloud')) return Cloud;
+                        if (id.includes('layer')) return Layers;
+                        return Sparkles;
+                      };
 
-                      {/* Metric 3: Mission Critical */}
-                      <div className="bg-gradient-to-br from-rose-500/10 via-rose-500/5 to-white border border-rose-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-900">
-                            {viewData.metrics?.find((m: any) => m.id === 'mission_critical_count')?.label || 'Sistemi Mission Critical'}
-                          </span>
-                          <span className="p-2 rounded-xl bg-rose-100 text-rose-700">
-                            <ShieldAlert className="w-4 h-4" />
-                          </span>
-                        </div>
-                        <div className="mt-3">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-black text-rose-950 font-mono">
-                              {viewData.metrics?.find((m: any) => m.id === 'mission_critical_count')?.value ?? 0}
-                            </span>
-                            {viewData.rows?.length > 0 && (
-                              <span className="text-xs font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
-                                {Math.round(((viewData.metrics?.find((m: any) => m.id === 'mission_critical_count')?.value || 0) / viewData.rows.length) * 100)}%
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-rose-800/80 mt-1">Continuità operativa vitale per la banca</p>
-                        </div>
-                      </div>
+                      const isCurrencyMetric = (m: any) => {
+                        const lbl = (m.label || '').toLowerCase();
+                        const id = (m.id || '').toLowerCase();
+                        return m.type === 'sum' && (lbl.includes('€') || lbl.includes('cost') || lbl.includes('tco') || id.includes('cost') || id.includes('tco') || id.includes('spend'));
+                      };
 
-                      {/* Metric 4: Cloud & SaaS */}
-                      <div className="bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-white border border-blue-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-900">
-                            {viewData.metrics?.find((m: any) => m.id === 'cloud_hosted_count')?.label || 'Soluzioni Cloud & SaaS'}
-                          </span>
-                          <span className="p-2 rounded-xl bg-blue-100 text-blue-700">
-                            <Cloud className="w-4 h-4" />
-                          </span>
-                        </div>
-                        <div className="mt-3">
-                          <div className="flex items-baseline gap-2">
-                            <span className="text-3xl font-black text-blue-950 font-mono">
-                              {viewData.metrics?.find((m: any) => m.id === 'cloud_hosted_count')?.value ?? 0}
-                            </span>
-                            {viewData.rows?.length > 0 && (
-                              <span className="text-xs font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full">
-                                {Math.round(((viewData.metrics?.find((m: any) => m.id === 'cloud_hosted_count')?.value || 0) / viewData.rows.length) * 100)}%
-                              </span>
-                            )}
-                          </div>
-                          <p className="text-xs text-blue-800/80 mt-1">Tasso di adozione architetture Cloud</p>
-                        </div>
-                      </div>
-                    </div>
+                      return (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                          {metrics.map((m: any, idx: number) => {
+                            const IconComponent = getMetricIcon(m);
+                            const isCurr = isCurrencyMetric(m);
+                            const isTotalMetric = m.id === 'total_elements' || m.id === 'total_apps' || m.id === 'total_items';
+                            const formattedVal = isCurr
+                              ? formatEUR(m.value)
+                              : (typeof m.value === 'number' ? m.value.toLocaleString() : (m.value ?? 0));
 
-                    {/* 2. Analytical Charts Grid (2x2) */}
-                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                      {/* Chart 1: Lifecycle Distribution */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                          <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                            <Clock className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>Distribuzione Ciclo di Vita</span>
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-mono">Status Lifecycle</span>
-                        </div>
-                        <div className="space-y-2.5 pt-1">
-                          {(() => {
-                            const chart = viewData.charts?.find((c: any) => c.id === 'chart_by_lifecycle');
-                            const data = chart?.data || [];
-                            const total = data.reduce((acc: number, d: any) => acc + (d.count || 0), 0) || 1;
-                            const colors: Record<string, { bar: string; text: string }> = {
-                              Live: { bar: 'bg-emerald-500', text: 'In Produzione' },
-                              'Phase Out': { bar: 'bg-amber-500', text: 'In Dismissione' },
-                              'Phase In': { bar: 'bg-purple-500', text: 'Rollout / Pilota' },
-                              Plan: { bar: 'bg-blue-500', text: 'Pianificazione' },
-                              Retired: { bar: 'bg-slate-400', text: 'Dismesse' }
-                            };
-                            return data.map((item: any) => {
-                              const pct = Math.round((item.count / total) * 100);
-                              const c = colors[item.label] || { bar: 'bg-indigo-500', text: item.label };
-                              return (
-                                <div key={item.label} className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                                      <span className={`w-2 h-2 rounded-full ${c.bar}`} />
-                                      {item.label}
-                                      <span className="text-[10px] text-slate-400 font-normal">({c.text})</span>
-                                    </span>
-                                    <span className="font-mono text-xs font-black text-slate-700">
-                                      {item.count} <span className="text-[10px] text-slate-400 font-normal">({pct}%)</span>
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all duration-500 ${c.bar}`} style={{ width: `${pct}%` }} />
-                                  </div>
+                            let subtitle = 'Elementi censiti nel modello';
+                            if (isCurr) {
+                              subtitle = 'Valore complessivo calcolato';
+                            } else if (m.type === 'average') {
+                              subtitle = 'Media per elemento';
+                            } else if (m.type === 'count' && !isTotalMetric && viewData.rows && viewData.rows.length > 0) {
+                              const pct = Math.round(((Number(m.value) || 0) / Math.max(1, viewData.rows.length)) * 100);
+                              subtitle = `${pct}% sul totale analizzato`;
+                            }
+
+                            return (
+                              <div
+                                key={m.id || idx}
+                                className="bg-white border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between"
+                              >
+                                <div className="flex items-center justify-between">
+                                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 truncate mr-2" title={m.label}>
+                                    {m.label}
+                                  </span>
+                                  <span className="p-2 rounded-xl bg-indigo-50 text-indigo-600 shrink-0">
+                                    <IconComponent className="w-4 h-4" />
+                                  </span>
                                 </div>
-                              );
-                            });
-                          })()}
-                        </div>
-                      </div>
-
-                      {/* Chart 2: Business Criticality */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                          <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                            <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Criticità di Business</span>
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-mono">Impatto Operativo</span>
-                        </div>
-                        <div className="space-y-2.5 pt-1">
-                          {(() => {
-                            const chart = viewData.charts?.find((c: any) => c.id === 'chart_by_criticality');
-                            const data = chart?.data || [];
-                            const total = data.reduce((acc: number, d: any) => acc + (d.count || 0), 0) || 1;
-                            const colors: Record<string, string> = {
-                              'Mission Critical': 'bg-rose-500',
-                              'Business Critical': 'bg-amber-500',
-                              'Business Operational': 'bg-blue-500',
-                              Administrative: 'bg-slate-400'
-                            };
-                            return data.map((item: any) => {
-                              const pct = Math.round((item.count / total) * 100);
-                              const barColor = colors[item.label] || 'bg-indigo-500';
-                              return (
-                                <div key={item.label} className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                                      <span className={`w-2 h-2 rounded-full ${barColor}`} />
-                                      {item.label}
-                                    </span>
-                                    <span className="font-mono text-xs font-black text-slate-700">
-                                      {item.count} <span className="text-[10px] text-slate-400 font-normal">({pct}%)</span>
-                                    </span>
+                                <div className="mt-3">
+                                  <div className="text-2xl sm:text-3xl font-black text-slate-900 font-mono truncate" title={String(formattedVal)}>
+                                    {formattedVal}
                                   </div>
-                                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
-                                  </div>
+                                  <p className="text-xs text-slate-500 mt-1 truncate">
+                                    {subtitle}
+                                  </p>
                                 </div>
-                              );
-                            });
-                          })()}
+                              </div>
+                            );
+                          })}
                         </div>
-                      </div>
+                      );
+                    })()}
 
-                      {/* Chart 3: Hosting Model */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                          <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                            <Server className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Modello di Erogazione / Hosting</span>
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-mono">Infrastruttura</span>
-                        </div>
-                        <div className="space-y-2.5 pt-1">
-                          {(() => {
-                            const chart = viewData.charts?.find((c: any) => c.id === 'chart_by_hosting');
-                            const data = chart?.data || [];
-                            const total = data.reduce((acc: number, d: any) => acc + (d.count || 0), 0) || 1;
-                            const colors: Record<string, string> = {
-                              SaaS: 'bg-indigo-500',
-                              'Public Cloud': 'bg-cyan-500',
-                              'Private Cloud': 'bg-blue-600',
-                              'On-Premise': 'bg-slate-600',
-                              Hybrid: 'bg-purple-500'
-                            };
-                            return data.map((item: any) => {
-                              const pct = Math.round((item.count / total) * 100);
-                              const barColor = colors[item.label] || 'bg-slate-400';
-                              return (
-                                <div key={item.label} className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                                      <span className={`w-2 h-2 rounded-full ${barColor}`} />
-                                      {item.label}
-                                    </span>
-                                    <span className="font-mono text-xs font-black text-slate-700">
-                                      {item.count} <span className="text-[10px] text-slate-400 font-normal">({pct}%)</span>
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div className={`h-full rounded-full transition-all duration-500 ${barColor}`} style={{ width: `${pct}%` }} />
-                                  </div>
+                    {/* 2. Dynamic Analytical Charts Grid */}
+                    {(() => {
+                      const charts = viewData.charts || [];
+                      if (charts.length === 0) return null;
+
+                      const colorPalette = [
+                        'bg-indigo-500', 'bg-blue-500', 'bg-emerald-500', 'bg-amber-500',
+                        'bg-purple-500', 'bg-rose-500', 'bg-cyan-500', 'bg-teal-500', 'bg-slate-500'
+                      ];
+
+                      const getKnownColor = (lbl: string): string | null => {
+                        switch (lbl) {
+                          case 'Live': return 'bg-emerald-500';
+                          case 'Phase Out': return 'bg-amber-500';
+                          case 'Phase In': return 'bg-purple-500';
+                          case 'Plan': return 'bg-blue-500';
+                          case 'Retired': return 'bg-slate-400';
+                          case 'Mission Critical': return 'bg-rose-500';
+                          case 'Business Critical': return 'bg-amber-500';
+                          case 'Business Operational': return 'bg-blue-500';
+                          case 'Administrative': return 'bg-slate-400';
+                          case 'Application': return 'bg-indigo-500';
+                          case 'Business': return 'bg-amber-500';
+                          case 'Technology': return 'bg-emerald-500';
+                          case 'Motivation': return 'bg-purple-500';
+                          case 'Strategy': return 'bg-rose-500';
+                          default: return null;
+                        }
+                      };
+
+                      return (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                          {charts.map((chart: any, cIdx: number) => {
+                            const data = chart.data || [];
+                            const isSumMetric = chart.metric === 'sum' || chart.title?.includes('€') || chart.title?.toLowerCase().includes('spend') || chart.title?.toLowerCase().includes('cost');
+                            const total = isSumMetric
+                              ? (data.reduce((acc: number, d: any) => acc + (Number(d.value) || 0), 0) || 1)
+                              : (data.reduce((acc: number, d: any) => acc + (Number(d.count) || 0), 0) || 1);
+
+                            return (
+                              <div key={chart.id || cIdx} className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
+                                <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                                  <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                                    {chart.type === 'pie' ? (
+                                      <PieChart className="w-3.5 h-3.5 text-indigo-600" />
+                                    ) : (
+                                      <BarChart3 className="w-3.5 h-3.5 text-indigo-600" />
+                                    )}
+                                    <span>{chart.title}</span>
+                                  </h4>
+                                  <span className="text-[10px] text-slate-400 font-mono">
+                                    {chart.group_by ? `Raggruppato per: ${chart.group_by}` : (isSumMetric ? 'Somma Valori' : 'Distribuzione Conteggi')}
+                                  </span>
                                 </div>
-                              );
-                            });
-                          })()}
-                        </div>
-                      </div>
+                                <div className="space-y-2.5 pt-1">
+                                  {data.length === 0 ? (
+                                    <div className="py-6 text-center text-xs text-slate-400">Nessun dato registrato</div>
+                                  ) : (
+                                    data.map((item: any, iIdx: number) => {
+                                      const valNum = isSumMetric ? (Number(item.value) || 0) : (Number(item.count) || 0);
+                                      const pct = Math.round((valNum / total) * 100);
+                                      const barColor = getKnownColor(item.label) || colorPalette[iIdx % colorPalette.length];
 
-                      {/* Chart 4: Top Vendors by Spend */}
-                      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-3">
-                        <div className="flex items-center justify-between pb-2 border-b border-slate-100">
-                          <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
-                            <Building2 className="w-3.5 h-3.5 text-amber-600" />
-                            <span>Top Fornitori per Spesa TCO</span>
-                          </h4>
-                          <span className="text-[10px] text-slate-400 font-mono">Concentrazione Spesa</span>
-                        </div>
-                        <div className="space-y-2.5 pt-1">
-                          {(() => {
-                            const chart = viewData.charts?.find((c: any) => c.id === 'chart_by_vendor');
-                            const data = chart?.data || [];
-                            const maxVal = Math.max(...data.map((d: any) => Number(d.value) || 0), 1);
-                            return data.map((item: any) => {
-                              const val = Number(item.value) || 0;
-                              const pct = Math.round((val / maxVal) * 100);
-                              return (
-                                <div key={item.label} className="space-y-1">
-                                  <div className="flex items-center justify-between text-xs">
-                                    <span className="font-bold text-slate-800 truncate max-w-[200px]" title={item.label}>
-                                      {item.label}
-                                      <span className="text-[10px] text-slate-400 font-normal ml-1">({item.count} app)</span>
-                                    </span>
-                                    <span className="font-mono text-xs font-black text-amber-700">
-                                      {formatEUR(val)}
-                                    </span>
-                                  </div>
-                                  <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full bg-amber-500 transition-all duration-500" style={{ width: `${pct}%` }} />
-                                  </div>
+                                      return (
+                                        <div key={item.label || iIdx} className="space-y-1">
+                                          <div className="flex items-center justify-between text-xs">
+                                            <span className="font-bold text-slate-800 flex items-center gap-1.5 truncate max-w-[240px]" title={item.label}>
+                                              <span className={`w-2 h-2 rounded-full shrink-0 ${barColor}`} />
+                                              <span className="truncate">{item.label}</span>
+                                            </span>
+                                            <span className="font-mono text-xs font-black text-slate-700 shrink-0">
+                                              {isSumMetric ? formatEUR(item.value) : item.count}{' '}
+                                              <span className="text-[10px] text-slate-400 font-normal">({pct}%)</span>
+                                            </span>
+                                          </div>
+                                          <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
+                                            <div
+                                              className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                                              style={{ width: `${Math.min(100, Math.max(pct > 0 ? 3 : 0, pct))}%` }}
+                                            />
+                                          </div>
+                                        </div>
+                                      );
+                                    })
+                                  )}
                                 </div>
-                              );
-                            });
-                          })()}
+                              </div>
+                            );
+                          })}
                         </div>
-                      </div>
-                    </div>
+                      );
+                    })()}
 
-                    {/* 3. Detailed Portfolio Table */}
+                    {/* 3. Detailed Elements Table */}
                     <div className="bg-white rounded-2xl border border-slate-200/90 shadow-sm overflow-hidden space-y-0">
                       <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
                         <div>
                           <h4 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider">
-                            {t.insights?.portfolioDetailTitle || 'Applications Portfolio Details'}
+                            {selectedView.name} • Elementi di Dettaglio
                           </h4>
                           <p className="text-[11px] text-slate-500">
-                            {t.insights?.portfolioDetailSubtitle || 'Click on any row to open the element detail sheet.'}
+                            {t.insights?.portfolioDetailSubtitle || 'Clicca su qualsiasi riga per aprire la scheda di dettaglio dell\'elemento.'}
                           </p>
                         </div>
                         <span className="text-xs font-mono font-bold text-slate-600 bg-white px-2.5 py-1 rounded-xl border border-slate-200">
-                          {viewData.rows?.length || 0} {t.insights?.elementsCountLabel || 'elements'}
+                          {viewData.rows?.length || 0} {t.insights?.elementsCountLabel || 'elementi'}
                         </span>
                       </div>
                       <div className="overflow-x-auto">
@@ -2076,8 +2197,14 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                               >
                                 {viewData.columns?.map((col: any) => (
                                   <td key={col.field} className="px-4 py-3">
-                                    {col.field === 'apm_annual_cost' ? (
+                                    {col.field === 'apm_annual_cost' || col.type === 'currency' ? (
                                       <span className="font-mono font-bold text-slate-900">{formatEUR(row[col.field])}</span>
+                                    ) : col.field === 'layer' ? (
+                                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${getLayerColor(row[col.field])}`}>
+                                        {row[col.field]}
+                                      </span>
+                                    ) : col.field === 'type' ? (
+                                      <span className="font-semibold text-slate-600">{row[col.field]}</span>
                                     ) : col.field === 'apm_app_code' ? (
                                       <span className="font-mono text-[10px] font-extrabold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">{row[col.field]}</span>
                                     ) : col.field === 'apm_business_criticality' ? (

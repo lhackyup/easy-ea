@@ -7,7 +7,7 @@ export interface ActivePackageViewSelection {
   viewId: string;
 }
 export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'saved-views' | 'import' | 'business-views';
-export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'apm_config' | 'roles' | 'auth_config' | 'system';
+export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
   name: string;
@@ -1008,6 +1008,7 @@ export interface PackageViewExecuteResponse {
   category: string;
   view_type: 'table' | 'matrix' | 'kpi_dashboard';
   icon?: string;
+  config?: Record<string, any>;
   columns?: PackageViewColumn[];
   rows?: Record<string, any>[];
   total?: number;
@@ -1015,6 +1016,11 @@ export interface PackageViewExecuteResponse {
   metrics?: PackageViewKPIMetric[];
   charts?: PackageViewChart[];
   facet_options?: Record<string, string[]>;
+  matrix_summary?: {
+    counts?: Record<string, number>;
+    costs?: Record<string, number>;
+    grid?: Record<string, Record<string, number>>;
+  };
 }
 
 

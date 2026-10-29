@@ -31,6 +31,7 @@ import {
   Grid,
   Settings,
   Building2,
+  Server,
   KeyRound,
   UploadCloud,
   BookmarkCheck,
@@ -81,6 +82,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const getViewIcon = (iconName?: string, viewType?: string) => {
     if (viewType === 'kpi_dashboard') return BarChart3;
     if (viewType === 'matrix') return Grid;
+    if (iconName === 'Building2') return Building2;
+    if (iconName === 'Workflow') return Workflow;
+    if (iconName === 'Server') return Server;
+    if (iconName === 'Sparkles') return Sparkles;
+    if (iconName === 'Package') return Package;
+    if (iconName === 'Database') return Database;
     if (iconName === 'Layers') return Layers;
     if (iconName === 'ShieldAlert') return ShieldAlert;
     if (iconName === 'PieChart') return PieChart;
@@ -167,11 +174,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'packages' as AdminSubTab,
       label: t.subtabs.packagesManager,
       icon: Package
-    },
-    {
-      id: 'apm_config' as AdminSubTab,
-      label: t.subtabs.apmTimeParams,
-      icon: Sliders
     },
     {
       id: 'roles' as AdminSubTab,
