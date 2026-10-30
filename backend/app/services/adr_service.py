@@ -9,6 +9,8 @@ from app.models.archimate import (
     ArchitectureDecisionRecord,
     ADRLinkedElement,
     ArchimateElement,
+    ArchimateRelationship,
+    ElementStereotype,
     ModelWorkspace,
     User
 )
@@ -87,6 +89,7 @@ class ADRService:
         return {
             "id": adr.id,
             "model_id": adr.model_id,
+            "archimate_element_id": adr.archimate_element_id,
             "code": adr.code,
             "title": adr.title,
             "status": adr.status,
@@ -180,6 +183,93 @@ class ADRService:
         if not adr:
             raise HTTPException(status_code=404, detail="Architecture Decision Record not found.")
         return ADRService.serialize_adr(adr)
+
+    @staticmethod
+    def _sync_archimate_element_for_adr(db: Session, adr: ArchitectureDecisionRecord):
+        """
+        Synchronizes an ArchitectureDecisionRecord 1:1 with an ArchimateElement of type Assessment
+        (Motivation layer, stereotype 'stereo-adr'), and creates/updates ArchimateRelationships to linked elements.
+        """
+        elem = None
+        if adr.archimate_element_id:
+            elem = db.query(ArchimateElement).filter(ArchimateElement.id == adr.archimate_element_id).first()
+
+        elem_id = adr.archimate_element_id or f"elem-adr-{adr.id.replace('adr-', '')}"
+        if not elem:
+            elem = db.query(ArchimateElement).filter(ArchimateElement.id == elem_id).first()
+
+        stereo = db.query(ElementStereotype).filter(ElementStereotype.id == "stereo-adr").first()
+        stereo_id = stereo.id if stereo else None
+
+        props = {
+            "adr_code": adr.code,
+            "adr_status": adr.status,
+            "adr_domain": adr.domain,
+            "adr_deciders": adr.deciders or "",
+            "adr_decided_at": adr.decided_at.strftime("%Y-%m-%d") if adr.decided_at else "",
+            "adr_decision_outcome": adr.decision_outcome or "",
+            "adr_compliance_impact": adr.compliance_impact or "",
+            "adr_superseded_by": adr.superseded_by.code if adr.superseded_by else ""
+        }
+
+        elem_name = f"[{adr.code}] {adr.title}"
+        doc_text = adr.decision_outcome or adr.context_and_problem or ""
+
+        if not elem:
+            elem = ArchimateElement(
+                id=elem_id,
+                model_id=adr.model_id,
+                name=elem_name,
+                type="Assessment",
+                layer="Motivation",
+                documentation=doc_text,
+                stereotype_id=stereo_id,
+                properties=props
+            )
+            db.add(elem)
+            db.flush()
+        else:
+            elem.model_id = adr.model_id
+            elem.name = elem_name
+            elem.type = "Assessment"
+            elem.layer = "Motivation"
+            elem.documentation = doc_text
+            if stereo_id:
+                elem.stereotype_id = stereo_id
+            current_props = dict(elem.properties or {})
+            current_props.update(props)
+            elem.properties = current_props
+
+        adr.archimate_element_id = elem.id
+
+        # Sync ArchimateRelationships for each linked element
+        existing_adr_rels = db.query(ArchimateRelationship).filter(
+            ArchimateRelationship.source_id == elem.id
+        ).all()
+        for r in existing_adr_rels:
+            r_props = r.properties if isinstance(r.properties, dict) else {}
+            if r_props.get("adr_auto_sync") is True or r.id.startswith("rel-adr-"):
+                db.delete(r)
+
+        for link in (adr.linked_elements or []):
+            rel_type = "InfluenceRelationship"
+            rel_id = f"rel-adr-{adr.id.replace('adr-', '')}-{link.element_id}"
+            rel_props = {
+                "adr_auto_sync": True,
+                "adr_id": adr.id,
+                "impact_type": link.impact_type
+            }
+            rel = ArchimateRelationship(
+                id=rel_id,
+                model_id=adr.model_id,
+                source_id=elem.id,
+                target_id=link.element_id,
+                type=rel_type,
+                name=f"ADR {link.impact_type}",
+                documentation=link.notes or f"ADR {adr.code} governance link ({link.impact_type})",
+                properties=rel_props
+            )
+            db.add(rel)
 
     @staticmethod
     def _sync_linked_elements(
@@ -282,6 +372,10 @@ class ADRService:
             if old_adr and old_adr.id != adr.id:
                 old_adr.status = "Superseded"
                 old_adr.superseded_by_id = adr.id
+                ADRService._sync_archimate_element_for_adr(db, old_adr)
+
+        # Synchronize 1:1 ArchimateElement and relationships
+        ADRService._sync_archimate_element_for_adr(db, adr)
 
         db.commit()
         db.refresh(adr)
@@ -342,6 +436,8 @@ class ADRService:
         if "linked_elements" in payload and payload["linked_elements"] is not None:
             ADRService._sync_linked_elements(db, adr, payload["linked_elements"])
 
+        ADRService._sync_archimate_element_for_adr(db, adr)
+
         db.commit()
         db.refresh(adr)
         return ADRService.serialize_adr(adr)
@@ -371,6 +467,8 @@ class ADRService:
                 raise HTTPException(status_code=400, detail="An ADR cannot supersede itself.")
             adr.superseded_by_id = superseded_by_id
 
+        ADRService._sync_archimate_element_for_adr(db, adr)
+
         db.commit()
         db.refresh(adr)
         return ADRService.serialize_adr(adr)
@@ -385,6 +483,13 @@ class ADRService:
         db.query(ArchitectureDecisionRecord).filter(
             ArchitectureDecisionRecord.superseded_by_id == adr.id
         ).update({"superseded_by_id": None}, synchronize_session=False)
+
+        # Also delete linked ArchimateElement
+        if adr.archimate_element_id:
+            elem = db.query(ArchimateElement).filter(ArchimateElement.id == adr.archimate_element_id).first()
+            if elem:
+                db.delete(elem)
+
         db.delete(adr)
         db.commit()
         return {"message": f"ADR {code} deleted successfully.", "id": adr_id}
@@ -660,5 +765,11 @@ def seed_sample_adrs(db: Session, model_id: str):
                 impact_type=imp_type,
                 notes=notes
             ))
+
+    db.flush()
+
+    # Synchronize Motivation Assessment elements and relationships for sample ADRs
+    for adr in [adr1, adr2, adr3, adr4]:
+        ADRService._sync_archimate_element_for_adr(db, adr)
 
     db.commit()

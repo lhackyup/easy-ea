@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
 import uuid
@@ -42,7 +42,10 @@ def get_derived_relationships(
     Computes derived relationships according to ArchiMate 3.2 §5.7 Derivation Rules.
     Determines transitive connections through intermediate elements based on weakest-link strength.
     """
-    elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
+    elements = db.query(ArchimateElement).options(
+        joinedload(ArchimateElement.apm_attributes),
+        joinedload(ArchimateElement.stereotype)
+    ).filter(ArchimateElement.model_id == model_id).all()
     relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
     return compute_archimate_derivation(elements, relationships, source_id, target_id)
 
@@ -55,7 +58,10 @@ def get_model_plateaus(
     """
     Returns architectural plateaus, migration work packages, and As-Is / To-Be horizons.
     """
-    elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
+    elements = db.query(ArchimateElement).options(
+        joinedload(ArchimateElement.apm_attributes),
+        joinedload(ArchimateElement.stereotype)
+    ).filter(ArchimateElement.model_id == model_id).all()
     relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
     return get_plateau_roadmap(elements, relationships)
 
@@ -124,7 +130,14 @@ def list_relationships(
         )
     if type:
         query = query.filter(ArchimateRelationship.type == type)
-    
+
+    # Eager load source, target, and package to eliminate 700+ N+1 queries
+    query = query.options(
+        joinedload(ArchimateRelationship.source_element),
+        joinedload(ArchimateRelationship.target_element),
+        joinedload(ArchimateRelationship.package)
+    )
+
     rels = query.all()
     results = []
     for r in rels:

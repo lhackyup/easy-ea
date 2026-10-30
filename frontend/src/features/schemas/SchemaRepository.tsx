@@ -118,8 +118,47 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
     }
   };
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  const refreshSchemas = async (silent = false) => {
+    if (!silent) setRefreshing(true);
+    try {
+      const sList = await api.getSchemas(modelId);
+      setSchemas(sList);
+      if (!silent) {
+        showToast(t.schemas.schemasRefreshed || 'Stato schemi aggiornato con successo.');
+      }
+    } catch (err: any) {
+      if (!silent) {
+        showToast(err.message || 'Errore durante l\'aggiornamento degli schemi', 'error');
+      }
+    } finally {
+      if (!silent) setRefreshing(false);
+    }
+  };
+
   useEffect(() => {
     loadData();
+  }, [modelId]);
+
+  // Auto-refresh schema states when returning to the browser tab or window (e.g. after Archi / Draw.io check-in)
+  useEffect(() => {
+    const handleFocus = () => {
+      refreshSchemas(true);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refreshSchemas(true);
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
   }, [modelId]);
 
   // Tree helper: build recursive hierarchy
@@ -633,6 +672,20 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <option value="available">🟢 Disponibili</option>
               <option value="checked_out">🔒 In Check-out</option>
             </select>
+
+            {/* Refresh Schemas Button */}
+            <button
+              type="button"
+              onClick={() => refreshSchemas(false)}
+              disabled={refreshing}
+              className={`px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/80 active:bg-slate-200 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer ${
+                refreshing ? 'opacity-70 cursor-not-allowed' : ''
+              }`}
+              title={t.schemas.refreshSchemasTooltip}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-slate-600 ${refreshing ? 'animate-spin text-indigo-600' : ''}`} />
+              <span className="hidden sm:inline">{t.schemas.refreshSchemasBtn}</span>
+            </button>
 
             {/* Tool-specific Plugin Button: Archi vs Draw.io */}
             {modelWorkspace?.modeling_tool === 'drawio' ? (

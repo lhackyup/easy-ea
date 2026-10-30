@@ -1,6 +1,6 @@
 import re
 from typing import Dict, List, Any, Optional
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.archimate import ArchimateElement, ApplicationBusinessAttributes, ModelWorkspace, ElementStereotype
 
 def calculate_time_quadrant(business_fit: int, technical_fit: int) -> str:
@@ -26,14 +26,20 @@ def parse_fit_score(val: Any, default: int = 3) -> int:
         return default
     if isinstance(val, (int, float)):
         return int(val)
-    m = re.search(r'\d+', str(val))
+    s = str(val).strip()
+    if s and s[0].isdigit():
+        return int(s[0])
+    m = re.search(r'\d+', s)
     return int(m.group(0)) if m else default
 
 class APMService:
     @staticmethod
     def get_portfolio_summary(db: Session, model_id: str) -> Dict[str, Any]:
         """Calculates executive APM metrics for a model workspace according to LeanIX & TOGAF standards."""
-        apps = db.query(ArchimateElement).filter(
+        apps = db.query(ArchimateElement).options(
+            joinedload(ArchimateElement.apm_attributes),
+            joinedload(ArchimateElement.stereotype)
+        ).filter(
             ArchimateElement.model_id == model_id,
             ArchimateElement.type == "ApplicationComponent"
         ).all()

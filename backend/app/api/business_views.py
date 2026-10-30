@@ -4,7 +4,7 @@ Provides endpoints to list and execute package-defined business views for active
 """
 from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
 
 from app.core.database import get_db
@@ -15,7 +15,8 @@ from app.models.archimate import (
     WorkspaceAttributePackage,
     PackageView,
     ElementStereotype,
-    ArchimateElement
+    ArchimateElement,
+    ArchimateRelationship
 )
 
 import uuid
@@ -36,9 +37,10 @@ class CustomViewPayload(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = "General"
-    view_type: str = "table" # "table" | "matrix" | "kpi_dashboard"
+    view_type: str = "table" # "table" | "matrix" | "kpi_dashboard" | "adr_manager"
     icon: Optional[str] = "Table"
     sort_order: Optional[int] = 0
+    target_hub: Optional[str] = "business" # "business" | "architecture" | "both"
     is_global: Optional[bool] = False
     is_active: Optional[bool] = False
     package_id: Optional[str] = None
@@ -54,6 +56,7 @@ class CustomViewUpdatePayload(BaseModel):
     view_type: Optional[str] = None
     icon: Optional[str] = None
     sort_order: Optional[int] = None
+    target_hub: Optional[str] = None
     is_global: Optional[bool] = None
     is_active: Optional[bool] = None
     package_id: Optional[str] = None
@@ -64,6 +67,29 @@ class CustomViewUpdatePayload(BaseModel):
 
 class ViewStatusPayload(BaseModel):
     is_active: bool
+
+
+class ViewTargetHubPayload(BaseModel):
+    target_hub: str # "business" | "architecture" | "both"
+
+
+def _flatten_string_list(val: Any) -> List[str]:
+    """Recursively flattens any nested list, tuple, or set of strings into a flat list of non-empty strings."""
+    if not val:
+        return []
+    if isinstance(val, str):
+        return [val] if val.strip() else []
+    res = []
+    if isinstance(val, (list, tuple, set)):
+        for item in val:
+            if isinstance(item, (list, tuple, set)):
+                res.extend(_flatten_string_list(item))
+            elif isinstance(item, str):
+                if item.strip():
+                    res.append(item.strip())
+            elif item is not None:
+                res.append(str(item))
+    return res
 
 
 def _get_active_package_ids(db: Session, model_id: str) -> List[str]:
@@ -87,8 +113,8 @@ def _build_match_filter(v: Any, id_to_stereo: dict, name_to_stereo: dict):
     filters = []
     target_ids = []
 
-    target_stereos = v.get("target_stereotypes") if isinstance(v, dict) else getattr(v, "target_stereotypes", None)
-    target_types = v.get("target_types") if isinstance(v, dict) else getattr(v, "target_types", None)
+    target_stereos = _flatten_string_list(v.get("target_stereotypes") if isinstance(v, dict) else getattr(v, "target_stereotypes", None))
+    target_types = _flatten_string_list(v.get("target_types") if isinstance(v, dict) else getattr(v, "target_types", None))
     config = v.get("config") if isinstance(v, dict) else getattr(v, "config", None)
     filter_config = (config or {}).get("filter_config") if isinstance(config, dict) else {}
 
@@ -104,13 +130,13 @@ def _build_match_filter(v: Any, id_to_stereo: dict, name_to_stereo: dict):
     if not target_types and isinstance(filter_config, dict) and filter_config.get("selectedType"):
         st = filter_config.get("selectedType")
         if st and str(st).lower() != "all":
-            target_types = [st]
+            target_types = _flatten_string_list([st])
 
     # Fallback to selectedStereotypeFilter in filter_config if target_stereos was not set
     if not target_stereos and isinstance(filter_config, dict) and filter_config.get("selectedStereotypeFilter"):
         sst = filter_config.get("selectedStereotypeFilter")
         if sst and str(sst).lower() != "all":
-            target_stereos = [sst]
+            target_stereos = _flatten_string_list([sst])
 
     for st_target in (target_stereos or []):
         if st_target in id_to_stereo:
@@ -247,7 +273,8 @@ def _apply_filter_config(
     rows: List[Dict[str, Any]],
     filter_config: Dict[str, Any],
     db: Session,
-    model_id: str
+    model_id: str,
+    connected_ids: Optional[set] = None
 ) -> List[Dict[str, Any]]:
     """Filters rows according to saved repository search filter rules."""
     if not filter_config:
@@ -255,17 +282,11 @@ def _apply_filter_config(
 
     # 1. Connected / Orphan relationship check
     rel_filter = filter_config.get("relationshipFilter")
-    connected_ids = set()
-    if rel_filter in ("orphan", "connected"):
-        from app.models.archimate import ArchimateRelationship
+    if rel_filter in ("orphan", "connected") and connected_ids is None:
         rels = db.query(ArchimateRelationship.source_id, ArchimateRelationship.target_id).filter(
             ArchimateRelationship.model_id == model_id
         ).all()
-        for s_id, t_id in rels:
-            if s_id:
-                connected_ids.add(s_id)
-            if t_id:
-                connected_ids.add(t_id)
+        connected_ids = {s for s, t in rels if s} | {t for s, t in rels if t}
 
     # 2. Text Search
     search_term = str(filter_config.get("search") or "").strip().lower()
@@ -448,25 +469,71 @@ def _build_element_row(el: ArchimateElement) -> Dict[str, Any]:
     return row
 
 
+class ModelViewsCache:
+    """Pre-loads workspace elements and relationships once with eager loading to compute view counts in memory."""
+    def __init__(self, db: Session, model_id: str, stereotypes: List[ElementStereotype]):
+        self.db = db
+        self.model_id = model_id
+        self.id_to_stereo = {s.id: s for s in stereotypes}
+        self.name_to_stereo = {s.name: s for s in stereotypes}
+
+        # Pre-load non-reference workspace elements with eager loaded 1:1 models
+        elements = db.query(ArchimateElement).options(
+            joinedload(ArchimateElement.stereotype),
+            joinedload(ArchimateElement.apm_attributes)
+        ).filter(
+            ArchimateElement.model_id == model_id,
+            ArchimateElement.is_reference == False
+        ).all()
+        self.cached_rows = [_build_element_row(el) for el in elements]
+
+        # Pre-load connected relationship IDs for fast orphan/connected checks
+        rels = db.query(ArchimateRelationship.source_id, ArchimateRelationship.target_id).filter(
+            ArchimateRelationship.model_id == model_id
+        ).all()
+        self.connected_ids = {s for s, t in rels if s} | {t for s, t in rels if t}
+        self._adr_count = None
+
+    def count_view(self, v: PackageView) -> int:
+        if getattr(v, "view_type", None) == "adr_manager":
+            if self._adr_count is None:
+                from app.models.archimate import ArchitectureDecisionRecord
+                self._adr_count = self.db.query(ArchitectureDecisionRecord).filter(
+                    ArchitectureDecisionRecord.model_id == self.model_id
+                ).count()
+            return self._adr_count
+
+        spec = _extract_spec(v)
+        target_stereos = set(_flatten_string_list(spec.get("target_stereotypes")))
+        target_types = set(_flatten_string_list(spec.get("target_types")))
+        config = spec.get("config") or {}
+        filter_config = config.get("filter_config") or {}
+
+        # Fast in-memory filter on stereotypes and types
+        rows = self.cached_rows
+        if target_stereos:
+            valid_ids = set()
+            for st in target_stereos:
+                if st in self.id_to_stereo:
+                    valid_ids.add(self.id_to_stereo[st].id)
+                elif st in self.name_to_stereo:
+                    valid_ids.add(self.name_to_stereo[st].id)
+                else:
+                    valid_ids.add(st)
+            rows = [r for r in rows if r.get("stereotype_id") in valid_ids or r.get("stereotype_name") in target_stereos]
+
+        if target_types:
+            rows = [r for r in rows if r.get("type") in target_types]
+
+        if filter_config:
+            rows = _apply_filter_config(rows, filter_config, self.db, self.model_id, connected_ids=self.connected_ids)
+
+        return len(rows)
+
+
 def _count_matching_elements(db: Session, model_id: str, v: PackageView, id_to_stereo: dict, name_to_stereo: dict) -> int:
-    spec = _extract_spec(v)
-    filter_config = (spec.get("config") or {}).get("filter_config")
-
-    match_query = db.query(ArchimateElement).filter(
-        ArchimateElement.model_id == model_id,
-        ArchimateElement.is_reference == False
-    )
-    match_filter = _build_match_filter(spec, id_to_stereo, name_to_stereo)
-    if match_filter is not None:
-        match_query = match_query.filter(match_filter)
-
-    if not filter_config:
-        return match_query.count()
-
-    elements = match_query.all()
-    rows = [_build_element_row(el) for el in elements]
-    filtered_rows = _apply_filter_config(rows, filter_config, db, model_id)
-    return len(filtered_rows)
+    cache = ModelViewsCache(db, model_id, list(id_to_stereo.values()))
+    return cache.count_view(v)
 
 
 @router.get("")
@@ -484,10 +551,9 @@ def list_package_views(
     if not model:
         raise HTTPException(status_code=404, detail="Workspace model non trovato")
 
-    # Pre-fetch stereotypes for matching
+    # Pre-fetch stereotypes and initialize high-performance matching cache
     stereotypes = db.query(ElementStereotype).all()
-    name_to_stereo = {s.name: s for s in stereotypes}
-    id_to_stereo = {s.id: s for s in stereotypes}
+    cache = ModelViewsCache(db, model_id, stereotypes)
 
     result_packages = []
 
@@ -501,7 +567,7 @@ def list_package_views(
     if custom_views:
         custom_views_data = []
         for v in custom_views:
-            count = _count_matching_elements(db, model_id, v, id_to_stereo, name_to_stereo)
+            count = cache.count_view(v)
             custom_views_data.append({
                 "id": v.id,
                 "view_key": v.view_key,
@@ -511,10 +577,11 @@ def list_package_views(
                 "view_type": v.view_type,
                 "icon": v.icon or "Table",
                 "sort_order": v.sort_order if v.sort_order is not None else 0,
+                "target_hub": getattr(v, "target_hub", None) or "business",
                 "is_global": v.is_global,
                 "author": v.author,
-                "target_stereotypes": v.target_stereotypes or [],
-                "target_types": v.target_types or [],
+                "target_stereotypes": _flatten_string_list(v.target_stereotypes),
+                "target_types": _flatten_string_list(v.target_types),
                 "config": v.config,
                 "matching_elements_count": count
             })
@@ -546,7 +613,7 @@ def list_package_views(
 
             pkg_views_data = []
             for v in views:
-                count = _count_matching_elements(db, model_id, v, id_to_stereo, name_to_stereo)
+                count = cache.count_view(v)
                 pkg_views_data.append({
                     "id": v.id,
                     "view_key": v.view_key,
@@ -556,6 +623,10 @@ def list_package_views(
                     "view_type": v.view_type,
                     "icon": v.icon or "Table",
                     "sort_order": v.sort_order if v.sort_order is not None else 0,
+                    "target_hub": getattr(v, "target_hub", None) or "business",
+                    "target_stereotypes": _flatten_string_list(v.target_stereotypes),
+                    "target_types": _flatten_string_list(v.target_types),
+                    "config": v.config,
                     "matching_elements_count": count
                 })
 
@@ -586,8 +657,7 @@ def list_custom_views(
         raise HTTPException(status_code=404, detail="Workspace model non trovato")
 
     stereotypes = db.query(ElementStereotype).all()
-    name_to_stereo = {s.name: s for s in stereotypes}
-    id_to_stereo = {s.id: s for s in stereotypes}
+    cache = ModelViewsCache(db, model_id, stereotypes)
 
     views = db.query(PackageView).filter(
         (PackageView.model_id == model_id) | (PackageView.is_global == True)
@@ -595,7 +665,7 @@ def list_custom_views(
 
     res = []
     for v in views:
-        count = _count_matching_elements(db, model_id, v, id_to_stereo, name_to_stereo)
+        count = cache.count_view(v)
         res.append({
             "id": v.id,
             "view_key": v.view_key,
@@ -605,6 +675,7 @@ def list_custom_views(
             "view_type": v.view_type,
             "icon": v.icon or "Table",
             "sort_order": v.sort_order or 0,
+            "target_hub": getattr(v, "target_hub", None) or "business",
             "is_global": v.is_global,
             "is_active": v.is_active if v.is_active is not None else True,
             "package_id": v.package_id,
@@ -651,6 +722,7 @@ def create_custom_view(
         view_type=payload.view_type or "table",
         icon=payload.icon or "Table",
         sort_order=payload.sort_order or 0,
+        target_hub=payload.target_hub or "business",
         target_stereotypes=payload.target_stereotypes or [],
         target_types=payload.target_types or [],
         config=payload.config or {}
@@ -667,6 +739,7 @@ def create_custom_view(
         "view_type": view.view_type,
         "icon": view.icon,
         "sort_order": view.sort_order,
+        "target_hub": getattr(view, "target_hub", None) or "business",
         "is_global": view.is_global,
         "is_active": view.is_active,
         "package_id": view.package_id,
@@ -702,6 +775,8 @@ def update_custom_view(
         view.icon = payload.icon or "Table"
     if payload.sort_order is not None:
         view.sort_order = payload.sort_order or 0
+    if payload.target_hub is not None:
+        view.target_hub = payload.target_hub
     if payload.is_global is not None:
         view.is_global = payload.is_global
     if payload.is_active is not None:
@@ -726,6 +801,7 @@ def update_custom_view(
         "view_type": view.view_type,
         "icon": view.icon,
         "sort_order": view.sort_order,
+        "target_hub": getattr(view, "target_hub", None) or "business",
         "is_global": view.is_global,
         "is_active": view.is_active,
         "package_id": view.package_id,
@@ -753,6 +829,34 @@ def toggle_custom_view_status(
     db.commit()
     db.refresh(view)
     return {"status": "ok", "id": view.id, "is_active": view.is_active}
+
+
+@router.patch("/{view_id}/target-hub")
+def update_view_target_hub(
+    view_id: str,
+    payload: ViewTargetHubPayload,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Update target_hub ('business' | 'architecture' | 'both') for any view (package-defined or custom).
+    Allows Enterprise Architects to configure whether a view appears in the Business Hub, Architecture Hub, or both.
+    """
+    target = (payload.target_hub or "").strip().lower()
+    if target not in ("business", "architecture", "both"):
+        raise HTTPException(
+            status_code=400,
+            detail="Valore target_hub non valido. Valori ammessi: 'business', 'architecture', 'both'."
+        )
+
+    view = db.query(PackageView).filter(PackageView.id == view_id).first()
+    if not view:
+        raise HTTPException(status_code=404, detail="Vista non trovata")
+
+    view.target_hub = target
+    db.commit()
+    db.refresh(view)
+    return {"status": "ok", "id": view.id, "target_hub": view.target_hub}
 
 
 @router.delete("/custom/{view_id}")
@@ -785,8 +889,8 @@ def _extract_spec(view_spec: Any) -> Dict[str, Any]:
             "category": view_spec.get("category") or "General",
             "view_type": view_spec.get("view_type") or "table",
             "icon": view_spec.get("icon") or "Table",
-            "target_stereotypes": view_spec.get("target_stereotypes") or [],
-            "target_types": view_spec.get("target_types") or [],
+            "target_stereotypes": _flatten_string_list(view_spec.get("target_stereotypes")),
+            "target_types": _flatten_string_list(view_spec.get("target_types")),
             "config": view_spec.get("config") or {}
         }
     else:
@@ -798,8 +902,8 @@ def _extract_spec(view_spec: Any) -> Dict[str, Any]:
             "category": getattr(view_spec, "category", None) or "General",
             "view_type": getattr(view_spec, "view_type", None) or "table",
             "icon": getattr(view_spec, "icon", None) or "Table",
-            "target_stereotypes": getattr(view_spec, "target_stereotypes", None) or [],
-            "target_types": getattr(view_spec, "target_types", None) or [],
+            "target_stereotypes": _flatten_string_list(getattr(view_spec, "target_stereotypes", None)),
+            "target_types": _flatten_string_list(getattr(view_spec, "target_types", None)),
             "config": getattr(view_spec, "config", None) or {}
         }
 
@@ -817,8 +921,11 @@ def _run_view_execution(
     name_to_stereo = {s.name: s for s in stereotypes}
     id_to_stereo = {s.id: s for s in stereotypes}
 
-    # Base query: non-reference elements belonging to this workspace
-    query = db.query(ArchimateElement).filter(
+    # Base query: non-reference elements belonging to this workspace with eager loaded relationships
+    query = db.query(ArchimateElement).options(
+        joinedload(ArchimateElement.stereotype),
+        joinedload(ArchimateElement.apm_attributes)
+    ).filter(
         ArchimateElement.model_id == model_id,
         ArchimateElement.is_reference == False
     )

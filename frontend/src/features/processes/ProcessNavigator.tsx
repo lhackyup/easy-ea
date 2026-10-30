@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BusinessProcessItem, ImpactSimulationResult, ArchitecturalRisksReport } from '../../types';
 import { api } from '../../lib/api';
 import {
@@ -91,6 +91,15 @@ export const ProcessNavigator: React.FC<ProcessNavigatorProps> = ({ modelId }) =
     }
   };
 
+  const filteredProcesses = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return processes;
+    return processes.filter((p) =>
+      p.name.toLowerCase().includes(q) ||
+      p.supporting_applications.some((a) => a.name.toLowerCase().includes(q))
+    );
+  }, [processes, search]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -101,11 +110,6 @@ export const ProcessNavigator: React.FC<ProcessNavigatorProps> = ({ modelId }) =
       </div>
     );
   }
-
-  const filteredProcesses = processes.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.supporting_applications.some((a) => a.name.toLowerCase().includes(search.toLowerCase()))
-  );
 
   return (
     <div className="space-y-6 pb-12">

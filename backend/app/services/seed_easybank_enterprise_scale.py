@@ -35,158 +35,158 @@ MODEL_ID = "sample-easybank-ea"
 NEW_BUSINESS_PROCESSES = [
     {
         "id": "proc-sepa-instant",
-        "name": "Elaborazione Bonifici Istantanei SEPA (TIPS / RT1)",
-        "documentation": "Regolamento ed esecuzione real-time 24/7 di bonifici istantanei europei tramite protocollo EPC SEPA Instant Credit Transfer.",
-        "properties": {"criticality": "Mission Critical", "owner": "Direzione Pagamenti & Regolamento Interbancario", "sla": "99.99%"}
+        "name": "SEPA Instant Credit Transfer Processing (TIPS / RT1)",
+        "documentation": "24/7 real-time settlement and execution of European instant credit transfers via the EPC SEPA Instant Credit Transfer scheme (TIPS / RT1).",
+        "properties": {"criticality": "Mission Critical", "owner": "Payments & Interbank Clearing Directorate", "sla": "99.99%"}
     },
     {
         "id": "proc-card-issuance",
-        "name": "Emissione e Attivazione Carte di Pagamento",
-        "documentation": "Gestione del ciclo di vita delle carte di debito e credito fisiche e virtuali, tokenizzazione Apple Pay / Google Wallet e spedizione PIN.",
+        "name": "Payment Card Issuance & Lifecycle Management",
+        "documentation": "Lifecycle management of physical and virtual debit and credit cards, Apple Pay / Google Wallet tokenization, and PIN dispatch.",
         "properties": {"criticality": "Business Critical", "owner": "Retail Cards & Acquiring Unit", "sla": "99.9%"}
     },
     {
         "id": "proc-mortgage-origination",
-        "name": "Istruttoria e Delibera Mutui Ipotecari Residenziali",
-        "documentation": "Valutazione del merito creditizio, calcolo LTV / DTI e delibera creditizia automatica e manuale per mutui acquisto prima casa.",
-        "properties": {"criticality": "Business Critical", "owner": "Credito ai Privati & Mortgage Division", "sla": "99.5%"}
+        "name": "Residential Mortgage Origination & Credit Underwriting",
+        "documentation": "Creditworthiness assessment, LTV / DTI calculation, and automated and manual credit committee approval for primary residence mortgages.",
+        "properties": {"criticality": "Business Critical", "owner": "Retail Lending & Mortgage Division", "sla": "99.5%"}
     },
     {
         "id": "proc-property-appraisal",
-        "name": "Perizia Immobiliare e Valutazione Garanzie",
-        "documentation": "Verifica conformità catastale, perizia tecnica asseverata dell'immobile a garanzia e calcolo valore di realizzo cauzionale.",
-        "properties": {"criticality": "Business Operational", "owner": "Ufficio Tecnico & Valutazione Garanzie", "sla": "99.0%"}
+        "name": "Real Estate Property Appraisal & Collateral Valuation",
+        "documentation": "Cadastral compliance verification, certified technical appraisal of collateral property, and liquidation value estimation.",
+        "properties": {"criticality": "Business Operational", "owner": "Technical Office & Collateral Valuation Unit", "sla": "99.0%"}
     },
     {
         "id": "proc-mortgage-disbursement",
-        "name": "Erogazione Fondi e Stipula Notarile Mutui",
-        "documentation": "Stipula atto notarile, iscrizione ipoteca di primo grado e svincolo saldo finanziamento sul conto del richiedente.",
+        "name": "Mortgage Loan Disbursement & Notarial Deed Execution",
+        "documentation": "Notarial deed execution, first-degree mortgage registration, and funds release to borrower checking account.",
         "properties": {"criticality": "Business Critical", "owner": "Mortgage Operations & Back Office", "sla": "99.5%"}
     },
     {
         "id": "proc-corporate-credit-line",
-        "name": "Apertura Linea di Credito Corporate (Fido di Cassa)",
-        "documentation": "Istruttoria affidamento per imprese corporate e PMI, analisi bilanci XBRL, centrale rischi e assegnazione rating creditizio.",
+        "name": "Corporate Credit Facility & Overdraft Origination",
+        "documentation": "Underwriting of credit lines for corporate and SME clients, XBRL financial statement analysis, Central Credit Register check, and internal rating assignment.",
         "properties": {"criticality": "Business Critical", "owner": "Corporate & Commercial Banking", "sla": "99.5%"}
     },
     {
         "id": "proc-invoice-factoring",
-        "name": "Anticipo Fatture e Cessione Crediti (Factoring)",
-        "documentation": "Acquisizione crediti commerciali, verifica plafond ceduto/cedente e anticipazione liquidità su fatture commerciali.",
+        "name": "Invoice Factoring & Working Capital Financing",
+        "documentation": "Commercial receivables assignment, debtor/assignor credit ceiling verification, and advance working capital funding against commercial invoices.",
         "properties": {"criticality": "Business Critical", "owner": "Trade & Working Capital Solutions", "sla": "99.0%"}
     },
     {
         "id": "proc-trade-finance-lc",
-        "name": "Emissione e Negoziazione Lettere di Credito Commerciali",
-        "documentation": "Apertura lettere di credito documentarie import/export, verifica documenti di spedizione e garanzie internazionali UCP 600.",
+        "name": "Commercial Letters of Credit Issuance & Negotiation",
+        "documentation": "Import/export documentary letter of credit issuance, shipping document verification, and UCP 600 international guarantee management.",
         "properties": {"criticality": "Business Critical", "owner": "International Trade Finance", "sla": "99.5%"}
     },
     {
         "id": "proc-cash-pooling",
-        "name": "Gestione Cash Pooling e Tesoreria di Gruppo",
-        "documentation": "Accentramento della liquidità multi-conto e multi-valuta (Zero-Balancing / Notional Pooling) per clienti corporate multinazionali.",
+        "name": "Group Cash Pooling & Liquidity Management",
+        "documentation": "Multi-account and multi-currency liquidity centralization (Zero-Balancing / Notional Pooling) for multinational corporate clients.",
         "properties": {"criticality": "Business Critical", "owner": "Treasury & Cash Management", "sla": "99.9%"}
     },
     {
         "id": "proc-swift-crossborder",
-        "name": "Regolamento Pagamenti Internazionali SWIFT / ISO 20022",
-        "documentation": "Instradamento messaggi MT103 / pacs.008 su rete SWIFT GPI con tracking dello stato transazione e verifica sanzioni internazionali.",
+        "name": "SWIFT & Cross-Border Payments Clearing (ISO 20022)",
+        "documentation": "Routing of MT103 / pacs.008 messages over SWIFT GPI network with transaction tracking and real-time international sanctions screening.",
         "properties": {"criticality": "Mission Critical", "owner": "Global Clearing & Forex Operations", "sla": "99.99%"}
     },
     {
         "id": "proc-sdd-clearing",
-        "name": "Elaborazione Incassi Commerciali SDD (Direct Debit)",
-        "documentation": "Gestione mandati di addebito diretto SEPA B2B e Core, lavorazione flussi massivi interbancari e gestione insoluti/storni.",
+        "name": "SEPA Direct Debit (SDD) Processing & Collection",
+        "documentation": "SEPA Direct Debit B2B and Core mandate management, bulk interbank clearing file processing, and chargeback/reversal handling.",
         "properties": {"criticality": "Business Critical", "owner": "Domestic Clearing & Settlement", "sla": "99.9%"}
     },
     {
         "id": "proc-mifid-profiling",
-        "name": "Profilazione Finanziaria Clienti MIFID II e Questionario ESG",
-        "documentation": "Raccolta e verifica periodica dell'adeguatezza, propensione al rischio, orizzonte temporale e preferenze di sostenibilità ESG.",
+        "name": "Client MiFID II Financial Profiling & ESG Questionnaire",
+        "documentation": "Periodic collection and assessment of investor suitability, risk tolerance, investment horizon, and ESG sustainability preferences.",
         "properties": {"criticality": "Business Critical", "owner": "Wealth Management Compliance", "sla": "99.5%"}
     },
     {
         "id": "proc-robo-advisory",
-        "name": "Consulenza Finanziaria Automatizzata e Ribilanciamento Portafogli",
-        "documentation": "Algoritmi di ottimizzazione portafoglio Markowitz, generazione proposte di investimento mirate e ribilanciamento automatico asset allocation.",
+        "name": "Automated Robo-Advisory & Portfolio Rebalancing",
+        "documentation": "Markowitz portfolio optimization algorithms, targeted investment proposal generation, and automated asset allocation rebalancing.",
         "properties": {"criticality": "Business Operational", "owner": "Digital Wealth & Asset Management", "sla": "99.5%"}
     },
     {
         "id": "proc-securities-trading",
-        "name": "Negoziazione e Trading Titoli, Obbligazioni ed ETF",
-        "documentation": "Ricezione ordini su mercati regolamentati (Borsa Italiana, Euronext, Xetra, NYSE), best execution e routing ordini DMA.",
+        "name": "Equities, Bonds & ETF Direct Market Trading",
+        "documentation": "Order reception on regulated markets (Borsa Italiana, Euronext, Xetra, NYSE), best execution compliance, and Direct Market Access (DMA) routing.",
         "properties": {"criticality": "Mission Critical", "owner": "Brokerage & Trading Operations", "sla": "99.99%"}
     },
     {
         "id": "proc-securities-custody",
-        "name": "Custodia Titoli, Regolamento e Corporate Actions",
-        "documentation": "Gestione deposito titoli, accredito dividendi, gestione stacchi cedole, assemblee societarie e regolamento Monte Titoli / Euroclear.",
+        "name": "Securities Custody, Clearing & Corporate Actions",
+        "documentation": "Securities custody account management, dividend crediting, coupon detachment, corporate actions processing, and Monte Titoli / Euroclear settlement.",
         "properties": {"criticality": "Business Critical", "owner": "Securities Settlement & Custody", "sla": "99.9%"}
     },
     {
         "id": "proc-pos-acquiring",
-        "name": "Elaborazione Transazioni POS ed E-commerce Acquiring",
-        "documentation": "Autorizzazione, cattura e regolamento transazioni carte merchant fisiche e digitali (Visa, Mastercard, PagoBANCOMAT).",
+        "name": "Merchant POS & E-Commerce Acquiring Processing",
+        "documentation": "Authorization, capture, and settlement of physical and digital merchant card transactions (Visa, Mastercard, PagoBANCOMAT).",
         "properties": {"criticality": "Mission Critical", "owner": "Merchant Acquiring & Digital Solutions", "sla": "99.99%"}
     },
     {
         "id": "proc-atm-cash-mgmt",
-        "name": "Gestione Ricarica e Riconciliazione Contante ATM / CSA",
-        "documentation": "Monitoraggio livelli di cassa circolante sportelli automatici, pianificazione viaggi portavalori (CIT) e quadratura contabile.",
+        "name": "ATM / CSA Cash Replenishment & Balance Reconciliation",
+        "documentation": "ATM vault cash inventory monitoring, Cash-in-Transit (CIT) route scheduling, and daily general ledger cash balancing.",
         "properties": {"criticality": "Business Operational", "owner": "Branch Operations & Cash Logistics", "sla": "99.0%"}
     },
     {
         "id": "proc-instant-personal-loan",
-        "name": "Concessione Prestito Personale Istantaneo Online",
-        "documentation": "Scoring creditizio istantaneo tramite PSD2 Open Banking, firma digitale e accredito immediato del prestito entro 3 minuti.",
+        "name": "Instant Digital Personal Loan Approval & Disbursement",
+        "documentation": "Instant credit scoring via PSD2 Open Banking data, certified digital signature, and immediate fund transfer within 3 minutes.",
         "properties": {"criticality": "Business Critical", "owner": "Consumer Finance & Digital Channels", "sla": "99.9%"}
     },
     {
         "id": "proc-aml-pep-screening",
-        "name": "Screening Antiriciclaggio AML, Liste Antiterrorismo e PEP",
-        "documentation": "Verifica nominativi su liste sanzioni internazionali OFAC / UE / UN, categorizzazione Persone Politicamente Esposte (PEP) e calcolo scoring di rischio riciclaggio.",
+        "name": "AML Screening, Counter-Terrorism & PEP Watchlist Surveillance",
+        "documentation": "Real-time name screening against OFAC / EU / UN sanctions watchlists, Politically Exposed Persons (PEP) identification, and AML risk score computation.",
         "properties": {"criticality": "Mission Critical", "owner": "Anti-Money Laundering & Sanctions Office", "sla": "99.99%"}
     },
     {
         "id": "proc-realtime-fraud-eval",
-        "name": "Valutazione e Blocco Frodi Transazionali Real-Time",
-        "documentation": "Analisi biometrica comportamentale, geolocalizzazione, anomalie di spesa e blocco preventivo pagamenti sospetti tramite machine learning.",
+        "name": "Real-Time Transactional Fraud Detection & Prevention",
+        "documentation": "Behavioral biometrics, IP geolocation, spending anomaly detection, and automated proactive blocking of suspicious transactions using machine learning.",
         "properties": {"criticality": "Mission Critical", "owner": "Fraud Prevention & Financial Cyber Crime", "sla": "99.99%"}
     },
     {
         "id": "proc-supervisory-reporting",
-        "name": "Segnalazioni Periodiche di Vigilanza Banca d'Italia (PUMA)",
-        "documentation": "Estrazione, validazione quadratura contabile e trasmissione flussi matrice segnaletica di vigilanza prudenziale PUMA2.",
+        "name": "Supervisory & Prudential Regulatory Reporting (PUMA / FINREP)",
+        "documentation": "Automated data extraction, accounting reconciliation, and submission of prudential reporting matrices (PUMA2, FINREP, COREP) to national and ECB supervisors.",
         "properties": {"criticality": "Business Critical", "owner": "Regulatory & Supervisory Reporting", "sla": "99.5%"}
     },
     {
         "id": "proc-basel-rwa-calc",
-        "name": "Calcolo RWA, Requisiti Patrimoniali e Stress Test Basilea IV",
-        "documentation": "Determinazione assorbimento patrimoniale per rischio di credito, mercato e operativo; calcolo indicatori CET1 ratio e Liquidity Coverage Ratio (LCR).",
+        "name": "Basel IV Capital Adequacy, RWA Calculation & Stress Testing",
+        "documentation": "Determination of Risk-Weighted Assets (RWA) for credit, market, and operational risk; calculation of CET1 ratio, Leverage Ratio, and Liquidity Coverage Ratio (LCR).",
         "properties": {"criticality": "Business Critical", "owner": "Enterprise Risk Management", "sla": "99.0%"}
     },
     {
         "id": "proc-npl-recovery",
-        "name": "Recupero Crediti Deteriorati e Workout Posizioni UTP / NPL",
-        "documentation": "Gestione piani di rientro transattivi, gestione crediti in contenzioso, cessione portafogli crediti non performanti a veicoli di cartolarizzazione.",
+        "name": "Non-Performing Loans (NPL/UTP) Recovery & Debt Workout",
+        "documentation": "Management of restructuring repayment plans, litigation claims, and portfolio sales of non-performing loans to securitization special purpose vehicles.",
         "properties": {"criticality": "Business Operational", "owner": "Special Credit & Debt Recovery Unit", "sla": "99.0%"}
     },
     {
         "id": "proc-general-ledger-close",
-        "name": "Chiusura Contabile Mensile e Riconciliazione Saldi GL",
-        "documentation": "Consolidamento scritture contabili sezionali, quadratura conti intercompany, riconciliazione conti transitori e chiusura bilancio gestionale.",
-        "properties": {"criticality": "Business Critical", "owner": "Amministrazione, Bilancio e Fiscale", "sla": "99.5%"}
+        "name": "Monthly General Ledger Closing & Balance Sheet Reconciliation",
+        "documentation": "Sub-ledger consolidation, intercompany account balancing, suspense account clearance, and management financial statement close.",
+        "properties": {"criticality": "Business Critical", "owner": "Finance, Accounting & Tax Office", "sla": "99.5%"}
     },
     {
         "id": "proc-electronic-invoicing",
-        "name": "Gestione Ciclo Passivo e Fatturazione Elettronica SDI",
-        "documentation": "Ricezione fatture elettroniche formato XML da Sistema di Interscambio (SDI), abbinamento ordini d'acquisto, approvazione e pagamento fornitore.",
+        "name": "Accounts Payable Processing & E-Invoicing (SDI)",
+        "documentation": "Automated XML electronic invoice reception via SDI exchange hub, 3-way purchase order matching, approval workflows, and vendor disbursements.",
         "properties": {"criticality": "Business Operational", "owner": "Procurement & Accounts Payable", "sla": "99.0%"}
     },
     {
         "id": "proc-digital-identity-spid",
-        "name": "Autenticazione Forte, Firma Digitale e Verifica SPID/CIE",
-        "documentation": "Verifica identità digitale SPID livello 2/3, autenticazione biometrica su app mobile e firma digitale grafometrica/remota certificata.",
+        "name": "Strong Authentication, Digital Signature & SPID/eID Verification",
+        "documentation": "National digital identity verification (SPID Level 2/3 / CIE / eID), mobile biometric authentication, and certified remote digital signature.",
         "properties": {"criticality": "Mission Critical", "owner": "Digital Identity & Trust Services", "sla": "99.99%"}
     }
 ]
@@ -205,7 +205,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-7010 Capital Markets",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Public Cloud",
@@ -222,8 +222,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-1030 Retail Lending",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "4 - Perfect",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Public Cloud",
         "apm_annual_cost": 420000,
@@ -239,7 +239,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-5010 Digital Payments",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "SaaS",
@@ -256,8 +256,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-2040 Risk & Fraud Prevention",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "4 - Perfect",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "SaaS",
         "apm_annual_cost": 340000,
@@ -273,8 +273,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-5010 Digital Payments",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "3 - Appropriate",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "On-Premise",
         "apm_annual_cost": 410000,
@@ -290,8 +290,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-2010 Finance & Accounting",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
-        "apm_technical_fit": "2 - Insufficient (Legacy On-Prem)",
+        "apm_functional_fit": "3 - Appropriate",
+        "apm_technical_fit": "2 - Insufficient (Legacy)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "On-Premise",
         "apm_annual_cost": 290000,
@@ -307,7 +307,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-3020 Enterprise Architecture & Data",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Public Cloud",
@@ -324,7 +324,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-1020 Retail & Channels",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Public Cloud",
@@ -341,7 +341,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-3010 Core Platforms",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Operational",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "SaaS",
@@ -358,8 +358,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-2040 Risk & Fraud Prevention",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "4 - Perfect",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Private Cloud",
         "apm_annual_cost": 460000,
@@ -375,8 +375,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-7010 Capital Markets",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "4 - Perfect",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "SaaS",
         "apm_annual_cost": 310000,
@@ -392,8 +392,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-7020 Wealth Management",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "4 - Perfect",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Private Cloud",
         "apm_annual_cost": 720000,
@@ -409,8 +409,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-3010 Core Platforms",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
-        "apm_technical_fit": "2 - Insufficient (Architettura Monolitica)",
+        "apm_functional_fit": "3 - Appropriate",
+        "apm_technical_fit": "2 - Insufficient (Monolith)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "On-Premise",
         "apm_annual_cost": 580000,
@@ -426,8 +426,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-7020 Wealth Management",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "4 - Perfect",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "Private Cloud",
         "apm_annual_cost": 410000,
@@ -443,7 +443,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-4010 Corporate Operations",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "Public Cloud",
@@ -460,7 +460,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-1020 Retail & Channels",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Operational",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
+        "apm_functional_fit": "3 - Appropriate",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "SaaS",
@@ -477,7 +477,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-4010 Corporate Operations",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Operational",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
+        "apm_functional_fit": "3 - Appropriate",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "SaaS",
@@ -494,7 +494,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-4050 Back Office Ops",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "SaaS",
@@ -511,8 +511,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-5010 Digital Payments",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
-        "apm_technical_fit": "2 - Insufficient (Legacy Architecture)",
+        "apm_functional_fit": "3 - Appropriate",
+        "apm_technical_fit": "2 - Insufficient (Legacy)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "On-Premise",
         "apm_annual_cost": 275000,
@@ -528,7 +528,7 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-1030 Retail Lending",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Mission Critical",
-        "apm_functional_fit": "4 - Perfect (Eccellente)",
+        "apm_functional_fit": "4 - Perfect",
         "apm_technical_fit": "4 - Perfect (Cloud Native)",
         "apm_time_quadrant_override": "Invest",
         "apm_hosting_type": "SaaS",
@@ -545,8 +545,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-2010 Finance & Accounting",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
-        "apm_technical_fit": "3 - Appropriate (Stabile/Standard)",
+        "apm_functional_fit": "3 - Appropriate",
+        "apm_technical_fit": "3 - Appropriate (Standard)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "Private Cloud",
         "apm_annual_cost": 195000,
@@ -562,8 +562,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-4050 Back Office Ops",
         "apm_lifecycle_status": "Phase Out",
         "apm_business_criticality": "Business Operational",
-        "apm_functional_fit": "2 - Insufficient (Lacunosa)",
-        "apm_technical_fit": "1 - Unreasonable (Obsoleta)",
+        "apm_functional_fit": "2 - Insufficient",
+        "apm_technical_fit": "1 - Unreasonable (Obsolete)",
         "apm_time_quadrant_override": "Migrate",
         "apm_hosting_type": "On-Premise",
         "apm_annual_cost": 110000,
@@ -579,8 +579,8 @@ NEW_BUSINESS_APPLICATIONS = [
         "apm_cost_center": "CC-2010 Finance & Accounting",
         "apm_lifecycle_status": "Live",
         "apm_business_criticality": "Business Critical",
-        "apm_functional_fit": "3 - Appropriate (Adeguata)",
-        "apm_technical_fit": "2 - Insufficient (Legacy On-Prem)",
+        "apm_functional_fit": "3 - Appropriate",
+        "apm_technical_fit": "2 - Insufficient (Legacy)",
         "apm_time_quadrant_override": "Tolerate",
         "apm_hosting_type": "On-Premise",
         "apm_annual_cost": 315000,
@@ -685,11 +685,11 @@ def seed_enterprise_scale(db: Session):
     comp_rels_created = 0
 
     sub_roles = [
-        ("ui", "Web & Mobile UI Frontend", "Interfaccia utente grafica reattiva per canali web, mobile e postazioni operatore di filiale."),
-        ("gw", "API Gateway & BFF Service", "Gateway applicativo REST/GraphQL per routing richieste, validazione token JWT e rate limiting."),
-        ("core", "Core Domain Logic Engine", "Motore di business logic, elaborazione regole di dominio, calcolo tariffe e validazione flussi."),
-        ("broker", "Integration & Event Broker", "Connettore eventi streaming Kafka, adattatore code MQ e integrazione batch verso sistemi esterni."),
-        ("data", "Data Access & Persistence Layer", "Microservizio di persistenza transazionale, accesso RDBMS/NoSQL e gestione cache distribuita.")
+        ("ui", "Web & Mobile UI Frontend", "Responsive graphical user interface for web, mobile, and branch workstation channels."),
+        ("gw", "API Gateway & BFF Service", "REST/GraphQL application gateway for request routing, JWT token validation, and rate limiting."),
+        ("core", "Core Domain Logic Engine", "Business logic engine, domain rule execution, fee calculation, and workflow validation."),
+        ("broker", "Integration & Event Broker", "Kafka event streaming connector, MQ queue adapter, and batch integration to external systems."),
+        ("data", "Data Access & Persistence Layer", "Transactional persistence microservice, RDBMS/NoSQL access, and distributed cache management.")
     ]
 
     all_internal_comp_ids: List[str] = []
@@ -714,7 +714,7 @@ def seed_enterprise_scale(db: Session):
                     name=f"{app_name} [{role_label}]",
                     type="ApplicationComponent",
                     layer="Application",
-                    documentation=f"{role_label} dedicato per l'applicazione {app_name}. {role_doc}",
+                    documentation=f"Dedicated {role_label} for {app_name}. {role_doc}",
                     properties={
                         "parent_application_id": app_id,
                         "parent_application_name": app_name,
@@ -743,7 +743,7 @@ def seed_enterprise_scale(db: Session):
                     target_id=comp_id,
                     type="CompositionRelationship",
                     name=f"Composes {role_label}",
-                    documentation=f"Relazione strutturale di composizione tra l'applicazione {app_name} e il suo modulo {role_label}."
+                    documentation=f"Structural composition relationship: {app_name} composes its {role_label} component."
                 )
                 db.add(rel)
                 comp_rels_created += 1
@@ -1108,7 +1108,7 @@ def seed_enterprise_scale(db: Session):
                     target_id=proc_id,
                     type="ServingRelationship",
                     name="Services Business Process",
-                    documentation=f"L'applicazione {app_id} supporta direttamente l'operatività del processo di business {proc_id}."
+                    documentation=f"Application {app_id} directly supports and realizes business process {proc_id}."
                 )
                 db.add(rel)
                 rels_created += 1
@@ -1189,7 +1189,7 @@ def seed_enterprise_scale(db: Session):
                 target_id=tgt_id,
                 type=rel_type,
                 name=rel_name,
-                documentation=f"Relazione operativa tra componenti: {rel_name}"
+                documentation=f"Operational component interaction flow: {rel_name}"
             )
             db.add(rel)
             rels_created += 1
@@ -1217,7 +1217,7 @@ def seed_enterprise_scale(db: Session):
                 target_id=data_comp_id,
                 type="AssignmentRelationship",
                 name="Hosts Persistence Layer",
-                documentation=f"Il software di sistema {db_sys.name} ospita e persiste i dati del componente {data_comp_id}."
+                documentation=f"System software {db_sys.name} hosts and persists transactional data for component {data_comp_id}."
             ))
             rels_created += 1
 
@@ -1232,7 +1232,7 @@ def seed_enterprise_scale(db: Session):
                 target_id=core_comp_id,
                 type="AssignmentRelationship",
                 name="Executes Core Logic",
-                documentation=f"Il nodo di calcolo {node_sys.name} esegue il container/processo di {core_comp_id}."
+                documentation=f"Compute node {node_sys.name} executes container workload for {core_comp_id}."
             ))
             rels_created += 1
 
@@ -1248,7 +1248,7 @@ def seed_enterprise_scale(db: Session):
                     target_id=gw_comp_id,
                     type="ServingRelationship",
                     name="Cryptographic PIN & Key Protection",
-                    documentation=f"Il modulo crittografico {hsm_dev.name} fornisce servizi hardware di cifratura delle chiavi a {gw_comp_id}."
+                    documentation=f"Hardware Security Module {hsm_dev.name} provides dedicated cryptographic key protection for {gw_comp_id}."
                 ))
                 rels_created += 1
 

@@ -11,7 +11,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { api } from '../../lib/api';
 import { DiagramViewDetail } from '../../types';
-import { Layers, Box, Info, Edit3, PlusCircle, Palette, Sparkles, Filter, Focus, X } from 'lucide-react';
+import { Layers, Box, Info, Edit3, PlusCircle, Palette, Sparkles, Filter, Focus, X, Download } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { DrawioEditorModal } from './DrawioEditorModal';
 import {
@@ -445,14 +445,44 @@ export const DiagramViewer: React.FC<DiagramViewerProps> = ({ modelId }) => {
           </button>
 
           {currentView && (
-            <button
-              onClick={handleOpenDrawioEdit}
-              className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm hover:shadow-indigo-600/30 cursor-pointer"
-              title={t.schemas.editInDrawioTooltip}
-            >
-              <Palette className="w-4 h-4" />
-              <span>{t.schemas.editInDrawio}</span>
-            </button>
+            <>
+              <button
+                onClick={async () => {
+                  try {
+                    await api.downloadViewArchimate(currentView.id, `${currentView.name.replace(/\s+/g, '_')}.archimate`);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 rounded-xl text-xs font-bold transition border border-indigo-200 cursor-pointer"
+                title="Esporta questa vista nel formato nativo Archi (.archimate)"
+              >
+                <Layers className="w-4 h-4 text-indigo-600" />
+                <span>.archimate</span>
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await api.downloadViewExchangeXml(currentView.id, `${currentView.name.replace(/\s+/g, '_')}_exchange.xml`);
+                  } catch (err) {
+                    console.error(err);
+                  }
+                }}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 rounded-xl text-xs font-bold transition border border-emerald-200 cursor-pointer"
+                title="Esporta questa vista in formato The Open Group ArchiMate Exchange XML (.xml)"
+              >
+                <Download className="w-4 h-4 text-emerald-600" />
+                <span>Esporta XML</span>
+              </button>
+              <button
+                onClick={handleOpenDrawioEdit}
+                className="flex items-center space-x-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition shadow-sm hover:shadow-indigo-600/30 cursor-pointer"
+                title={t.schemas.editInDrawioTooltip}
+              >
+                <Palette className="w-4 h-4" />
+                <span>{t.schemas.editInDrawio}</span>
+              </button>
+            </>
           )}
         </div>
       </div>

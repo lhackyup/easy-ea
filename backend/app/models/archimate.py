@@ -393,6 +393,7 @@ class PackageView(Base):
     icon = Column(String(32), nullable=True, default="Table")
     target_stereotypes = Column(JSON, default=list) # List of stereotype keys/names
     target_types = Column(JSON, default=list) # List of base ArchiMate element types e.g. ["ApplicationComponent"]
+    target_hub = Column(String(32), nullable=False, default="business", server_default="business") # "business" | "architecture" | "both"
     config = Column(JSON, nullable=False, default=dict) # Columns, filters, metrics, charts definition
     sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=utc_now)
@@ -420,6 +421,7 @@ class ArchitectureDecisionRecord(Base):
     deciders = Column(String(255), nullable=True)
     author_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     author_name = Column(String(255), nullable=True, default="Enterprise Architect")
+    archimate_element_id = Column(String, ForeignKey("archimate_elements.id", ondelete="SET NULL"), nullable=True, index=True)
     superseded_by_id = Column(String, ForeignKey("architecture_decision_records.id", ondelete="SET NULL"), nullable=True, index=True)
     decided_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utc_now)
@@ -427,6 +429,7 @@ class ArchitectureDecisionRecord(Base):
 
     workspace = relationship("ModelWorkspace", back_populates="adrs")
     author = relationship("User", foreign_keys=[author_id])
+    archimate_element = relationship("ArchimateElement", foreign_keys=[archimate_element_id])
     superseded_by = relationship("ArchitectureDecisionRecord", remote_side=[id], backref="supersedes_list")
     linked_elements = relationship("ADRLinkedElement", back_populates="adr", cascade="all, delete-orphan")
 

@@ -47,7 +47,9 @@ import {
   Building2,
   Workflow,
   Sparkles,
-  Database
+  Database,
+  ShieldCheck,
+  CheckCircle2
 } from 'lucide-react';
 
 interface FrameworkInsightsProps {
@@ -79,6 +81,15 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
   const [facetFilters, setFacetFilters] = useState<Record<string, string>>({});
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+
+  // Pagination for Views
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(50);
+
+  // Reset page when view or filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedView?.id, searchQuery, facetFilters, sortField, sortDir]);
 
   // Matrix View Mode (Matrice 2x2 a Bolle vs Quadranti vs Tabella vs Pivot 2D)
   const [matrixViewMode, setMatrixViewMode] = useState<'bubble' | 'cards' | 'table' | 'pivot'>('bubble');
@@ -117,6 +128,20 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
     }
     return `${num} €`;
   };
+
+  const totalPages = useMemo(() => {
+    if (!viewData?.rows) return 1;
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(viewData.rows.length / pageSize));
+  }, [viewData?.rows, pageSize]);
+
+  const paginatedRows = useMemo(() => {
+    if (!viewData?.rows) return [];
+    if (pageSize === 'all') return viewData.rows;
+    const page = Math.min(Math.max(1, currentPage), totalPages);
+    const start = (page - 1) * pageSize;
+    return viewData.rows.slice(start, start + pageSize);
+  }, [viewData?.rows, currentPage, pageSize, totalPages]);
 
   // Calcolo posizioni cartesiane X (Technical Fit), Y (Business Fit) e raggio (TCO) per Scatter Bubble Chart
   const bubbleApps = useMemo(() => {
@@ -554,8 +579,10 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
     const processedAttrNames = new Set<string>();
 
     if (isEasyApp) {
-      // Reorganize strictly into "Attributi Generici" and "Package APM"
       const genericAttrs: CustomAttributeDefinition[] = [];
+      const apmAttrs: CustomAttributeDefinition[] = [];
+      const resilienceAttrs: CustomAttributeDefinition[] = [];
+      const otherPackageAttrs: Record<string, CustomAttributeDefinition[]> = {};
 
       // 1. Standard / core attributes of ApplicationComponent
       const standardAttrs = typeInfo?.standard_attributes || [
@@ -579,15 +606,46 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
         });
       });
 
-      // 2. Custom attributes: non-package attributes go to generic, APM attributes go to Package APM
-      const apmAttrs: CustomAttributeDefinition[] = [];
+      // 2. Custom & Package attributes: split APM, Resilience, and Generic
       (typeInfo?.custom_attributes || []).forEach((attr) => {
         processedAttrNames.add(attr.name);
-        const isApm = attr.is_package || attr.package_code === 'APM' || attr.name.startsWith('apm_');
-        if (isApm) {
+        const pkgCode = (attr.package_code || '').toUpperCase();
+        const pkgId = (attr as any).package_id || '';
+        const name = attr.name || '';
+        const isResilience =
+          pkgCode === 'RESILIENCE' ||
+          pkgId === 'pkg-resilience' ||
+          name.startsWith('app_rto') ||
+          name.startsWith('app_rpo') ||
+          name.startsWith('dr_') ||
+          name.startsWith('app_sla') ||
+          name.startsWith('infra_') ||
+          name.startsWith('target_rto') ||
+          name.startsWith('target_rpo') ||
+          name.startsWith('target_sla') ||
+          name.startsWith('resilience_') ||
+          name.startsWith('dora_');
+
+        const isApm =
+          !isResilience &&
+          (pkgCode === 'APM' || pkgId === 'pkg-apm' || name.startsWith('apm_'));
+
+        if (isResilience) {
+          resilienceAttrs.push({
+            ...attr,
+            section: 'Package Resilience'
+          });
+        } else if (isApm) {
           apmAttrs.push({
             ...attr,
             section: 'Package APM'
+          });
+        } else if (attr.is_package && attr.package_code) {
+          const sec = `Package ${pkgCode}`;
+          if (!otherPackageAttrs[sec]) otherPackageAttrs[sec] = [];
+          otherPackageAttrs[sec].push({
+            ...attr,
+            section: sec
           });
         } else {
           genericAttrs.push({
@@ -597,7 +655,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
         }
       });
 
-      // 3. Any extra properties in elementDetail.properties
+      // 3. Extra properties in elementDetail.properties
       if (elementDetail.properties) {
         Object.entries(elementDetail.properties).forEach(([k, v]) => {
           if (!processedAttrNames.has(k)) {
@@ -605,7 +663,20 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
             const matchedCol = viewData?.columns?.find((c) => c.field === k);
             const rawLabel = matchedCol?.label || k.replace(/^([a-z0-9]+)_/, '').replace(/_/g, ' ');
             const formattedLabel = rawLabel.charAt(0).toUpperCase() + rawLabel.slice(1);
-            const isApm = k.startsWith('apm_');
+            const isResilience =
+              k.startsWith('app_rto') ||
+              k.startsWith('app_rpo') ||
+              k.startsWith('dr_') ||
+              k.startsWith('app_sla') ||
+              k.startsWith('infra_') ||
+              k.startsWith('target_rto') ||
+              k.startsWith('target_rpo') ||
+              k.startsWith('target_sla') ||
+              k.startsWith('resilience_') ||
+              k.startsWith('dora_');
+            const isApm = !isResilience && k.startsWith('apm_');
+
+            const targetSection = isResilience ? 'Package Resilience' : isApm ? 'Package APM' : 'Attributi Generici';
             const extraAttr: CustomAttributeDefinition = {
               id: k,
               name: k,
@@ -614,9 +685,11 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
               layer: elementDetail.layer,
               data_type: typeof v === 'boolean' ? 'boolean' : typeof v === 'number' ? 'number' : 'string',
               is_required: false,
-              section: isApm ? 'Package APM' : 'Attributi Generici'
+              section: targetSection
             };
-            if (isApm) {
+            if (isResilience) {
+              resilienceAttrs.push(extraAttr);
+            } else if (isApm) {
               apmAttrs.push(extraAttr);
             } else {
               genericAttrs.push(extraAttr);
@@ -625,12 +698,29 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
         });
       }
 
-      sectionsMap['Attributi Generici'] = genericAttrs;
-      sectionsMap['Package APM'] = apmAttrs;
+      const activeSections: string[] = [];
+      if (genericAttrs.length > 0) {
+        sectionsMap['Attributi Generici'] = genericAttrs;
+        activeSections.push('Attributi Generici');
+      }
+      if (apmAttrs.length > 0) {
+        sectionsMap['Package APM'] = apmAttrs;
+        activeSections.push('Package APM');
+      }
+      if (resilienceAttrs.length > 0) {
+        sectionsMap['Package Resilience'] = resilienceAttrs;
+        activeSections.push('Package Resilience');
+      }
+      Object.keys(otherPackageAttrs).forEach((sec) => {
+        if (otherPackageAttrs[sec].length > 0) {
+          sectionsMap[sec] = otherPackageAttrs[sec];
+          activeSections.push(sec);
+        }
+      });
 
       return {
         sections: sectionsMap,
-        allSectionsList: ['Attributi Generici', 'Package APM']
+        allSectionsList: activeSections
       };
     }
 
@@ -1386,15 +1476,47 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                   </button>
                 </div>
               ) : !viewData || !viewData.rows || viewData.rows.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm space-y-2">
-                  <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                    <TableIcon className="w-5 h-5" />
+                selectedView?.view_key === 'archimate_undocumented_audit' ? (
+                  <div className="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-12 text-center shadow-xs space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto text-emerald-600">
+                      <ShieldCheck className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-base font-bold text-emerald-950">{t.insights.noUndocumentedElementsTitle}</h4>
+                    <p className="text-xs text-emerald-700 max-w-md mx-auto">
+                      {t.insights.noUndocumentedElementsDesc}
+                    </p>
                   </div>
-                  <h4 className="text-sm font-bold text-slate-800">{t.insights.noMatchingElements}</h4>
-                  <p className="text-xs text-slate-500 max-w-md mx-auto">
-                    {t.insights.noMatchingElementsHint}
-                  </p>
-                </div>
+                ) : selectedView?.view_key === 'archimate_orphan_audit' ? (
+                  <div className="bg-emerald-50/70 rounded-2xl border border-emerald-200 p-12 text-center shadow-xs space-y-2">
+                    <div className="w-12 h-12 rounded-full bg-emerald-100 flex items-center justify-center mx-auto text-emerald-600">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <h4 className="text-base font-bold text-emerald-950">{t.insights.noOrphanElementsTitle}</h4>
+                    <p className="text-xs text-emerald-700 max-w-md mx-auto">
+                      {t.insights.noOrphanElementsDesc}
+                    </p>
+                  </div>
+                ) : selectedView?.target_stereotypes && selectedView.target_stereotypes.length > 0 ? (
+                  <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm space-y-2">
+                    <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center mx-auto text-amber-500">
+                      <Tag className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-800">{t.insights.noMatchingElements}</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {t.insights.noMatchingElementsHint}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="bg-white rounded-2xl border border-slate-200/80 p-12 text-center shadow-sm space-y-2">
+                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                      <TableIcon className="w-5 h-5" />
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-800">{t.insights.noFilteredElementsTitle}</h4>
+                    <p className="text-xs text-slate-500 max-w-md mx-auto">
+                      {t.insights.noFilteredElementsDesc}
+                    </p>
+                  </div>
+                )
               ) : (
                 <div className="space-y-4">
                   {/* LIFECYCLE ROADMAP PIPELINE OVERVIEW (VISTA A) */}
@@ -2189,7 +2311,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                            {viewData.rows?.map((row: any) => (
+                            {paginatedRows?.map((row: any) => (
                               <tr
                                 key={row.id}
                                 onClick={() => handleOpenElementDetail(row.id)}
@@ -2229,6 +2351,70 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                           </tbody>
                         </table>
                       </div>
+
+                      {/* KPI Table Footer & Pagination */}
+                      <div className="px-4 py-3 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-semibold text-slate-500">
+                        <div className="flex items-center gap-3">
+                          <span>
+                            {interpolate(t.insights.totalRecords, { count: viewData.total ?? viewData.rows?.length ?? 0 })}
+                          </span>
+                          {hasActiveFilters && (
+                            <span className="text-[11px] text-indigo-600 font-bold">
+                              (Filtri runtime applicati)
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-slate-600">Per pagina:</span>
+                            <select
+                              value={pageSize}
+                              onChange={(e) => {
+                                const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                                setPageSize(val);
+                                setCurrentPage(1);
+                              }}
+                              className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                            >
+                              <option value={25}>25</option>
+                              <option value={50}>50</option>
+                              <option value={100}>100</option>
+                              <option value="all">Tutti ({viewData.rows?.length || 0})</option>
+                            </select>
+                          </div>
+
+                          {pageSize !== 'all' && totalPages > 1 && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-semibold text-slate-600 mr-1">
+                                {Math.min((currentPage - 1) * (pageSize as number) + 1, viewData.rows?.length || 0)}-
+                                {Math.min(currentPage * (pageSize as number), viewData.rows?.length || 0)} di {viewData.rows?.length || 0}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                                disabled={currentPage === 1}
+                                className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs"
+                                title="Pagina precedente"
+                              >
+                                <ChevronLeft className="w-3.5 h-3.5" />
+                              </button>
+                              <span className="font-mono text-xs font-bold text-slate-700 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md shadow-2xs">
+                                {currentPage} / {totalPages}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                                disabled={currentPage === totalPages}
+                                className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs"
+                                title="Pagina successiva"
+                              >
+                                <ChevronRight className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2267,7 +2453,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 text-xs text-slate-700">
-                        {viewData.rows.map((row: any, idx: number) => (
+                        {paginatedRows.map((row: any, idx: number) => (
                           <tr
                             key={row.id || idx}
                             onClick={() => handleOpenElementDetail(row.id)}
@@ -2410,16 +2596,68 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                     </table>
                   </div>
 
-                  {/* Table Footer */}
-                  <div className="px-4 py-3 bg-slate-50 border-t border-slate-200/80 flex items-center justify-between text-xs font-semibold text-slate-500">
-                    <span>
-                      {interpolate(t.insights.totalRecords, { count: viewData.total ?? viewData.rows?.length ?? 0 })}
-                    </span>
-                    {hasActiveFilters && (
-                      <span className="text-[11px] text-indigo-600 font-bold">
-                        (Filtri runtime applicati)
+                  {/* Table Footer & Pagination */}
+                  <div className="px-4 py-3 bg-slate-50 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs font-semibold text-slate-500">
+                    <div className="flex items-center gap-3">
+                      <span>
+                        {interpolate(t.insights.totalRecords, { count: viewData.total ?? viewData.rows?.length ?? 0 })}
                       </span>
-                    )}
+                      {hasActiveFilters && (
+                        <span className="text-[11px] text-indigo-600 font-bold">
+                          (Filtri runtime applicati)
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-semibold text-slate-600">Per pagina:</span>
+                        <select
+                          value={pageSize}
+                          onChange={(e) => {
+                            const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                            setPageSize(val);
+                            setCurrentPage(1);
+                          }}
+                          className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-indigo-500 cursor-pointer"
+                        >
+                          <option value={25}>25</option>
+                          <option value={50}>50</option>
+                          <option value={100}>100</option>
+                          <option value="all">Tutti ({viewData.rows?.length || 0})</option>
+                        </select>
+                      </div>
+
+                      {pageSize !== 'all' && totalPages > 1 && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-semibold text-slate-600 mr-1">
+                            {Math.min((currentPage - 1) * (pageSize as number) + 1, viewData.rows.length)}-
+                            {Math.min(currentPage * (pageSize as number), viewData.rows.length)} di {viewData.rows.length}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                            disabled={currentPage === 1}
+                            className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs"
+                            title="Pagina precedente"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5" />
+                          </button>
+                          <span className="font-mono text-xs font-bold text-slate-700 px-1.5 py-0.5 bg-white border border-slate-200 rounded-md shadow-2xs">
+                            {currentPage} / {totalPages}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                            disabled={currentPage === totalPages}
+                            className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition shadow-2xs"
+                            title="Pagina successiva"
+                          >
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

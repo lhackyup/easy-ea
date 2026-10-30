@@ -39,6 +39,7 @@ import {
   ListFilter,
   HelpCircle,
   Sparkles,
+  ChevronLeft,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -47,6 +48,7 @@ import {
   GitBranch,
   ArrowUpDown,
   RotateCcw,
+  FileCode,
   BookmarkPlus,
   BookmarkCheck,
   Bookmark,
@@ -1282,6 +1284,42 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     allAvailableAttributes
   ]);
 
+  // Pagination State for high performance with dense metamodels
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number | 'all'>(50);
+
+  const totalPages = useMemo(() => {
+    if (pageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(filteredElements.length / pageSize));
+  }, [filteredElements.length, pageSize]);
+
+  // Clamp currentPage if filteredElements shrinks
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(1);
+    }
+  }, [totalPages, currentPage]);
+
+  // Reset to page 1 on search or filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [
+    search,
+    selectedLayer,
+    selectedType,
+    selectedStereotypeFilter,
+    relationshipFilter,
+    documentationFilter,
+    attributeFilterRules,
+    sortBy
+  ]);
+
+  const paginatedElements = useMemo(() => {
+    if (pageSize === 'all') return filteredElements;
+    const start = (currentPage - 1) * pageSize;
+    return filteredElements.slice(start, start + pageSize);
+  }, [filteredElements, currentPage, pageSize]);
+
   const handleExportRepository = async (format: 'xlsx' | 'csv') => {
     try {
       setExporting(true);
@@ -1359,29 +1397,57 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
     if (isEasyApp) {
       const grouped: Record<string, CustomAttributeDefinition[]> = {
         'Attributi Generici': [],
-        'Package APM': []
+        'Package APM': [],
+        'Package Resilience': []
       };
       typeInfo.custom_attributes.forEach((attr) => {
-        const isApm = attr.is_package || attr.package_code === 'APM' || attr.name.startsWith('apm_');
+        const pkgCode = (attr.package_code || '').toUpperCase();
+        const pkgId = (attr as any).package_id || '';
+        const name = attr.name || '';
+        const isResilience =
+          pkgCode === 'RESILIENCE' ||
+          pkgId === 'pkg-resilience' ||
+          name.startsWith('app_rto') ||
+          name.startsWith('app_rpo') ||
+          name.startsWith('dr_') ||
+          name.startsWith('app_sla') ||
+          name.startsWith('infra_') ||
+          name.startsWith('target_rto') ||
+          name.startsWith('target_rpo') ||
+          name.startsWith('target_sla') ||
+          name.startsWith('resilience_') ||
+          name.startsWith('dora_');
+
+        const isApm =
+          !isResilience &&
+          (pkgCode === 'APM' || pkgId === 'pkg-apm' || name.startsWith('apm_'));
+
+        let targetSec = 'Attributi Generici';
         if (isApm) {
-          grouped['Package APM'].push({
-            ...attr,
-            section: 'Package APM'
-          });
-        } else {
-          grouped['Attributi Generici'].push({
-            ...attr,
-            section: 'Attributi Generici'
-          });
+          targetSec = 'Package APM';
+        } else if (isResilience) {
+          targetSec = 'Package Resilience';
+        } else if (attr.is_package && attr.package_code) {
+          targetSec = `Package ${pkgCode}`;
+        } else if (attr.section && attr.section !== 'Custom Attributes') {
+          targetSec = attr.section;
+        }
+
+        if (!grouped[targetSec]) {
+          grouped[targetSec] = [];
+        }
+        grouped[targetSec].push({
+          ...attr,
+          section: targetSec
+        });
+      });
+
+      const res: Record<string, CustomAttributeDefinition[]> = {};
+      Object.keys(grouped).forEach((sec) => {
+        if (grouped[sec].length > 0) {
+          res[sec] = grouped[sec];
         }
       });
-      const res: Record<string, CustomAttributeDefinition[]> = {};
-      if (grouped['Attributi Generici'].length > 0) {
-        res['Attributi Generici'] = grouped['Attributi Generici'];
-      }
-      if (grouped['Package APM'].length > 0) {
-        res['Package APM'] = grouped['Package APM'];
-      }
       return res;
     }
 
@@ -1651,6 +1717,45 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                       <div className="flex flex-col">
                         <span className="font-semibold">{t.architect.exportCsv}</span>
                         <span className="text-[10px] text-slate-400">{t.architect.exportCsvDesc}</span>
+                      </div>
+                    </button>
+                    <div className="border-t border-slate-100 my-1" />
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setExportDropdownOpen(false);
+                        try {
+                          await api.downloadModelArchimate(modelId);
+                          showNotification('Export modello Archi (.archimate) completato', 'success');
+                        } catch (err: any) {
+                          showNotification(err?.message || 'Errore durante export .archimate', 'error');
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-indigo-50 hover:text-indigo-900 flex items-center space-x-2 transition cursor-pointer"
+                    >
+                      <Layers className="w-4 h-4 text-indigo-600 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="font-semibold">Modello Archi (.archimate)</span>
+                        <span className="text-[10px] text-slate-400">Formato nativo open source Archi</span>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setExportDropdownOpen(false);
+                        try {
+                          await api.downloadModelExchangeXml(modelId);
+                          showNotification('Export ArchiMate Open Exchange XML completato', 'success');
+                        } catch (err: any) {
+                          showNotification(err?.message || 'Errore durante export XML', 'error');
+                        }
+                      }}
+                      className="w-full text-left px-3 py-2 text-xs text-slate-700 hover:bg-purple-50 hover:text-purple-900 flex items-center space-x-2 transition cursor-pointer"
+                    >
+                      <FileCode className="w-4 h-4 text-purple-600 shrink-0" />
+                      <div className="flex flex-col">
+                        <span className="font-semibold">ArchiMate Exchange XML</span>
+                        <span className="text-[10px] text-slate-400">Open Group Exchange XML (.xml)</span>
                       </div>
                     </button>
                   </div>
@@ -2256,8 +2361,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
           </div>
 
           <div className="space-y-2 max-h-[620px] overflow-y-auto pr-1">
-            {filteredElements.length > 0 ? (
-              filteredElements.map((el) => {
+            {paginatedElements.length > 0 ? (
+              paginatedElements.map((el) => {
                 const isSelected = selectedElement?.id === el.id;
                 return (
                   <div
@@ -2301,6 +2406,59 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
               </div>
             )}
           </div>
+
+          {/* Pagination Controls */}
+          {filteredElements.length > 0 && (
+            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-slate-600">Per pagina:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                    setPageSize(val);
+                    setCurrentPage(1);
+                  }}
+                  className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                  <option value="all">Tutti ({filteredElements.length})</option>
+                </select>
+              </div>
+
+              {pageSize !== 'all' && totalPages > 1 && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[11px] font-semibold text-slate-600 mr-1">
+                    {Math.min((currentPage - 1) * (pageSize as number) + 1, filteredElements.length)}-
+                    {Math.min(currentPage * (pageSize as number), filteredElements.length)} di {filteredElements.length}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="p-1 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                    title="Pagina precedente"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                  </button>
+                  <span className="font-mono text-xs font-bold text-slate-700 px-1 bg-slate-50 border border-slate-200 rounded-md py-0.5">
+                    {currentPage} / {totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="p-1 rounded-lg border border-slate-200 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                    title="Pagina successiva"
+                  >
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Right: Selected Element Inspector & Sections */}

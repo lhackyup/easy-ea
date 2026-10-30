@@ -26,6 +26,7 @@ from app.api.schemas import router as schemas_router
 from app.api.plugin_api import router as plugin_router
 from app.api.business_views import router as business_views_router
 from app.api.adrs import router as adrs_router
+from app.api.resilience import router as resilience_router
 
 from sqlalchemy import text
 
@@ -81,6 +82,8 @@ _safe_add_column("package_views", "is_global BOOLEAN DEFAULT FALSE")
 _safe_add_column("package_views", "target_types JSON DEFAULT '[]'")
 _safe_add_column("package_views", "author VARCHAR")
 _safe_add_column("package_views", "is_active BOOLEAN DEFAULT TRUE")
+_safe_add_column("package_views", "target_hub VARCHAR(32) DEFAULT 'business'")
+_safe_add_column("architecture_decision_records", "archimate_element_id VARCHAR")
 
 def _safe_alter_column(table_name: str, sql_action: str):
     with engine.connect() as conn:
@@ -179,6 +182,7 @@ if engine.dialect.name == "sqlite":
                             icon VARCHAR(32),
                             target_stereotypes JSON,
                             target_types JSON DEFAULT '[]',
+                            target_hub VARCHAR(32) DEFAULT 'business',
                             config JSON NOT NULL,
                             sort_order INTEGER DEFAULT 0,
                             is_global BOOLEAN DEFAULT FALSE,
@@ -192,7 +196,7 @@ if engine.dialect.name == "sqlite":
                     """))
                     conn.execute(text("""
                         INSERT INTO package_views_dg_tmp
-                        SELECT id, package_id, model_id, view_key, name, description, category, view_type, icon, target_stereotypes, target_types, config, sort_order, is_global, is_active, author, created_at, updated_at
+                        SELECT id, package_id, model_id, view_key, name, description, category, view_type, icon, target_stereotypes, target_types, COALESCE(target_hub, 'business'), config, sort_order, is_global, is_active, author, created_at, updated_at
                         FROM package_views;
                     """))
                     conn.execute(text("DROP TABLE package_views;"))
@@ -290,6 +294,7 @@ app.include_router(schemas_router, prefix=settings.API_V1_STR)
 app.include_router(plugin_router, prefix=settings.API_V1_STR)
 app.include_router(business_views_router, prefix=settings.API_V1_STR)
 app.include_router(adrs_router, prefix=settings.API_V1_STR)
+app.include_router(resilience_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 

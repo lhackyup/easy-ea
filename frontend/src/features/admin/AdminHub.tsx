@@ -30,6 +30,7 @@ interface AdminHubProps {
   selectedModelId: string;
   onRefreshModels: () => void;
   onSelectModel: (id: string) => void;
+  onPackageUpdated?: () => void;
   subTab: AdminSubTab;
   onSelectSubTab: (subTab: AdminSubTab) => void;
 }
@@ -39,6 +40,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
   selectedModelId,
   onRefreshModels,
   onSelectModel,
+  onPackageUpdated,
   subTab,
   onSelectSubTab
 }) => {
@@ -171,16 +173,17 @@ export const AdminHub: React.FC<AdminHubProps> = ({
     }
   };
 
-  const handleExportJson = async (id: string, name: string) => {
+  const handleExportArchimate = async (id: string, name: string) => {
     try {
-      const data = await api.exportModelJson(id);
-      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `${name.replace(/\s+/g, '_')}_export.json`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await api.downloadModelArchimate(id, undefined, `${name.replace(/\s+/g, '_')}.archimate`);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleExportExchangeXml = async (id: string, name: string) => {
+    try {
+      await api.downloadModelExchangeXml(id, undefined, `${name.replace(/\s+/g, '_')}_archimate_exchange.xml`);
     } catch (err) {
       console.error(err);
     }
@@ -259,11 +262,18 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                       {/* Actions */}
                       <div className="flex items-center space-x-1.5">
                         <button
-                          onClick={() => handleExportJson(m.id, m.name)}
-                          className="p-1.5 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                          title={t.admin.exportJson}
+                          onClick={() => handleExportArchimate(m.id, m.name)}
+                          className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                          title="Esporta modello Archi nativo (.archimate)"
                         >
-                          <Download className="w-4 h-4" />
+                          <Layers className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleExportExchangeXml(m.id, m.name)}
+                          className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
+                          title="Esporta ArchiMate Open Exchange XML (.xml)"
+                        >
+                          <FileCode className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setDeleteConfirmId(m.id)}
@@ -624,6 +634,9 @@ export const AdminHub: React.FC<AdminHubProps> = ({
           }}
           onPackageUpdated={() => {
             onRefreshModels();
+            if (onPackageUpdated) {
+              onPackageUpdated();
+            }
           }}
         />
       )}

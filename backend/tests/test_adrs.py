@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from app.main import app
 from app.core.database import Base, get_db
 from app.services.sample_data import seed_sample_model
+from app.services.metamodel_service import seed_default_custom_attributes
 from app.services.rbac_service import seed_default_rbac
 from app.models.archimate import User, ArchitectureDecisionRecord, ADRLinkedElement
 from app.services.auth_service import create_access_token
@@ -38,6 +39,7 @@ def setup_test_db():
     db.commit()
 
     seed_sample_model(db)
+    seed_default_custom_attributes(db)
     seed_default_rbac(db)
 
     admin_user = db.query(User).filter(User.username == "admin").first() or db.query(User).first()
@@ -180,3 +182,82 @@ def test_adr_governance_risks_in_process_audit():
     # ADR-0003 is Deprecated and governs app-feedzai-fraud (which is Live)
     drift_codes = [r["adr_code"] for r in data["adr_governance_risks"]]
     assert "ADR-0003" in drift_codes
+
+
+def test_adr_hybrid_dual_mapping_and_archimate_synchronization():
+    """Verify ADRs synchronize 1:1 with ArchimateElements (type Assessment) and ArchimateRelationships."""
+    # 1. Create a new ADR
+    payload = {
+        "title": "Establish Event Driven Architecture with CloudEvents Standard",
+        "status": "Accepted",
+        "domain": "Integration",
+        "context_and_problem": "Lack of standardized event schemas across microservices.",
+        "decision_outcome": "Adopt CloudEvents v1.0 on Kafka topics.",
+        "deciders": "Integration Architecture Guild",
+        "linked_elements": [
+            {"element_id": "tech-aws-cluster", "impact_type": "governs", "notes": "Event Broker Cluster"}
+        ]
+    }
+    res = client.post("/api/adrs?model_id=sample-easybank-ea", json=payload)
+    assert res.status_code == 200
+    adr_data = res.json()
+    assert adr_data["archimate_element_id"] is not None
+    elem_id = adr_data["archimate_element_id"]
+
+    # 2. Check that the synchronized ArchimateElement exists in the Motivation layer with stereo-adr
+    el_res = client.get(f"/api/elements/{elem_id}")
+    assert el_res.status_code == 200
+    elem = el_res.json()
+    assert elem["type"] == "Assessment"
+    assert elem["layer"] == "Motivation"
+    assert elem["stereotype_id"] == "stereo-adr"
+    assert elem["properties"]["adr_code"] == adr_data["code"]
+    assert elem["properties"]["adr_status"] == "Accepted"
+    assert elem["properties"]["adr_domain"] == "Integration"
+
+    # 3. Check outgoing ArchimateRelationship generated to tech-aws-cluster
+    assert len(elem["outgoing_relations"]) == 1
+    rel = elem["outgoing_relations"][0]
+    assert rel["type"] == "InfluenceRelationship"
+    assert rel["target_id"] == "tech-aws-cluster"
+
+
+def test_adr_package_views_target_hub_and_toggling():
+    """Verify pkg-adr views have target_hub='architecture' and can be toggled on/off."""
+    # 1. Check pkg-adr in catalog
+    pkg_res = client.get("/api/metamodel/packages/pkg-adr")
+    assert pkg_res.status_code == 200
+    pkg_data = pkg_res.json()
+    assert pkg_data["code"] == "adr"
+    assert len(pkg_data["items"]) == 8
+    assert len(pkg_data["views"]) == 2
+    assert all(v.get("target_hub") == "architecture" for v in pkg_data["views"])
+
+    # 2. Check that /api/business/package-views lists pkg-adr with target_hub='architecture'
+    views_res = client.get("/api/business/package-views?model_id=sample-easybank-ea")
+    assert views_res.status_code == 200
+    pkgs = views_res.json()["packages"]
+    adr_pkg = next((p for p in pkgs if p["code"] == "adr"), None)
+    assert adr_pkg is not None
+    assert len(adr_pkg["views"]) == 2
+    assert all(v["target_hub"] == "architecture" for v in adr_pkg["views"])
+
+    # 3. Test PATCH target_hub endpoint
+    view_id = adr_pkg["views"][0]["id"]
+    patch_res = client.patch(f"/api/business/package-views/{view_id}/target-hub", json={"target_hub": "both"})
+    assert patch_res.status_code == 200
+    assert patch_res.json()["target_hub"] == "both"
+
+    # 4. Deactivate pkg-adr on sample-easybank-ea library
+    toggle_res = client.post("/api/metamodel/libraries/sample-easybank-ea/packages/pkg-adr/toggle", json={"active": False})
+    assert toggle_res.status_code == 200
+    assert toggle_res.json()["is_active"] is False
+
+    # 5. After deactivation, pkg-adr should no longer appear in /api/business/package-views
+    views_deact = client.get("/api/business/package-views?model_id=sample-easybank-ea")
+    assert views_deact.status_code == 200
+    pkgs_after = views_deact.json()["packages"]
+    assert not any(p["code"] == "adr" for p in pkgs_after)
+
+    # Re-activate for further tests
+    client.post("/api/metamodel/libraries/sample-easybank-ea/packages/pkg-adr/toggle", json={"active": True})

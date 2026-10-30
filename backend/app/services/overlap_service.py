@@ -1,5 +1,5 @@
 from typing import Dict, List, Any, Set
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.archimate import ArchimateElement, ArchimateRelationship, ApplicationBusinessAttributes
 
 class OverlapService:
@@ -16,7 +16,10 @@ class OverlapService:
         ).all()
 
         # 2. Fetch Applications (respecting in_apm_scope != False and excluding internal sub-components)
-        all_applications = db.query(ArchimateElement).filter(
+        all_applications = db.query(ArchimateElement).options(
+            joinedload(ArchimateElement.apm_attributes),
+            joinedload(ArchimateElement.stereotype)
+        ).filter(
             ArchimateElement.model_id == model_id,
             ArchimateElement.type == "ApplicationComponent"
         ).all()

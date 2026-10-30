@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { OverlapMatrixData } from '../../types';
 import { api } from '../../lib/api';
 import { GitMerge, AlertCircle, DollarSign, CheckCircle2, Search, Filter, ArrowRight, Zap } from 'lucide-react';
@@ -31,6 +31,15 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
     loadData();
   }, [modelId]);
 
+  const filteredCapabilities = useMemo(() => {
+    if (!data?.capability_rows) return [];
+    return data.capability_rows.filter((cap) => {
+      const matchesSearch = cap.name.toLowerCase().includes(search.toLowerCase());
+      const matchesRedundant = filterRedundantOnly ? cap.is_redundant : true;
+      return matchesSearch && matchesRedundant;
+    });
+  }, [data?.capability_rows, search, filterRedundantOnly]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
@@ -46,12 +55,6 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
 
   const formatEUR = (val: number) =>
     new Intl.NumberFormat(language === 'en' ? 'en-US' : 'it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
-
-  const filteredCapabilities = data.capability_rows.filter((cap) => {
-    const matchesSearch = cap.name.toLowerCase().includes(search.toLowerCase());
-    const matchesRedundant = filterRedundantOnly ? cap.is_redundant : true;
-    return matchesSearch && matchesRedundant;
-  });
 
   return (
     <div className="space-y-6 pb-12">
@@ -217,7 +220,7 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredCapabilities.map((cap) => {
-                const servingAppIds = new Set(cap.serving_applications.map((s) => s.app_id));
+                const servingAppMap = new Map(cap.serving_applications.map((s) => [s.app_id, s]));
 
                 return (
                   <tr key={cap.id} className={`hover:bg-slate-50/80 transition ${cap.is_redundant ? 'bg-amber-50/30' : ''}`}>
@@ -241,8 +244,8 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
                     </td>
 
                     {data.applications_columns.map((app) => {
-                      const isLinked = servingAppIds.has(app.id);
-                      const linkDetail = cap.serving_applications.find((s) => s.app_id === app.id);
+                      const linkDetail = servingAppMap.get(app.id);
+                      const isLinked = Boolean(linkDetail);
 
                       return (
                         <td key={app.id} className="py-3 px-3 text-center border-l border-slate-100">

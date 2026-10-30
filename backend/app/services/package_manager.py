@@ -104,9 +104,10 @@ class PackageViewSpec(BaseModel):
     name: str
     description: Optional[str] = None
     category: Optional[str] = "General"
-    view_type: str = "table" # "table", "matrix", "kpi_dashboard"
+    view_type: str = "table" # "table", "matrix", "kpi_dashboard", "adr_manager"
     icon: Optional[str] = "Table"
     sort_order: Optional[int] = 0
+    target_hub: Optional[str] = "business" # "business", "architecture", "both"
     target_stereotypes: List[str] = []
     target_types: Optional[List[str]] = []
     target_layer: Optional[str] = None
@@ -677,6 +678,7 @@ def install_package_bundle(file_bytes: bytes, db: Session, force: bool = False) 
                         category=v_spec.category or "General",
                         view_type=v_spec.view_type or "table",
                         icon=v_spec.icon or "Table",
+                        target_hub=v_spec.target_hub or "business",
                         target_stereotypes=v_spec.target_stereotypes or [],
                         target_types=v_spec.target_types or [],
                         config=cfg,
@@ -817,6 +819,7 @@ def export_package_bundle(package_id: str, db: Session) -> Tuple[bytes, str]:
                 v_data["view_type"] = pv.view_type or "table"
                 v_data["icon"] = pv.icon or "Table"
                 v_data["sort_order"] = pv.sort_order
+                v_data["target_hub"] = getattr(pv, "target_hub", None) or "business"
                 v_data["target_stereotypes"] = pv.target_stereotypes or []
                 v_data["target_types"] = pv.target_types or []
                 if pv.config and "filter_config" in pv.config:

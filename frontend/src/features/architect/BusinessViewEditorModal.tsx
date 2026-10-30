@@ -183,11 +183,12 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
   const [viewKey, setViewKey] = useState('');
   const [category, setCategory] = useState('Portfolio Governance');
   const [description, setDescription] = useState('');
-  const [viewType, setViewType] = useState<'table' | 'matrix' | 'kpi_dashboard'>('table');
+  const [viewType, setViewType] = useState<'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard'>('table');
   const [icon, setIcon] = useState('Table');
   const [sortOrder, setSortOrder] = useState<number>(10);
   const [isGlobal, setIsGlobal] = useState(false);
   const [isActive, setIsActive] = useState(false);
+  const [targetHub, setTargetHub] = useState<'business' | 'architecture' | 'both'>('business');
   const [targetStereotypes, setTargetStereotypes] = useState<string[]>([]);
   const [targetTypes, setTargetTypes] = useState<string[]>([]);
 
@@ -290,6 +291,7 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
         setSortOrder(initialView.sort_order ?? 10);
         setIsGlobal(!!initialView.is_global);
         setIsActive(!!initialView.is_active);
+        setTargetHub(initialView.target_hub || 'business');
         setPackageId(initialView.package_id || null);
         setTargetStereotypes(initialView.target_stereotypes || []);
         setTargetTypes(initialView.target_types || []);
@@ -330,6 +332,7 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
         setSortOrder(10);
         setIsGlobal(false);
         setIsActive(false); // Inactive (Draft) by default
+        setTargetHub('business');
         setPackageId(null);
         setTargetStereotypes([]);
         setTargetTypes(['ApplicationComponent']);
@@ -540,6 +543,7 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
         view_type: viewType,
         icon,
         sort_order: Number(sortOrder) || 0,
+        target_hub: targetHub,
         is_global: isGlobal,
         is_active: isActive,
         package_id: packageId || undefined,
@@ -582,6 +586,7 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
         view_type: viewType,
         icon,
         sort_order: Number(sortOrder) || 0,
+        target_hub: targetHub,
         is_global: isGlobal,
         is_active: isActive,
         package_id: packageId || undefined,
@@ -746,7 +751,52 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
                   ))}
                 </select>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  Se associata a un pacchetto attivo, la vista apparirà sotto il sottomenù del pacchetto nella sezione Business.
+                  Se associata a un pacchetto attivo, la vista apparirà sotto il sottomenù del pacchetto nell'hub selezionato.
+                </p>
+              </div>
+
+              {/* Target Hub Selection */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Destinazione Hub *
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTargetHub('business')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1.5 ${
+                      targetHub === 'business'
+                        ? 'bg-indigo-50 border-indigo-500 text-indigo-700 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>💼 Business Hub</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetHub('architecture')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1.5 ${
+                      targetHub === 'architecture'
+                        ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>🏛️ Architecture Hub</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTargetHub('both')}
+                    className={`px-3 py-2 rounded-xl text-xs font-bold border transition flex items-center justify-center space-x-1.5 ${
+                      targetHub === 'both'
+                        ? 'bg-purple-50 border-purple-500 text-purple-700 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                    }`}
+                  >
+                    <span>🌐 Entrambi gli Hub</span>
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Stabilisce se la vista compare nella barra laterale del Business Hub, dell'Architecture Hub o di entrambi.
                 </p>
               </div>
 

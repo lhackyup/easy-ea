@@ -1,4 +1,5 @@
 import uuid
+import re
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
@@ -10,6 +11,8 @@ from app.core.database import get_db
 from app.models.archimate import ArchimateView, ArchimateElement, ArchimateRelationship, User
 from app.api.deps import get_current_user, require_library_permission
 from app.services.drawio_service import export_view_to_drawio
+from app.services.exchange_export_service import export_model_to_exchange_xml
+from app.services.archimate_native_export_service import export_model_to_archimate_xml
 
 router = APIRouter(prefix="/views", tags=["Diagram Views"])
 
@@ -198,6 +201,42 @@ def export_view_drawio(
     
     xml_content = export_view_to_drawio(view_id, db)
     filename = f"{view.name.replace(' ', '_')}.drawio"
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@router.get("/{view_id}/export/exchange-xml")
+def export_view_exchange_xml(
+    view_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Export single diagram view as Open Group ArchiMate 3.0 Exchange XML file."""
+    view = db.query(ArchimateView).filter(ArchimateView.id == view_id).first()
+    if not view:
+        raise HTTPException(status_code=404, detail="View not found")
+
+    xml_content, filename = export_model_to_exchange_xml(view.model_id, db, view_id=view_id)
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+
+@router.get("/{view_id}/export/archimate")
+def export_view_archimate_xml(
+    view_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Export single diagram view as Archi native model (.archimate)."""
+    view = db.query(ArchimateView).filter(ArchimateView.id == view_id).first()
+    if not view:
+        raise HTTPException(status_code=404, detail="View not found")
+
+    xml_content, filename = export_model_to_archimate_xml(view.model_id, db, view_id=view_id)
     return Response(
         content=xml_content,
         media_type="application/xml",

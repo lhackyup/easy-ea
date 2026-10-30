@@ -1,13 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
-from typing import List, Optional, Dict, Any
+from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
+from typing import List, Optional, Dict, Any, Union
 from pydantic import BaseModel
+import math
 import uuid
+import re
 
 from app.core.database import get_db
 from app.models.archimate import (
     ArchimateElement,
+    ArchimateRelationship,
+    ADRLinkedElement,
     ApplicationBusinessAttributes,
+    ArchitectureDecisionRecord,
     User,
     ElementStereotype,
     WorkspaceAttributePackage
@@ -151,17 +157,77 @@ def sync_apm_from_properties(apm: ApplicationBusinessAttributes, props: Dict[str
         apm.notes = str(notes)
 
 
-@router.get("", response_model=List[Dict[str, Any]])
+def sync_adr_from_element(db: Session, el: ArchimateElement):
+    """
+    Reverse synchronization: when an ArchimateElement with stereotype 'stereo-adr'
+    is created or updated via standard ArchiMate element APIs or Draw.io, update or create
+    the corresponding ArchitectureDecisionRecord in the ADR registry.
+    """
+    if el.stereotype_id != "stereo-adr":
+        return
+
+    from app.services.adr_service import ADRService
+
+    adr = db.query(ArchitectureDecisionRecord).filter(
+        (ArchitectureDecisionRecord.archimate_element_id == el.id) |
+        (ArchitectureDecisionRecord.id == el.id.replace("elem-adr-", "adr-"))
+    ).first()
+
+    props = el.properties if isinstance(el.properties, dict) else {}
+    code = props.get("adr_code")
+    clean_title = re.sub(r"^\[ADR-\d+\]\s*", "", el.name).strip() if el.name else "Architecture Decision"
+
+    if not adr:
+        if not code:
+            m = re.search(r"\[(ADR-\d+)\]", el.name)
+            code = m.group(1) if m else ADRService.generate_next_code(db, el.model_id)
+        adr = ArchitectureDecisionRecord(
+            id=f"adr-{uuid.uuid4().hex[:8]}",
+            model_id=el.model_id,
+            archimate_element_id=el.id,
+            code=code,
+            title=clean_title,
+            status=props.get("adr_status") or "Draft",
+            domain=props.get("adr_domain") or "Application",
+            context_and_problem=el.documentation or "",
+            decision_outcome=props.get("adr_decision_outcome") or el.documentation or "",
+            compliance_impact=props.get("adr_compliance_impact") or "",
+            deciders=props.get("adr_deciders") or ""
+        )
+        db.add(adr)
+        db.flush()
+    else:
+        adr.archimate_element_id = el.id
+        if code:
+            adr.code = code
+        adr.title = clean_title
+        if props.get("adr_status"):
+            adr.status = props["adr_status"]
+        if props.get("adr_domain"):
+            adr.domain = props["adr_domain"]
+        if el.documentation:
+            adr.context_and_problem = el.documentation
+        if props.get("adr_decision_outcome"):
+            adr.decision_outcome = props["adr_decision_outcome"]
+        if props.get("adr_compliance_impact"):
+            adr.compliance_impact = props["adr_compliance_impact"]
+        if props.get("adr_deciders"):
+            adr.deciders = props["adr_deciders"]
+
+
+@router.get("", response_model=Union[List[Dict[str, Any]], Dict[str, Any]])
 def list_elements(
     model_id: str,
     layer: Optional[str] = None,
     type: Optional[str] = None,
     stereotype_id: Optional[str] = None,
     search: Optional[str] = None,
+    page: Optional[int] = Query(None, ge=1, description="Page number (1-based)"),
+    limit: Optional[int] = Query(None, ge=1, le=500, description="Items per page"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """List elements of a model filtered by Layer, Type, Stereotype, or Search query, including active framework elements."""
+    """List elements of a model filtered by Layer, Type, Stereotype, or Search query, with optional pagination and eager loading."""
     active_links = db.query(WorkspaceAttributePackage.package_id).filter(
         WorkspaceAttributePackage.model_id == model_id
     ).all()
@@ -175,16 +241,67 @@ def list_elements(
     else:
         query = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id)
 
-    if layer:
+    if layer and layer != "All":
         query = query.filter(ArchimateElement.layer == layer)
-    if type:
+    if type and type != "All":
         query = query.filter(ArchimateElement.type == type)
-    if stereotype_id:
+    if stereotype_id and stereotype_id != "all":
         query = query.filter(ArchimateElement.stereotype_id == stereotype_id)
     if search:
         query = query.filter(ArchimateElement.name.ilike(f"%{search}%"))
 
+    # Normalize page and limit if called directly in tests/services
+    page_num = page if isinstance(page, int) else None
+    limit_num = limit if isinstance(limit, int) else None
+
+    total_count = query.count() if page_num is not None else None
+
+    # Deterministic sorting for stable pagination
+    query = query.order_by(ArchimateElement.name.asc(), ArchimateElement.id.asc())
+
+    if page_num is not None and limit_num is not None:
+        offset_val = (page_num - 1) * limit_num
+        query = query.offset(offset_val).limit(limit_num)
+
+    # 1. Eager load 1-to-1 / many-to-one relations to eliminate N+1 queries
+    query = query.options(
+        joinedload(ArchimateElement.stereotype),
+        joinedload(ArchimateElement.apm_attributes),
+        joinedload(ArchimateElement.package)
+    )
     elements = query.all()
+
+    # 2. Batch aggregation for incoming/outgoing relations and ADR links in O(1)
+    element_ids = [e.id for e in elements]
+    incoming_counts: Dict[str, int] = {}
+    outgoing_counts: Dict[str, int] = {}
+    adr_counts: Dict[str, int] = {}
+
+    if element_ids:
+        inc_rows = db.query(
+            ArchimateRelationship.target_id,
+            func.count(ArchimateRelationship.id)
+        ).filter(
+            ArchimateRelationship.target_id.in_(element_ids)
+        ).group_by(ArchimateRelationship.target_id).all()
+        incoming_counts = {r[0]: r[1] for r in inc_rows}
+
+        out_rows = db.query(
+            ArchimateRelationship.source_id,
+            func.count(ArchimateRelationship.id)
+        ).filter(
+            ArchimateRelationship.source_id.in_(element_ids)
+        ).group_by(ArchimateRelationship.source_id).all()
+        outgoing_counts = {r[0]: r[1] for r in out_rows}
+
+        adr_rows = db.query(
+            ADRLinkedElement.element_id,
+            func.count(ADRLinkedElement.id)
+        ).filter(
+            ADRLinkedElement.element_id.in_(element_ids)
+        ).group_by(ADRLinkedElement.element_id).all()
+        adr_counts = {r[0]: r[1] for r in adr_rows}
+
     results = []
     for e in elements:
         apm = e.apm_attributes
@@ -228,9 +345,9 @@ def list_elements(
                 "label": e.stereotype.label,
                 "icon_color": e.stereotype.icon_color
             } if e.stereotype else None,
-            "incoming_count": len(e.incoming_relations or []),
-            "outgoing_count": len(e.outgoing_relations or []),
-            "adr_count": len(e.adr_links or []),
+            "incoming_count": incoming_counts.get(e.id, 0),
+            "outgoing_count": outgoing_counts.get(e.id, 0),
+            "adr_count": adr_counts.get(e.id, 0),
             "apm": {
                 "business_fit": apm.business_fit,
                 "technical_fit": apm.technical_fit,
@@ -244,6 +361,18 @@ def list_elements(
                 "in_apm_scope": apm.in_apm_scope
             } if apm else None
         })
+
+    if page_num is not None and limit_num is not None:
+        total_val = total_count or 0
+        total_pages = math.ceil(total_val / limit_num) if (total_val > 0 and limit_num > 0) else 0
+        return {
+            "items": results,
+            "total": total_val,
+            "page": page_num,
+            "limit": limit_num,
+            "total_pages": total_pages
+        }
+
     return results
 
 @router.get("/search", response_model=List[Dict[str, Any]])
@@ -461,6 +590,9 @@ def create_element(
         sync_apm_from_properties(apm, props)
         db.add(apm)
 
+    if el.stereotype_id == "stereo-adr":
+        sync_adr_from_element(db, el)
+
     db.commit()
     db.refresh(el)
     return {
@@ -534,6 +666,9 @@ def update_element(
                 el.apm_attributes = apm
             sync_apm_from_properties(el.apm_attributes, payload.properties)
 
+    if el.stereotype_id == "stereo-adr":
+        sync_adr_from_element(db, el)
+
     db.commit()
     db.refresh(el)
     return {
@@ -564,6 +699,14 @@ def delete_element(
             detail="Gli elementi canonici di riferimento forniti da uno standard industriale non possono essere eliminati."
         )
     require_library_permission(db, current_user, "delete_element", el.model_id)
+
+    # If deleting an ADR Assessment element, remove corresponding ADR record
+    if el.stereotype_id == "stereo-adr":
+        db.query(ArchitectureDecisionRecord).filter(
+            (ArchitectureDecisionRecord.archimate_element_id == el.id) |
+            (ArchitectureDecisionRecord.id == el.id.replace("elem-adr-", "adr-"))
+        ).delete(synchronize_session=False)
+
     db.delete(el)
     db.commit()
     return {"message": "Element deleted"}

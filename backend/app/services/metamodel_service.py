@@ -612,7 +612,18 @@ def get_full_metamodel_with_custom_attributes(db: Session, model_id: Optional[st
                     custom_map[key] = []
                 sec = item.section or pkg.name
                 if is_easy and (item.element_type in ("ApplicationComponent", "*") or item.layer in ("Application", "All")):
-                    sec = f"Package {pkg.code.upper()}"
+                    if pkg.code.lower() == "apm":
+                        sec = "Package APM"
+                    elif pkg.code.lower() == "resilience":
+                        sec = "Package Resilience"
+                    elif pkg.code.lower() == "bian":
+                        sec = "Package BIAN"
+                    elif pkg.code.lower() == "it4it":
+                        sec = "Package IT4IT"
+                    elif pkg.code.lower() == "adr":
+                        sec = "Package ADR"
+                    else:
+                        sec = f"Package {pkg.code.upper()}"
                 custom_map[key].append({
                     "id": item.id,
                     "model_id": model_id,
@@ -807,7 +818,18 @@ def list_custom_attributes(db: Session, model_id: Optional[str] = None, element_
             for item, pkg in p_query.order_by(AttributePackageItem.sort_order).all():
                 sec = item.section or pkg.name
                 if is_easy and (item.element_type in ("ApplicationComponent", "*") or item.layer in ("Application", "All")):
-                    sec = f"Package {pkg.code.upper()}"
+                    if pkg.code.lower() == "apm":
+                        sec = "Package APM"
+                    elif pkg.code.lower() == "resilience":
+                        sec = "Package Resilience"
+                    elif pkg.code.lower() == "bian":
+                        sec = "Package BIAN"
+                    elif pkg.code.lower() == "it4it":
+                        sec = "Package IT4IT"
+                    elif pkg.code.lower() == "adr":
+                        sec = "Package ADR"
+                    else:
+                        sec = f"Package {pkg.code.upper()}"
                 res.append({
                     "id": item.id,
                     "model_id": model_id,
@@ -1390,12 +1412,14 @@ def seed_default_attribute_packages(db: Session):
 
     # 3. Ensure APM package is active on all existing model workspaces
     workspaces = db.query(ModelWorkspace).all()
+    newly_linked_ws_ids = set()
     for ws in workspaces:
         has_link = db.query(WorkspaceAttributePackage).filter(
             WorkspaceAttributePackage.model_id == ws.id,
             WorkspaceAttributePackage.package_id == apm_pkg.id
         ).first()
         if not has_link:
+            newly_linked_ws_ids.add(ws.id)
             db.add(WorkspaceAttributePackage(
                 id=f"wap-{uuid.uuid4().hex[:8]}",
                 model_id=ws.id,
@@ -1635,6 +1659,7 @@ def seed_default_attribute_packages(db: Session):
                 view_type=v_data["view_type"],
                 icon=v_data["icon"],
                 sort_order=v_data.get("sort_order", 0),
+                target_hub=v_data.get("target_hub", "business"),
                 target_stereotypes=v_data["target_stereotypes"],
                 config=v_data["config"]
             )
@@ -1646,13 +1671,586 @@ def seed_default_attribute_packages(db: Session):
             existing_v.view_type = v_data["view_type"]
             existing_v.icon = v_data["icon"]
             existing_v.sort_order = v_data.get("sort_order", 0)
+            if not getattr(existing_v, "target_hub", None):
+                existing_v.target_hub = v_data.get("target_hub", "business")
             existing_v.target_stereotypes = v_data["target_stereotypes"]
+            existing_v.config = v_data["config"]
+
+    # 6b. Architecture Decision Records (ADR) System Package (pkg-adr)
+    adr_pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-adr").first()
+    created_adr_pkg = False
+    if not adr_pkg:
+        adr_pkg = AttributePackage(
+            id="pkg-adr",
+            code="adr",
+            name="Architecture Decision Records (ADR)",
+            version="1.0.0",
+            author="EasyEA Governance",
+            license="Open Standard (MADR 3.0)",
+            description="Standard MADR 3.0 Architecture Decision Records package providing the «Architecture Decision» Motivation stereotype, governance attributes, and ADR views.",
+            icon_color="indigo",
+            package_type="attribute_only",
+            standard_version="MADR 3.0",
+            is_default_active=True,
+            is_system=True
+        )
+        db.add(adr_pkg)
+        db.flush()
+        created_adr_pkg = True
+    else:
+        adr_pkg.code = "adr"
+        adr_pkg.name = "Architecture Decision Records (ADR)"
+        adr_pkg.version = "1.0.0"
+        adr_pkg.author = "EasyEA Governance"
+        adr_pkg.license = "Open Standard (MADR 3.0)"
+        adr_pkg.description = "Standard MADR 3.0 Architecture Decision Records package providing the «Architecture Decision» Motivation stereotype, governance attributes, and ADR views."
+        adr_pkg.icon_color = "indigo"
+        adr_pkg.package_type = "attribute_only"
+        adr_pkg.standard_version = "MADR 3.0"
+        adr_pkg.is_default_active = True
+        adr_pkg.is_system = True
+
+    adr_items = [
+        {
+            "id": "item-adr-code",
+            "name": "adr_code",
+            "label": "ADR Code",
+            "description": "Unique sequential Architecture Decision Record identifier (e.g. ADR-0001).",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "string",
+            "options": [],
+            "default_value": None,
+            "is_required": True,
+            "section": "ADR Identification",
+            "sort_order": 1
+        },
+        {
+            "id": "item-adr-status",
+            "name": "adr_status",
+            "label": "Decision Status",
+            "description": "Lifecycle status of the Architecture Decision Record.",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "select",
+            "options": ["Draft", "Proposed", "Accepted", "Rejected", "Deprecated", "Superseded"],
+            "default_value": "Draft",
+            "is_required": True,
+            "section": "ADR Identification",
+            "sort_order": 2
+        },
+        {
+            "id": "item-adr-domain",
+            "name": "adr_domain",
+            "label": "Architectural Domain",
+            "description": "Primary enterprise architecture domain impacted by the decision.",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "select",
+            "options": ["Strategy", "Business", "Application", "Data", "Technology", "Security", "Integration", "Governance"],
+            "default_value": "Application",
+            "is_required": True,
+            "section": "ADR Identification",
+            "sort_order": 3
+        },
+        {
+            "id": "item-adr-deciders",
+            "name": "adr_deciders",
+            "label": "Deciders / Architecture Board",
+            "description": "Stakeholders, architects, or governance boards responsible for the decision.",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "string",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "ADR Governance",
+            "sort_order": 4
+        },
+        {
+            "id": "item-adr-decided-at",
+            "name": "adr_decided_at",
+            "label": "Decision Date",
+            "description": "Date when the decision was formally accepted or ratified.",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "date",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "ADR Governance",
+            "sort_order": 5
+        },
+        {
+            "id": "item-adr-outcome",
+            "name": "adr_decision_outcome",
+            "label": "Decision Outcome",
+            "description": "Chosen architectural option and core justification.",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "string",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "ADR Rationale",
+            "sort_order": 6
+        },
+        {
+            "id": "item-adr-compliance",
+            "name": "adr_compliance_impact",
+            "label": "Compliance & Security Impact",
+            "description": "Regulatory, security, or operational resilience impact (e.g. DORA, GDPR, ISO 27001).",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "string",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "ADR Governance",
+            "sort_order": 7
+        },
+        {
+            "id": "item-adr-superseded-by",
+            "name": "adr_superseded_by",
+            "label": "Superseded By ADR",
+            "description": "Code of the newer ADR that supersedes this decision.",
+            "element_type": "Assessment",
+            "layer": "Motivation",
+            "data_type": "string",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "ADR Governance",
+            "sort_order": 8
+        }
+    ]
+
+    for it in adr_items:
+        existing_it = db.query(AttributePackageItem).filter(AttributePackageItem.id == it["id"]).first()
+        if existing_it:
+            for k, v in it.items():
+                setattr(existing_it, k, v)
+        else:
+            db.add(AttributePackageItem(package_id=adr_pkg.id, **it))
+
+    # Ensure ADR package is active on existing workspaces when first seeded or for newly created workspaces
+    for ws in workspaces:
+        if created_adr_pkg or ws.id in newly_linked_ws_ids:
+            has_adr_link = db.query(WorkspaceAttributePackage).filter(
+                WorkspaceAttributePackage.model_id == ws.id,
+                WorkspaceAttributePackage.package_id == adr_pkg.id
+            ).first()
+            if not has_adr_link:
+                db.add(WorkspaceAttributePackage(
+                    id=f"wap-{uuid.uuid4().hex[:8]}",
+                    model_id=ws.id,
+                    package_id=adr_pkg.id
+                ))
+
+    adr_views = [
+        {
+            "id": "pkv-adr-registry",
+            "view_key": "adr_governance_registry",
+            "name": "Architecture Decision Records (ADR)",
+            "description": "Interactive MADR 3.0 Architecture Decision Records registry, options analysis, superseding chains, and governance workflow.",
+            "category": "Architecture Governance",
+            "view_type": "adr_manager",
+            "icon": "Scale",
+            "sort_order": 1,
+            "target_hub": "architecture",
+            "target_stereotypes": ["Architecture Decision", "stereo-adr"],
+            "target_types": ["Assessment"],
+            "config": {}
+        },
+        {
+            "id": "pkv-adr-elements-table",
+            "view_key": "adr_elements_catalog",
+            "name": "ADR Catalog & Matrix View",
+            "description": "Tabular and analytical view of «Architecture Decision» elements in the ArchiMate Motivation layer.",
+            "category": "Architecture Governance",
+            "view_type": "table",
+            "icon": "Table",
+            "sort_order": 2,
+            "target_hub": "architecture",
+            "target_stereotypes": ["Architecture Decision", "stereo-adr"],
+            "target_types": ["Assessment"],
+            "config": {
+                "columns": [
+                    { "field": "adr_code", "label": "ADR Code", "type": "badge", "sortable": True, "filterable": True },
+                    { "field": "name", "label": "Decision Title", "type": "string", "sortable": True },
+                    { "field": "adr_status", "label": "Status", "type": "badge", "filterable": True },
+                    { "field": "adr_domain", "label": "Domain", "type": "badge", "filterable": True },
+                    { "field": "adr_deciders", "label": "Deciders", "type": "string", "sortable": True },
+                    { "field": "adr_decision_outcome", "label": "Decision Outcome", "type": "string", "sortable": False }
+                ],
+                "default_sort": { "field": "adr_code", "direction": "asc" },
+                "filters": []
+            }
+        }
+    ]
+
+    for v_data in adr_views:
+        existing_v = db.query(PackageView).filter(PackageView.id == v_data["id"]).first()
+        if not existing_v:
+            v = PackageView(
+                id=v_data["id"],
+                package_id=adr_pkg.id,
+                view_key=v_data["view_key"],
+                name=v_data["name"],
+                description=v_data["description"],
+                category=v_data["category"],
+                view_type=v_data["view_type"],
+                icon=v_data["icon"],
+                sort_order=v_data.get("sort_order", 0),
+                target_hub=v_data.get("target_hub", "architecture"),
+                target_stereotypes=v_data["target_stereotypes"],
+                target_types=v_data.get("target_types", []),
+                config=v_data["config"]
+            )
+            db.add(v)
+        else:
+            existing_v.name = v_data["name"]
+            existing_v.description = v_data["description"]
+            existing_v.category = v_data["category"]
+            existing_v.view_type = v_data["view_type"]
+            existing_v.icon = v_data["icon"]
+            existing_v.sort_order = v_data.get("sort_order", 0)
+            if not getattr(existing_v, "target_hub", None):
+                existing_v.target_hub = v_data.get("target_hub", "architecture")
+            existing_v.target_stereotypes = v_data["target_stereotypes"]
+            existing_v.target_types = v_data.get("target_types", [])
+            existing_v.config = v_data["config"]
+
+    # 6c. Operational Resilience & SLA (DORA) System Package (pkg-resilience)
+    res_pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-resilience").first()
+    if not res_pkg:
+        res_pkg = AttributePackage(
+            id="pkg-resilience",
+            code="resilience",
+            name="Operational Resilience & SLA (DORA)",
+            version="1.0.0",
+            author="EasyEA Governance & Resilience",
+            license="Open Standard (DORA / ISO 22301)",
+            description="Enterprise resilience package providing operational continuity attributes (RTO, RPO, SLA Availability) and automatic mismatch analysis across Business, Application, and Technology layers.",
+            icon_color="emerald",
+            package_type="attribute_only",
+            standard_version="DORA / ISO 22301",
+            is_default_active=True,
+            is_system=True
+        )
+        db.add(res_pkg)
+        db.flush()
+    else:
+        res_pkg.code = "resilience"
+        res_pkg.name = "Operational Resilience & SLA (DORA)"
+        res_pkg.version = "1.0.0"
+        res_pkg.author = "EasyEA Governance & Resilience"
+        res_pkg.license = "Open Standard (DORA / ISO 22301)"
+        res_pkg.description = "Enterprise resilience package providing operational continuity attributes (RTO, RPO, SLA Availability) and automatic mismatch analysis across Business, Application, and Technology layers."
+        res_pkg.icon_color = "emerald"
+        res_pkg.package_type = "attribute_only"
+        res_pkg.standard_version = "DORA / ISO 22301"
+        res_pkg.is_default_active = True
+        res_pkg.is_system = True
+
+    res_items = [
+        # Business Layer
+        {
+            "id": "item-res-criticality",
+            "name": "resilience_criticality",
+            "label": "Resilience Tier",
+            "description": "Business continuity criticality tier defining recovery priority.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "select",
+            "options": ["Tier-1 (Mission Critical)", "Tier-2 (Business Critical)", "Tier-3 (Important)", "Tier-4 (Non-critical)"],
+            "default_value": "Tier-2 (Business Critical)",
+            "is_required": False,
+            "section": "Operational Resilience Target",
+            "sort_order": 1
+        },
+        {
+            "id": "item-res-target-rto",
+            "name": "target_rto_hours",
+            "label": "Target RTO (Hours)",
+            "description": "Recovery Time Objective: maximum acceptable duration of downtime before service restoration.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "number",
+            "options": [],
+            "default_value": "4.0",
+            "is_required": False,
+            "section": "Operational Resilience Target",
+            "sort_order": 2
+        },
+        {
+            "id": "item-res-target-rpo",
+            "name": "target_rpo_hours",
+            "label": "Target RPO (Hours)",
+            "description": "Recovery Point Objective: maximum acceptable data loss measured in hours of transactions.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "number",
+            "options": [],
+            "default_value": "1.0",
+            "is_required": False,
+            "section": "Operational Resilience Target",
+            "sort_order": 3
+        },
+        {
+            "id": "item-res-target-sla",
+            "name": "target_sla_availability",
+            "label": "Target SLA Availability (%)",
+            "description": "Minimum contractual or operational service availability percentage (e.g. 99.90%).",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "number",
+            "options": [],
+            "default_value": "99.90",
+            "is_required": False,
+            "section": "Operational Resilience Target",
+            "sort_order": 4
+        },
+        {
+            "id": "item-res-dora-flag",
+            "name": "dora_critical_function",
+            "label": "DORA Critical Function",
+            "description": "Designates whether this process/service qualifies as a critical or important operational function under DORA / NIS2.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "boolean",
+            "options": [],
+            "default_value": "false",
+            "is_required": False,
+            "section": "Regulatory Compliance (DORA/NIS2)",
+            "sort_order": 5
+        },
+        # Application Layer
+        {
+            "id": "item-res-app-sla",
+            "name": "app_sla_availability",
+            "label": "Offered App SLA (%)",
+            "description": "Application software or vendor contract uptime availability percentage.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "99.50",
+            "is_required": False,
+            "section": "Application Reliability & DR",
+            "sort_order": 6
+        },
+        {
+            "id": "item-res-app-rto",
+            "name": "app_rto_hours",
+            "label": "App RTO (Hours)",
+            "description": "Estimated application service restoration or failover time.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "2.0",
+            "is_required": False,
+            "section": "Application Reliability & DR",
+            "sort_order": 7
+        },
+        {
+            "id": "item-res-app-rpo",
+            "name": "app_rpo_hours",
+            "label": "App RPO (Hours)",
+            "description": "Application data synchronization or local backup interval.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "1.0",
+            "is_required": False,
+            "section": "Application Reliability & DR",
+            "sort_order": 8
+        },
+        {
+            "id": "item-res-dr-strategy",
+            "name": "dr_strategy",
+            "label": "DR Strategy",
+            "description": "Disaster Recovery and high-availability architecture pattern implemented.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["Active-Active Multi-Region", "Active-Passive Automated", "Warm Standby", "Cold Standby / Backup Restore"],
+            "default_value": "Active-Passive Automated",
+            "is_required": False,
+            "section": "Application Reliability & DR",
+            "sort_order": 9
+        },
+        # Technology Layer
+        {
+            "id": "item-res-infra-sla",
+            "name": "infra_sla_availability",
+            "label": "Infrastructure SLA (%)",
+            "description": "Cloud provider, datacenter or server hardware SLA availability percentage.",
+            "element_type": "Node",
+            "layer": "Technology",
+            "data_type": "number",
+            "options": [],
+            "default_value": "99.90",
+            "is_required": False,
+            "section": "Infrastructure Resilience",
+            "sort_order": 10
+        },
+        {
+            "id": "item-res-infra-rto",
+            "name": "infra_rto_hours",
+            "label": "Infra RTO (Hours)",
+            "description": "Infrastructure hardware or cloud VM rebuild/reboot recovery time.",
+            "element_type": "Node",
+            "layer": "Technology",
+            "data_type": "number",
+            "options": [],
+            "default_value": "1.0",
+            "is_required": False,
+            "section": "Infrastructure Resilience",
+            "sort_order": 11
+        },
+        {
+            "id": "item-res-infra-rpo",
+            "name": "infra_rpo_hours",
+            "label": "Storage / Snapshot RPO (Hours)",
+            "description": "Storage block-level replication frequency or automated snapshot frequency.",
+            "element_type": "Node",
+            "layer": "Technology",
+            "data_type": "number",
+            "options": [],
+            "default_value": "1.0",
+            "is_required": False,
+            "section": "Infrastructure Resilience",
+            "sort_order": 12
+        },
+        {
+            "id": "item-res-ha-redundancy",
+            "name": "ha_redundancy",
+            "label": "HA Redundancy",
+            "description": "Physical hosting failure domain redundancy level.",
+            "element_type": "Node",
+            "layer": "Technology",
+            "data_type": "select",
+            "options": ["Single Zone (No HA)", "Multi-AZ Redundant", "Multi-Region Geo-Replicated"],
+            "default_value": "Multi-AZ Redundant",
+            "is_required": False,
+            "section": "Infrastructure Resilience",
+            "sort_order": 13
+        }
+    ]
+
+    for it_data in res_items:
+        existing_it = db.query(AttributePackageItem).filter(AttributePackageItem.id == it_data["id"]).first()
+        if not existing_it:
+            item = AttributePackageItem(
+                id=it_data["id"],
+                package_id=res_pkg.id,
+                name=it_data["name"],
+                label=it_data["label"],
+                description=it_data["description"],
+                element_type=it_data["element_type"],
+                layer=it_data["layer"],
+                data_type=it_data["data_type"],
+                options=it_data["options"],
+                default_value=it_data["default_value"],
+                is_required=it_data["is_required"],
+                section=it_data["section"],
+                sort_order=it_data["sort_order"]
+            )
+            db.add(item)
+        else:
+            existing_it.name = it_data["name"]
+            existing_it.label = it_data["label"]
+            existing_it.description = it_data["description"]
+            existing_it.element_type = it_data["element_type"]
+            existing_it.layer = it_data["layer"]
+            existing_it.data_type = it_data["data_type"]
+            existing_it.options = it_data["options"]
+            existing_it.default_value = it_data["default_value"]
+            existing_it.is_required = it_data["is_required"]
+            existing_it.section = it_data["section"]
+            existing_it.sort_order = it_data["sort_order"]
+
+    res_views = [
+        {
+            "id": "pview-resilience-dashboard",
+            "view_key": "resilience_dashboard",
+            "name": "Operational Resilience & SLA Gaps",
+            "description": "Interactive mismatch engine and audit dashboard comparing business RTO/RPO/SLA targets against application and infrastructure capabilities.",
+            "category": "Governance & Resilience",
+            "view_type": "resilience_dashboard",
+            "icon": "ShieldAlert",
+            "sort_order": 1,
+            "target_hub": "both",
+            "target_stereotypes": [],
+            "target_types": ["BusinessProcess", "BusinessService", "ApplicationComponent", "Node"],
+            "config": {}
+        },
+        {
+            "id": "pview-resilience-matrix",
+            "view_key": "resilience_matrix",
+            "name": "Resilience & DORA Tier Matrix",
+            "description": "Tabular matrix of Business Processes with critical tiers, recovery objectives and technical supply chain status.",
+            "category": "Governance & Resilience",
+            "view_type": "table",
+            "icon": "Table",
+            "sort_order": 2,
+            "target_hub": "business",
+            "target_stereotypes": [],
+            "target_types": ["BusinessProcess", "BusinessService"],
+            "config": {
+                "columns": [
+                    { "field": "name", "label": "Process Name", "type": "string", "sortable": True },
+                    { "field": "resilience_criticality", "label": "Criticality Tier", "type": "badge", "filterable": True },
+                    { "field": "target_sla_availability", "label": "Target SLA (%)", "type": "number", "sortable": True },
+                    { "field": "target_rto_hours", "label": "Target RTO (h)", "type": "number", "sortable": True },
+                    { "field": "target_rpo_hours", "label": "Target RPO (h)", "type": "number", "sortable": True },
+                    { "field": "dora_critical_function", "label": "DORA Critical", "type": "boolean", "filterable": True }
+                ],
+                "default_sort": { "field": "resilience_criticality", "direction": "asc" },
+                "filters": []
+            }
+        }
+    ]
+
+    for v_data in res_views:
+        existing_v = db.query(PackageView).filter(PackageView.id == v_data["id"]).first()
+        if not existing_v:
+            v = PackageView(
+                id=v_data["id"],
+                package_id=res_pkg.id,
+                view_key=v_data["view_key"],
+                name=v_data["name"],
+                description=v_data["description"],
+                category=v_data["category"],
+                view_type=v_data["view_type"],
+                icon=v_data["icon"],
+                sort_order=v_data.get("sort_order", 0),
+                target_hub=v_data.get("target_hub", "both"),
+                target_stereotypes=v_data["target_stereotypes"],
+                target_types=v_data.get("target_types", []),
+                config=v_data["config"]
+            )
+            db.add(v)
+        else:
+            existing_v.name = v_data["name"]
+            existing_v.description = v_data["description"]
+            existing_v.category = v_data["category"]
+            existing_v.view_type = v_data["view_type"]
+            existing_v.icon = v_data["icon"]
+            existing_v.sort_order = v_data.get("sort_order", 0)
+            if not getattr(existing_v, "target_hub", None):
+                existing_v.target_hub = v_data.get("target_hub", "both")
+            existing_v.target_stereotypes = v_data["target_stereotypes"]
+            existing_v.target_types = v_data.get("target_types", [])
             existing_v.config = v_data["config"]
 
     # 7. Delete any orphaned package items and packages not belonging to registered packages or frameworks
     legacy_pkgs = db.query(AttributePackage).filter(
         AttributePackage.package_type != "framework",
-        ~AttributePackage.id.in_(["pkg-apm"])
+        ~AttributePackage.id.in_(["pkg-apm", "pkg-adr", "pkg-resilience"])
     ).all()
     legacy_ids = [p.id for p in legacy_pkgs if not p.id.startswith("pkg-user-")]
     if legacy_ids:
@@ -2147,6 +2745,74 @@ def seed_default_stereotypes(db: Session):
             "is_system": True,
             "package_id": None,
             "links": []
+        },
+        {
+            "id": "stereo-adr",
+            "base_type": "Assessment",
+            "name": "Architecture Decision",
+            "label": "«Architecture Decision»",
+            "description": "Formal Architecture Decision Record (ADR) modeled in the ArchiMate Motivation Layer.",
+            "icon_color": "indigo",
+            "is_system": True,
+            "package_id": "pkg-adr",
+            "links": [
+                {
+                    "attribute_name": "adr_code",
+                    "is_required": True,
+                    "default_value": None,
+                    "section_override": None,
+                    "sort_order": 1
+                },
+                {
+                    "attribute_name": "adr_status",
+                    "is_required": True,
+                    "default_value": "Draft",
+                    "section_override": None,
+                    "sort_order": 2
+                },
+                {
+                    "attribute_name": "adr_domain",
+                    "is_required": True,
+                    "default_value": "Application",
+                    "section_override": None,
+                    "sort_order": 3
+                },
+                {
+                    "attribute_name": "adr_deciders",
+                    "is_required": False,
+                    "default_value": None,
+                    "section_override": None,
+                    "sort_order": 4
+                },
+                {
+                    "attribute_name": "adr_decided_at",
+                    "is_required": False,
+                    "default_value": None,
+                    "section_override": None,
+                    "sort_order": 5
+                },
+                {
+                    "attribute_name": "adr_decision_outcome",
+                    "is_required": False,
+                    "default_value": None,
+                    "section_override": None,
+                    "sort_order": 6
+                },
+                {
+                    "attribute_name": "adr_compliance_impact",
+                    "is_required": False,
+                    "default_value": None,
+                    "section_override": None,
+                    "sort_order": 7
+                },
+                {
+                    "attribute_name": "adr_superseded_by",
+                    "is_required": False,
+                    "default_value": None,
+                    "section_override": None,
+                    "sort_order": 8
+                }
+            ]
         }
     ]
 
@@ -2600,6 +3266,7 @@ def get_attribute_package(db: Session, package_id: str) -> Dict[str, Any]:
                 "category": v.category or "General",
                 "view_type": v.view_type,
                 "icon": v.icon or "Table",
+                "target_hub": getattr(v, "target_hub", None) or "business",
                 "target_stereotypes": v.target_stereotypes or [],
                 "config": v.config or {}
             }
@@ -2876,76 +3543,77 @@ def toggle_library_package(
             "message": f"Pacchetto '{pkg.name}' attivato per la libreria '{model.name}'."
         }
     else:
-        # STRICT DEACTIVATION GUARD
+        # STRICT DEACTIVATION GUARD (except for pkg-adr and pkg-resilience which can be toggled freely to show/hide views)
         if existing_link:
-            # 1. Check if any element in the library has populated attributes from this package
-            pkg_attr_names = [it.name for it in pkg.items]
-            elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
-            
-            populated_elements = []
-            for elem in elements:
-                props = elem.properties if isinstance(elem.properties, dict) else {}
-                populated_attrs = []
-                for attr_name in pkg_attr_names:
-                    val = props.get(attr_name)
-                    if val is not None and val != "" and val != [] and val != {}:
-                        populated_attrs.append(attr_name)
-                if populated_attrs:
-                    populated_elements.append({
-                        "id": elem.id,
-                        "name": elem.name,
-                        "type": elem.type,
-                        "populated_attributes": populated_attrs
-                    })
+            if package_id not in ["pkg-adr", "pkg-resilience"]:
+                # 1. Check if any element in the library has populated attributes from this package
+                pkg_attr_names = [it.name for it in pkg.items]
+                elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
+                
+                populated_elements = []
+                for elem in elements:
+                    props = elem.properties if isinstance(elem.properties, dict) else {}
+                    populated_attrs = []
+                    for attr_name in pkg_attr_names:
+                        val = props.get(attr_name)
+                        if val is not None and val != "" and val != [] and val != {}:
+                            populated_attrs.append(attr_name)
+                    if populated_attrs:
+                        populated_elements.append({
+                            "id": elem.id,
+                            "name": elem.name,
+                            "type": elem.type,
+                            "populated_attributes": populated_attrs
+                        })
 
-            if populated_elements:
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "error": "package_deactivation_blocked",
-                        "message": f"Impossibile disattivare il pacchetto '{pkg.name}': ci sono {len(populated_elements)} elementi nella libreria che hanno uno o più attributi del pacchetto valorizzati.",
-                        "populated_count": len(populated_elements),
-                        "affected_elements": populated_elements[:20]
-                    }
-                )
-
-            # 2. Check if any local element uses a stereotype provided by this package
-            pkg_stereotype_ids = [st.id for st in (pkg.stereotypes or [])]
-            if pkg_stereotype_ids:
-                elem_with_st = [
-                    {"id": e.id, "name": e.name, "type": e.type}
-                    for e in elements if e.stereotype_id in pkg_stereotype_ids
-                ]
-                if elem_with_st:
+                if populated_elements:
                     raise HTTPException(
                         status_code=409,
                         detail={
                             "error": "package_deactivation_blocked",
-                            "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(elem_with_st)} elementi nella libreria a cui è applicato uno stereotipo fornito da questo pacchetto.",
-                            "populated_count": len(elem_with_st),
-                            "affected_elements": elem_with_st[:20]
+                            "message": f"Impossibile disattivare il pacchetto '{pkg.name}': ci sono {len(populated_elements)} elementi nella libreria che hanno uno o più attributi del pacchetto valorizzati.",
+                            "populated_count": len(populated_elements),
+                            "affected_elements": populated_elements[:20]
                         }
                     )
 
-            # 3. Check if any relationship in this library connects to canonical reference elements of this package
-            pkg_ref_elem_ids = [re_el.id for re_el in (pkg.reference_elements or [])]
-            if pkg_ref_elem_ids:
-                connected_rels = db.query(ArchimateRelationship).filter(
-                    ArchimateRelationship.model_id == model_id,
-                    (ArchimateRelationship.source_id.in_(pkg_ref_elem_ids) | ArchimateRelationship.target_id.in_(pkg_ref_elem_ids))
-                ).all()
-                if connected_rels:
-                    raise HTTPException(
-                        status_code=409,
-                        detail={
-                            "error": "package_deactivation_blocked",
-                            "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(connected_rels)} relazioni nella libreria collegate a elementi canonici di questo framework.",
-                            "populated_count": len(connected_rels),
-                            "affected_elements": [
-                                {"id": r.id, "name": r.name, "type": r.type} for r in connected_rels[:20]
-                            ]
-                        }
-                    )
+                # 2. Check if any local element uses a stereotype provided by this package
+                pkg_stereotype_ids = [st.id for st in (pkg.stereotypes or [])]
+                if pkg_stereotype_ids:
+                    elem_with_st = [
+                        {"id": e.id, "name": e.name, "type": e.type}
+                        for e in elements if e.stereotype_id in pkg_stereotype_ids
+                    ]
+                    if elem_with_st:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "error": "package_deactivation_blocked",
+                                "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(elem_with_st)} elementi nella libreria a cui è applicato uno stereotipo fornito da questo pacchetto.",
+                                "populated_count": len(elem_with_st),
+                                "affected_elements": elem_with_st[:20]
+                            }
+                        )
+
+                # 3. Check if any relationship in this library connects to canonical reference elements of this package
+                pkg_ref_elem_ids = [re_el.id for re_el in (pkg.reference_elements or [])]
+                if pkg_ref_elem_ids:
+                    connected_rels = db.query(ArchimateRelationship).filter(
+                        ArchimateRelationship.model_id == model_id,
+                        (ArchimateRelationship.source_id.in_(pkg_ref_elem_ids) | ArchimateRelationship.target_id.in_(pkg_ref_elem_ids))
+                    ).all()
+                    if connected_rels:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "error": "package_deactivation_blocked",
+                                "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(connected_rels)} relazioni nella libreria collegate a elementi canonici di questo framework.",
+                                "populated_count": len(connected_rels),
+                                "affected_elements": [
+                                    {"id": r.id, "name": r.name, "type": r.type} for r in connected_rels[:20]
+                                ]
+                            }
+                        )
 
             db.delete(existing_link)
             db.commit()
@@ -3479,7 +4147,19 @@ ARCHIMATE_RELATIONSHIP_RULES: Dict[str, Dict[str, List[str]]] = {
         "Assessment": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],
         "Goal": ["Influence", "Association"],
         "Driver": ["Influence", "Association"],
-        "Requirement": ["Influence", "Association"]
+        "Requirement": ["Influence", "Association"],
+        "Principle": ["Influence", "Association"],
+        "Constraint": ["Influence", "Association"],
+        "Capability": ["Influence", "Association"],
+        "ValueStream": ["Influence", "Association"],
+        "BusinessProcess": ["Influence", "Association"],
+        "ApplicationComponent": ["Influence", "Association"],
+        "ApplicationService": ["Influence", "Association"],
+        "DataObject": ["Influence", "Association"],
+        "Node": ["Influence", "Association"],
+        "SystemSoftware": ["Influence", "Association"],
+        "TechnologyService": ["Influence", "Association"],
+        "WorkPackage": ["Influence", "Association"]
     },
     "Goal": {
         "Goal": ["Composition", "Aggregation", "Influence", "Specialization", "Association"],

@@ -168,6 +168,7 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
         view_type: view.view_type,
         icon: view.icon,
         sort_order: (view.sort_order ?? 0) + 1,
+        target_hub: view.target_hub || 'business',
         is_global: false, // Local to workspace by default
         is_active: false, // Inactive by default
         target_stereotypes: view.target_stereotypes || [],
@@ -438,6 +439,16 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
 
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 uppercase tracking-wider">
                           {view.view_type}
+                        </span>
+
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          view.target_hub === 'architecture'
+                            ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                            : view.target_hub === 'both'
+                            ? 'bg-purple-50 text-purple-700 border-purple-200'
+                            : 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                        }`}>
+                          {view.target_hub === 'architecture' ? '🏛️ Arch Hub' : view.target_hub === 'both' ? '🌐 Dual Hub' : '💼 Business Hub'}
                         </span>
                       </div>
                     </div>

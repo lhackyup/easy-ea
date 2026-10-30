@@ -1,5 +1,5 @@
 from typing import Dict, List, Any, Optional, Set
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from app.models.archimate import ArchimateElement, ArchimateRelationship, ArchitectureDecisionRecord
 
 class ProcessService:
@@ -19,8 +19,13 @@ class ProcessService:
             ArchimateRelationship.model_id == model_id
         ).all()
 
-        # Build element lookup
-        all_elements = {e.id: e for e in db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()}
+        # Build element lookup with eager loaded APM attributes and stereotypes
+        all_elements = {
+            e.id: e for e in db.query(ArchimateElement).options(
+                joinedload(ArchimateElement.apm_attributes),
+                joinedload(ArchimateElement.stereotype)
+            ).filter(ArchimateElement.model_id == model_id).all()
+        }
 
         # Adjacency maps
         outgoing: Dict[str, List[Dict[str, str]]] = {}
@@ -164,6 +169,45 @@ class ProcessService:
                             "message": f"Disallineamento SLA: Processo Mission Critical supportato da '{a['name']}' classificata con criticità 'Administrative'."
                         })
 
+            # Check 5: Explicit RTO/RPO/SLA Package Mismatch
+            p_props = p.properties if isinstance(p.properties, dict) else {}
+            p_target_sla = p_props.get("target_sla_availability")
+            p_target_rto = p_props.get("target_rto_hours")
+            
+            if p_target_sla is not None:
+                try:
+                    t_sla_val = float(p_target_sla)
+                    for a in supporting_apps:
+                        a_elem = all_elements.get(a["id"])
+                        a_p = a_elem.properties if a_elem and isinstance(a_elem.properties, dict) else {}
+                        a_sla = float(a_p.get("app_sla_availability") or 99.50)
+                        if a_sla < t_sla_val:
+                            process_risks.append({
+                                "severity": "HIGH" if is_proc_critical else "MEDIUM",
+                                "type": "SLA_AVAILABILITY_GAP",
+                                "message": f"SLA Gap: Il processo richiede disponibilità {t_sla_val}%, ma l'applicazione '{a['name']}' offre solo {a_sla}%."
+                            })
+                            break
+                except (ValueError, TypeError):
+                    pass
+
+            if p_target_rto is not None:
+                try:
+                    t_rto_val = float(p_target_rto)
+                    for a in supporting_apps:
+                        a_elem = all_elements.get(a["id"])
+                        a_p = a_elem.properties if a_elem and isinstance(a_elem.properties, dict) else {}
+                        a_rto = float(a_p.get("app_rto_hours") or 2.0)
+                        if a_rto > t_rto_val:
+                            process_risks.append({
+                                "severity": "HIGH" if is_proc_critical else "MEDIUM",
+                                "type": "RTO_BREACH_RISK",
+                                "message": f"Rischio RTO: Il processo richiede ripristino entro {t_rto_val}h, ma l'applicazione '{a['name']}' ha RTO stimato di {a_rto}h."
+                            })
+                            break
+                except (ValueError, TypeError):
+                    pass
+
             process_list.append({
                 "id": p.id,
                 "name": p.name,
@@ -199,7 +243,12 @@ class ProcessService:
         when a specific element fails (failure mode) or is modified/decommissioned (change mode).
         Returns hop distances, shortest critical propagation paths, and layer-by-layer impact.
         """
-        all_elements = {e.id: e for e in db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()}
+        all_elements = {
+            e.id: e for e in db.query(ArchimateElement).options(
+                joinedload(ArchimateElement.apm_attributes),
+                joinedload(ArchimateElement.stereotype)
+            ).filter(ArchimateElement.model_id == model_id).all()
+        }
         relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
 
         if element_id not in all_elements:
@@ -372,7 +421,12 @@ class ProcessService:
         3. SLA & Criticality Mismatches.
         """
         catalog = ProcessService.get_process_catalog(db, model_id)
-        all_elements = {e.id: e for e in db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()}
+        all_elements = {
+            e.id: e for e in db.query(ArchimateElement).options(
+                joinedload(ArchimateElement.apm_attributes),
+                joinedload(ArchimateElement.stereotype)
+            ).filter(ArchimateElement.model_id == model_id).all()
+        }
         all_relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
 
         spof_risks = []

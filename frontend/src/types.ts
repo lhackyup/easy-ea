@@ -6,7 +6,7 @@ export interface ActivePackageViewSelection {
   packageId: string;
   viewId: string;
 }
-export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'adrs' | 'saved-views' | 'import' | 'business-views';
+export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'adrs' | 'saved-views' | 'import' | 'business-views' | 'package_view';
 export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
@@ -593,7 +593,16 @@ export interface ArchimateElementItem {
   stereotype?: { id: string; name: string; label: string; icon_color: string } | null;
   incoming_count?: number;
   outgoing_count?: number;
+  adr_count?: number;
   apm?: Partial<ApplicationInfo>;
+}
+
+export interface PaginatedElementsResponse {
+  items: ArchimateElementItem[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
 }
 
 export interface ArchimateRelationshipItem {
@@ -930,9 +939,10 @@ export interface PackageViewSummary {
   name: string;
   description?: string | null;
   category: string;
-  view_type: 'table' | 'matrix' | 'kpi_dashboard';
+  view_type: 'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard';
   icon?: string;
   sort_order?: number;
+  target_hub?: 'business' | 'architecture' | 'both';
   matching_elements_count: number;
   is_global?: boolean;
   is_active?: boolean;
@@ -949,9 +959,10 @@ export interface CustomBusinessViewPayload {
   view_key?: string;
   description?: string;
   category: string;
-  view_type: 'table' | 'matrix' | 'kpi_dashboard';
+  view_type: 'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard';
   icon?: string;
   sort_order?: number;
+  target_hub?: 'business' | 'architecture' | 'both';
   is_global?: boolean;
   is_active?: boolean;
   package_id?: string | null;
@@ -1094,6 +1105,80 @@ export interface ADRListResponse {
   summary: ADRListSummary;
   items: ADRItem[];
 }
+
+export interface ResilienceMetrics {
+  total_processes: number;
+  total_critical_processes: number;
+  compliant_processes: number;
+  mismatched_processes: number;
+  compliance_rate: number;
+  worst_sla_gap: number;
+  worst_rto_gap: number;
+  worst_rpo_gap: number;
+}
+
+export interface ResilienceSupportingApp {
+  id: string;
+  name: string;
+  type: string;
+  sla: number;
+  rto_hours: number;
+  rpo_hours: number;
+  dr_strategy: string;
+}
+
+export interface ResilienceSupportingTech {
+  id: string;
+  name: string;
+  type: string;
+  sla: number;
+  rto_hours: number;
+  rpo_hours: number;
+  ha_redundancy: string;
+  serves_app?: string;
+}
+
+export interface ResilienceBottleneck {
+  id: string;
+  name: string;
+  type: string;
+  issue: string;
+}
+
+export interface ResilienceMismatchItem {
+  process_id: string;
+  process_name: string;
+  process_type: string;
+  criticality_tier: string;
+  dora_critical_function: boolean;
+  target_sla: number;
+  effective_sla: number;
+  sla_gap: number;
+  has_sla_mismatch: boolean;
+  target_rto_hours: number;
+  effective_rto_hours: number;
+  rto_gap_hours: number;
+  has_rto_breach: boolean;
+  target_rpo_hours: number;
+  effective_rpo_hours: number;
+  rpo_gap_hours: number;
+  has_rpo_breach: boolean;
+  status: 'COMPLIANT' | 'CRITICAL_MISMATCH' | 'HIGH_MISMATCH' | 'MEDIUM_MISMATCH';
+  badge_color: 'emerald' | 'rose' | 'amber' | 'orange';
+  bottleneck?: ResilienceBottleneck | null;
+  supporting_apps_count: number;
+  supporting_apps: ResilienceSupportingApp[];
+  supporting_tech_count: number;
+  supporting_tech: ResilienceSupportingTech[];
+}
+
+export interface ResilienceAnalysisResult {
+  model_id: string;
+  model_name: string;
+  metrics: ResilienceMetrics;
+  mismatches: ResilienceMismatchItem[];
+}
+
 
 
 

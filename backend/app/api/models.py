@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Response, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel
@@ -17,6 +17,8 @@ from app.parsers.archi_parser import ArchiModelParser
 from app.services.sample_data import seed_sample_model
 from app.services.apm_service import calculate_time_quadrant
 from app.services.metamodel_service import activate_default_packages_for_workspace
+from app.services.exchange_export_service import export_model_to_exchange_xml
+from app.services.archimate_native_export_service import export_model_to_archimate_xml
 
 router = APIRouter(prefix="/models", tags=["Models & Import"])
 
@@ -310,75 +312,44 @@ def update_model(
     db.commit()
     return {"message": "Model updated successfully"}
 
-@router.get("/{model_id}/export")
-def export_model_json(
+@router.get("/{model_id}/export/archimate")
+def export_model_archimate_xml(
     model_id: str,
+    view_id: Optional[str] = Query(None, description="Optional diagram view ID to export only that view with its elements"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Exports full model content in structured JSON format."""
+    """Exports model workspace in Archi native format (.archimate)."""
     m = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not m:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
-    relationships = db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == model_id).all()
-    views = db.query(ArchimateView).filter(ArchimateView.model_id == model_id).all()
+    xml_content, filename = export_model_to_archimate_xml(model_id, db, view_id=view_id)
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
-    elem_list = []
-    for e in elements:
-        apm = e.apm_attributes
-        elem_list.append({
-            "id": e.id,
-            "name": e.name,
-            "type": e.type,
-            "layer": e.layer,
-            "documentation": e.documentation,
-            "properties": e.properties or {},
-            "apm": {
-                "business_fit": apm.business_fit,
-                "technical_fit": apm.technical_fit,
-                "time_quadrant": apm.time_quadrant,
-                "annual_cost": apm.annual_cost,
-                "business_criticality": apm.business_criticality,
-                "lifecycle_status": apm.lifecycle_status,
-                "business_owner": apm.business_owner,
-                "vendor": apm.vendor,
-                "hosting_type": apm.hosting_type
-            } if apm else None
-        })
+@router.get("/{model_id}/export/exchange-xml")
+def export_model_exchange_xml(
+    model_id: str,
+    view_id: Optional[str] = Query(None, description="Optional diagram view ID to export only that view with its elements"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Exports model (or single view) in The Open Group ArchiMate 3.0 Exchange XML format."""
+    m = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Model not found")
 
-    rel_list = [{
-        "id": r.id,
-        "type": r.type,
-        "name": r.name,
-        "source_id": r.source_id,
-        "target_id": r.target_id,
-        "documentation": r.documentation
-    } for r in relationships]
+    xml_content, filename = export_model_to_exchange_xml(model_id, db, view_id=view_id)
 
-    view_list = [{
-        "id": v.id,
-        "name": v.name,
-        "viewpoint": v.viewpoint,
-        "view_data": v.view_data
-    } for v in views]
-
-    return {
-        "model": {
-            "id": m.id,
-            "code": m.code,
-            "name": m.name,
-            "description": m.description,
-            "version": m.version,
-            "source_format": m.source_format,
-            "created_at": str(m.created_at),
-            "updated_at": str(m.updated_at)
-        },
-        "elements": elem_list,
-        "relationships": rel_list,
-        "views": view_list
-    }
+    return Response(
+        content=xml_content,
+        media_type="application/xml",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
 
 @router.delete("/{model_id}")
 def delete_model(

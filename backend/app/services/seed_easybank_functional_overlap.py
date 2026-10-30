@@ -37,43 +37,43 @@ BANKING_CAPABILITIES = [
     {
         "id": "cap-cust-mgmt",
         "name": "Customer Relationship Management (CRM)",
-        "documentation": "Gestione a 360 gradi dell'anagrafica cliente, opportunità commerciali, pipeline di vendita retail e corporate, campagne marketing e storico interazioni.",
+        "documentation": "Comprehensive 360-degree customer relationship management, sales pipeline, retail and corporate marketing campaigns, and omni-channel interaction history.",
         "properties": {"domain": "Sales & Distribution", "level": "Level 1"}
     },
     {
         "id": "cap-core-acc",
         "name": "Core Account & General Ledger Management",
-        "documentation": "Tenuta conti correnti, piano dei conti, saldi contabili e contabilità generale in tempo reale secondo principi IFRS.",
+        "documentation": "Deposit and checking account administration, chart of accounts, real-time balance ledgers, and financial accounting under IFRS standards.",
         "properties": {"domain": "Core Banking", "level": "Level 1"}
     },
     {
         "id": "cap-payments",
         "name": "Payment & Transaction Processing",
-        "documentation": "Inoltro, validazione e regolamento di transazioni di pagamento multicanale, bonifici SEPA, carte e addebiti diretti.",
+        "documentation": "Multi-channel payment transaction routing, validation, clearing, and settlement for SEPA transfers, payment cards, and direct debits.",
         "properties": {"domain": "Payments & Clearing", "level": "Level 1"}
     },
     {
         "id": "cap-fraud",
         "name": "Fraud Detection & Anti-Financial Crime",
-        "documentation": "Monitoraggio transazionale in tempo reale con intelligenza artificiale per individuazione frodi con carte, furto d'identità e account takeover.",
+        "documentation": "Real-time AI/ML transactional monitoring and decisioning for card fraud, identity theft, and account takeover prevention.",
         "properties": {"domain": "Risk & Compliance", "level": "Level 1"}
     },
     {
         "id": "cap-doc",
         "name": "Document & Archive Management",
-        "documentation": "Conservazione a norma, indicizzazione e archiviazione conforme e-IDAS e WORM di contratti bancari, estratti conto e corrispondenza.",
+        "documentation": "Compliant electronic archiving, indexing, and digital retention under eIDAS and WORM standards for contracts, statements, and formal correspondence.",
         "properties": {"domain": "Corporate Operations", "level": "Level 1"}
     },
     {
         "id": "cap-hr",
         "name": "Human Capital & Payroll Management",
-        "documentation": "Gestione del personale, stipendi, organigramma aziendale, benefit, formazione obbligatoria bancaria e performance management.",
+        "documentation": "Human capital management, payroll processing, organizational modeling, benefits administration, mandatory banking compliance training, and performance reviews.",
         "properties": {"domain": "Corporate Support", "level": "Level 1"}
     },
     {
         "id": "cap-claims",
         "name": "Claims, NPL & Credit Recovery Management",
-        "documentation": "Gestione reclami clientela, contenzioso legale, recupero crediti in sofferenza (NPL/UTP) e monitoraggio piani di rientro.",
+        "documentation": "Customer dispute resolution, legal litigation handling, non-performing loan (NPL/UTP) work-out, and debt restructuring plan tracking.",
         "properties": {"domain": "Credit & Operations", "level": "Level 1"}
     },
 
@@ -81,157 +81,157 @@ BANKING_CAPABILITIES = [
     {
         "id": "cap-aml-screening",
         "name": "Anti-Money Laundering (AML) & PEP Screening",
-        "documentation": "Sorveglianza transazioni antiriciclaggio, screening liste PEP, persone politicamente esposte e antiterrorismo OFAC/UE.",
+        "documentation": "Anti-money laundering transaction surveillance, automated screening against PEP watchlists, and OFAC/EU counter-terrorism sanctions checks.",
         "properties": {"domain": "Compliance & Security", "level": "Level 1"}
     },
     {
         "id": "cap-digital-signature",
         "name": "Digital Signature & Electronic Trust Services",
-        "documentation": "Firma elettronica avanzata (FEA), qualificata (FEQ), marcatura temporale e conservazione a norma del fascicolo digitale contrattuale.",
+        "documentation": "Advanced and Qualified Electronic Signatures (QES), cryptographic timestamping, and legally binding digital contract execution.",
         "properties": {"domain": "Trust & Security", "level": "Level 1"}
     },
     {
         "id": "cap-identity-mgmt",
         "name": "Customer Identity & Access Management (CIAM)",
-        "documentation": "Autenticazione biometrica forte (SCA/PSD2), Single Sign-On (SSO), federation OpenID Connect e gestione credenziali d'accesso cliente.",
+        "documentation": "Strong customer authentication (SCA/PSD2), biometric login, Single Sign-On (SSO), OpenID Connect federation, and credential lifecycle management.",
         "properties": {"domain": "Security & Architecture", "level": "Level 1"}
     },
     {
         "id": "cap-credit-scoring",
         "name": "Credit Bureau Scoring & Customer Creditworthiness",
-        "documentation": "Interrogazione banche dati creditizie (CRIF, Experian, Centrale Rischi Banca d'Italia) e calcolo scoring di probabilità di default (PD).",
+        "documentation": "Quantitative and qualitative credit scoring, automated credit bureau inquiry (CRIF/Experian), and real-time default probability (PD) calculation.",
         "properties": {"domain": "Credit Risk", "level": "Level 1"}
     },
     {
         "id": "cap-mortgage-orig",
         "name": "Mortgage & Loan Origination / Underwriting",
-        "documentation": "Istruttoria, preventivazione, calcolo LTV/DTI e delibera crediti per mutui ipotecari residenziali e prestiti personali.",
+        "documentation": "End-to-end mortgage origination, cadastral property checks, technical collateral appraisal, and notarial deed workflow management.",
         "properties": {"domain": "Retail Lending", "level": "Level 1"}
     },
     {
         "id": "cap-securities-trading",
         "name": "Securities Trading, OMS & Market Feeds",
-        "documentation": "Trading desk multi-asset, Order Management System (OMS), esecuzione ordini azionari e obbligazionari e feed finanziari in tempo reale.",
+        "documentation": "Direct Market Access (DMA) equity, bond, and derivatives trading execution, smart order routing, and exchange connectivity.",
         "properties": {"domain": "Capital Markets", "level": "Level 1"}
     },
     {
         "id": "cap-wealth-portfolio",
         "name": "Wealth Portfolio Management & Asset Allocation",
-        "documentation": "Pianificazione finanziaria, asset allocation personalizzata per clienti Private Banking, ribilanciamento automatico e adeguatezza MiFID II.",
+        "documentation": "Financial planning, tailored asset allocation for Private Banking clients, and discretionary portfolio management.",
         "properties": {"domain": "Wealth Management", "level": "Level 1"}
     },
     {
         "id": "cap-treasury-cash",
         "name": "Treasury Management, Liquidity & Cash Pooling",
-        "documentation": "Gestione della liquidità di tesoreria, zero-balancing cash pooling per grandi aziende corporate e operazioni interbancarie sul mercato monetario.",
+        "documentation": "Corporate treasury liquidity management, multi-entity zero-balancing cash pooling, and intraday cash forecasting.",
         "properties": {"domain": "Corporate Treasury", "level": "Level 1"}
     },
     {
         "id": "cap-reg-reporting",
         "name": "Supervisory & Regulatory Reporting (BDI / EBA / ECB)",
-        "documentation": "Generazione e quadratura delle segnalazioni di vigilanza prudenziale per Banca d'Italia (Matrice PUMA, Finrep, Corep, AnaCredit).",
+        "documentation": "Automated calculation, reconciliation, and filing of prudential regulatory reports for Bank of Italy and ECB (PUMA, FINREP, COREP).",
         "properties": {"domain": "Regulatory Compliance", "level": "Level 1"}
     },
     {
         "id": "cap-pos-acquiring",
         "name": "Merchant POS Acquiring & Terminal Management",
-        "documentation": "Gestione convenzionamento esercenti commerciali, instradamento transazioni POS fisiche e virtuali (e-Commerce) e settlement commissionale.",
+        "documentation": "Merchant acquiring terminal fleet management, POS authorization routing, e-commerce payment gateway integration, and merchant settlement.",
         "properties": {"domain": "Merchant Payments", "level": "Level 1"}
     },
     {
         "id": "cap-atm-switch",
         "name": "ATM Switch & Self-Service Terminal Fleet Monitoring",
-        "documentation": "Monitoraggio operativo flotta sportelli bancomat ATM/cash-in, diagnostica remota, autorizzazione prelievi e quadratura contante.",
+        "documentation": "Operational monitoring of ATM and cash-in terminal fleets, remote telemetry diagnostics, withdrawal authorization, and cash balancing.",
         "properties": {"domain": "Retail Channels", "level": "Level 1"}
     },
     {
         "id": "cap-bi-analytics",
         "name": "Enterprise Business Intelligence & Analytics",
-        "documentation": "Data warehousing aziendale, data lakehouse, dashboard direzionali esecutive e modelli analitici di redditività cliente/prodotto.",
+        "documentation": "Enterprise Business Intelligence reporting and interactive dashboard analytics for executive management.",
         "properties": {"domain": "Data & Analytics", "level": "Level 1"}
     },
     {
         "id": "cap-itsm-ops",
         "name": "IT Service Management & Operational Governance",
-        "documentation": "Incident, problem e change management per l'infrastruttura IT bancaria, Service Catalog e monitoraggio SLA erogativi.",
+        "documentation": "ITIL incident, problem, and change management for banking IT infrastructure, service catalog, and SLA compliance monitoring.",
         "properties": {"domain": "IT Operations", "level": "Level 1"}
     },
     {
         "id": "cap-swift-clearing",
         "name": "SWIFT Messaging & Interbank Clearing",
-        "documentation": "Instradamento messaggi transfrontalieri su rete SWIFT (ISO 20022 MX e MT103), tracking GPI e compensazione multilaterale interbancaria.",
+        "documentation": "Cross-border financial messaging routing over SWIFT network (ISO 20022 MX and MT103), SWIFT GPI tracking, and sanctions checks.",
         "properties": {"domain": "Payments & Clearing", "level": "Level 1"}
     },
     {
         "id": "cap-erp-accounting",
         "name": "Enterprise ERP, General Accounting & Consolidation",
-        "documentation": "Contabilità analitica e generale interna di banca, cespiti, controllo di gestione, fatturazione passiva e consolidato di gruppo.",
+        "documentation": "Enterprise ERP for general ledger accounting, corporate treasury, fixed assets, cost controlling, and financial reporting.",
         "properties": {"domain": "Corporate Finance", "level": "Level 1"}
     },
     {
         "id": "cap-customer-support",
         "name": "Customer Service, Contact Center & Branch Management",
-        "documentation": "Servizio assistenza clienti omnicanale, contact center telefonico e chat, ticketing supporto e gestione code filiale fisica.",
+        "documentation": "Omnichannel customer care service, telephone and chat contact center, support ticketing, and physical branch queue routing.",
         "properties": {"domain": "Customer Channels", "level": "Level 1"}
     },
     {
         "id": "cap-data-governance",
         "name": "Enterprise Data Governance & Catalog",
-        "documentation": "Data lineage end-to-end, dizionario dati aziendale, qualità del dato conforme a BCBS 239 e tracciamento titolarità dati (Data Owner).",
+        "documentation": "Enterprise data catalog, end-to-end data lineage, BCBS 239 risk data aggregation, and business glossary management.",
         "properties": {"domain": "Data Management", "level": "Level 1"}
     },
     {
         "id": "cap-fund-accounting",
         "name": "Investment Fund Accounting & NAV Calculation",
-        "documentation": "Calcolo giornaliero della quota (NAV - Net Asset Value) dei fondi comuni, contabilità OICR e riconciliazione titoli.",
+        "documentation": "Daily fund valuation (NAV - Net Asset Value) calculation for mutual funds, UCITS fund accounting, and securities reconciliation.",
         "properties": {"domain": "Asset Management", "level": "Level 1"}
     },
     {
         "id": "cap-digital-channels",
         "name": "Digital Retail & Corporate Banking Channels",
-        "documentation": "Piattaforma di internet e mobile banking omnicanale per clienti retail e portale dispositivo per tesoreria imprese.",
+        "documentation": "Omnichannel digital banking platforms for retail mobile/web clients and corporate banking cash management portals.",
         "properties": {"domain": "Digital Channels", "level": "Level 1"}
     },
     {
         "id": "cap-integration-platform",
         "name": "Integration Middleware & API Gateway",
-        "documentation": "Disaccoppiamento servizi, gateway API con rate-limiting e policy security, e bus di streaming eventi asincroni enterprise (Kafka).",
+        "documentation": "Service decoupling, enterprise API gateway with rate-limiting and security policies, and enterprise asynchronous Kafka event bus.",
         "properties": {"domain": "Integration Architecture", "level": "Level 1"}
     },
     {
         "id": "cap-cyber-defense",
         "name": "Cybersecurity, SIEM & Threat Detection",
-        "documentation": "Security Operations Center (SOC), correlazione log ed eventi SIEM, difesa endpoint EDR e crittografia hardware con moduli HSM.",
+        "documentation": "Security Operations Center (SOC), SIEM log and event correlation, EDR endpoint protection, and hardware cryptographic key protection via HSMs.",
         "properties": {"domain": "Cybersecurity", "level": "Level 1"}
     },
     {
         "id": "cap-procurement",
         "name": "Strategic Sourcing & Enterprise Procurement",
-        "documentation": "Gestione albo fornitori, acquisti telematici, ordini d'acquisto e contratti procurement con terze parti.",
+        "documentation": "Vendor directory management, electronic procurement, purchase orders, and third-party vendor contract administration.",
         "properties": {"domain": "Corporate Support", "level": "Level 1"}
     },
     {
         "id": "cap-esg-scoring",
         "name": "ESG Portfolio Risk & Sustainability Scoring",
-        "documentation": "Valutazione dei fattori ambientali, sociali e di governance (ESG) dei debitori e degli asset finanziari a portafoglio.",
+        "documentation": "Environmental, Social, and Governance (ESG) factor assessment for corporate borrowers and investment portfolio assets.",
         "properties": {"domain": "Sustainable Finance", "level": "Level 1"}
     },
     {
         "id": "cap-crypto-custody",
         "name": "Digital Asset & Cryptocurrency Custody",
-        "documentation": "Custodia sicura di asset tokenizzati e crypto con chiavi multi-party computation (MPC) e conformità normativa MiCA.",
+        "documentation": "Institutional digital asset and crypto custody utilizing multi-party computation (MPC) private keys under MiCA regulatory standards.",
         "properties": {"domain": "Digital Assets", "level": "Level 1"}
     },
     {
         "id": "cap-audit-risk",
         "name": "Internal Audit & Operational Risk Governance",
-        "documentation": "Pianificazione controlli di terzo livello, audit trail, matrice dei rischi operativi e monitoraggio rilievi di conformità.",
+        "documentation": "Third-line audit control planning, immutable audit trails, operational risk register, and regulatory findings tracking.",
         "properties": {"domain": "Internal Audit", "level": "Level 1"}
     },
     {
         "id": "cap-trade-finance",
         "name": "Trade Finance & Working Capital Solutions",
-        "documentation": "Emissione lettere di credito, crediti all'esportazione, anticipazione fatture e factoring crediti d'impresa.",
+        "documentation": "Documentary letters of credit, international bank guarantees, performance bonds, and supply chain working capital finance.",
         "properties": {"domain": "Commercial Banking", "level": "Level 1"}
     }
 ]
@@ -596,8 +596,8 @@ def seed_functional_overlap(db: Session):
                 source_id=app_id,
                 target_id=cap_id,
                 type="RealizationRelationship",
-                name="Realizza Funzionalità",
-                documentation=f"L'applicazione di business '{app.name}' implementa e realizza la capacità di business '{cap.name}'."
+                name="Realizes Functionality",
+                documentation=f"Business application '{app.name}' implements and realizes strategic business capability '{cap.name}'."
             ))
             rels_created += 1
 
@@ -622,8 +622,8 @@ def seed_functional_overlap(db: Session):
                     source_id=core_comp_id,
                     target_id=cap_id,
                     type="RealizationRelationship",
-                    name="Supporta Logica Funzionale",
-                    documentation=f"Il componente core di {app.name} esegue la logica applicativa a supporto della capability '{cap.name}'."
+                    name="Supports Functional Domain Logic",
+                    documentation=f"The core component of {app.name} executes application logic supporting business capability '{cap.name}'."
                 ))
                 rels_created += 1
 

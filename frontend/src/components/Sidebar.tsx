@@ -52,7 +52,7 @@ interface SidebarProps {
   onToggleCollapse: () => void;
   packagesWithViews?: PackageWithViews[];
   activePackageView?: ActivePackageViewSelection | null;
-  onSelectPackageView?: (packageId: string, viewId: string) => void;
+  onSelectPackageView?: (packageId: string, viewId: string, hub?: 'business' | 'architecture') => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -81,6 +81,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   const getViewIcon = (iconName?: string, viewType?: string) => {
+    if (viewType === 'adr_manager' || iconName === 'Scale') return Scale;
     if (viewType === 'kpi_dashboard') return BarChart3;
     if (viewType === 'matrix') return Grid;
     if (iconName === 'Building2') return Building2;
@@ -149,11 +150,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: GitMerge
     },
     {
-      id: 'adrs' as ArchitectureSubTab,
-      label: t.subtabs.adrRegistry,
-      icon: Scale
-    },
-    {
       id: 'business-views' as ArchitectureSubTab,
       label: t.subtabs.businessViews,
       icon: Sliders
@@ -164,6 +160,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: UploadCloud
     }
   ];
+
+  const businessPackages = packagesWithViews
+    .map((p) => ({
+      ...p,
+      views: (p.views || []).filter((v) => (v.target_hub || 'business') === 'business' || v.target_hub === 'both')
+    }))
+    .filter((p) => p.views.length > 0);
+
+  const architecturePackages = packagesWithViews
+    .map((p) => ({
+      ...p,
+      views: (p.views || []).filter((v) => v.target_hub === 'architecture' || v.target_hub === 'both')
+    }))
+    .filter((p) => p.views.length > 0);
 
   const adminItems = [
     {
@@ -259,105 +269,103 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             {/* DYNAMIC PACKAGE VIEWS SECTION */}
-            {packagesWithViews.filter((p) => p.views && p.views.length > 0).length > 0 && (
+            {businessPackages.length > 0 && (
               <div className="pt-3 mt-2 border-t border-slate-100">
                 {!isCollapsed && (
                   <div className="px-3 pb-1.5 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
                     <span>Pacchetti & Viste</span>
                     <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded-full font-bold">
-                      {packagesWithViews.filter((p) => p.views && p.views.length > 0).length}
+                      {businessPackages.length}
                     </span>
                   </div>
                 )}
 
                 <div className="space-y-1.5">
-                  {packagesWithViews
-                    .filter((p) => p.views && p.views.length > 0)
-                    .map((pkg) => {
-                      const isExpanded = expandedPackages[pkg.id] ?? true;
+                  {businessPackages.map((pkg) => {
+                    const isExpanded = expandedPackages[pkg.id] ?? true;
 
-                      return (
-                        <div key={pkg.id} className="space-y-0.5">
-                          {/* Package Header button */}
-                          <button
-                            onClick={() => togglePackageExpand(pkg.id)}
-                            title={isCollapsed ? pkg.name : undefined}
-                            className={`w-full flex items-center justify-between rounded-xl text-xs font-bold transition-all duration-150 ${
-                              isCollapsed ? 'justify-center p-2' : 'px-2.5 py-1.5 text-left'
-                            } text-slate-700 hover:text-indigo-600 hover:bg-slate-50`}
-                          >
-                            <div className="flex items-center space-x-2 min-w-0">
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border shrink-0 ${getColorClasses(
-                                  pkg.icon_color
-                                )}`}
-                              >
-                                {pkg.code}
-                              </span>
-                              {!isCollapsed && (
-                                <span className="truncate text-xs font-bold text-slate-800" title={pkg.name}>
-                                  {pkg.name}
-                                </span>
-                              )}
-                            </div>
+                    return (
+                      <div key={pkg.id} className="space-y-0.5">
+                        {/* Package Header button */}
+                        <button
+                          onClick={() => togglePackageExpand(pkg.id)}
+                          title={isCollapsed ? pkg.name : undefined}
+                          className={`w-full flex items-center justify-between rounded-xl text-xs font-bold transition-all duration-150 ${
+                            isCollapsed ? 'justify-center p-2' : 'px-2.5 py-1.5 text-left'
+                          } text-slate-700 hover:text-indigo-600 hover:bg-slate-50`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border shrink-0 ${getColorClasses(
+                                pkg.icon_color
+                              )}`}
+                            >
+                              {pkg.code}
+                            </span>
                             {!isCollapsed && (
-                              <ChevronDown
-                                className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
-                                  isExpanded ? 'rotate-180' : ''
-                                }`}
-                              />
+                              <span className="truncate text-xs font-bold text-slate-800" title={pkg.name}>
+                                {pkg.name}
+                              </span>
                             )}
-                          </button>
-
-                          {/* Submenu of views */}
-                          {(!isCollapsed && isExpanded) && (
-                            <div className="pl-3.5 pr-1 space-y-0.5 border-l-2 border-slate-100 ml-3.5 my-1">
-                              {[...(pkg.views || [])]
-                                .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
-                                .map((v) => {
-                                const Icon = getViewIcon(v.icon, v.view_type);
-                                const isViewActive =
-                                  businessTab === 'package_view' &&
-                                  activePackageView?.packageId === pkg.id &&
-                                  (activePackageView?.viewId === v.id || activePackageView?.viewId === v.view_key);
-
-                                return (
-                                  <button
-                                    key={v.id}
-                                    onClick={() => onSelectPackageView && onSelectPackageView(pkg.id, v.id)}
-                                    className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                                      isViewActive
-                                        ? 'bg-indigo-600 text-white shadow-sm font-bold'
-                                        : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/60'
-                                    }`}
-                                  >
-                                    <div className="flex items-center space-x-2 min-w-0">
-                                      <Icon
-                                        className={`w-3.5 h-3.5 shrink-0 ${
-                                          isViewActive ? 'text-white' : 'text-slate-400'
-                                        }`}
-                                      />
-                                      <span className="truncate">{v.name}</span>
-                                    </div>
-                                    {v.matching_elements_count > 0 && (
-                                      <span
-                                        className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1 shrink-0 ${
-                                          isViewActive
-                                            ? 'bg-white/20 text-white'
-                                            : 'bg-slate-100 text-slate-500'
-                                        }`}
-                                      >
-                                        {v.matching_elements_count}
-                                      </span>
-                                    )}
-                                  </button>
-                                );
-                              })}
-                            </div>
+                          </div>
+                          {!isCollapsed && (
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                                isExpanded ? 'rotate-180' : ''
+                              }`}
+                            />
                           )}
-                        </div>
-                      );
-                    })}
+                        </button>
+
+                        {/* Submenu of views */}
+                        {(!isCollapsed && isExpanded) && (
+                          <div className="pl-3.5 pr-1 space-y-0.5 border-l-2 border-slate-100 ml-3.5 my-1">
+                            {[...(pkg.views || [])]
+                              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
+                              .map((v) => {
+                              const Icon = getViewIcon(v.icon, v.view_type);
+                              const isViewActive =
+                                businessTab === 'package_view' &&
+                                activePackageView?.packageId === pkg.id &&
+                                (activePackageView?.viewId === v.id || activePackageView?.viewId === v.view_key);
+
+                              return (
+                                <button
+                                  key={v.id}
+                                  onClick={() => onSelectPackageView && onSelectPackageView(pkg.id, v.id, 'business')}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                    isViewActive
+                                      ? 'bg-indigo-600 text-white shadow-sm font-bold'
+                                      : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/60'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-2 min-w-0">
+                                    <Icon
+                                      className={`w-3.5 h-3.5 shrink-0 ${
+                                        isViewActive ? 'text-white' : 'text-slate-400'
+                                      }`}
+                                    />
+                                    <span className="truncate">{v.name}</span>
+                                  </div>
+                                  {v.matching_elements_count > 0 && (
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1 shrink-0 ${
+                                        isViewActive
+                                          ? 'bg-white/20 text-white'
+                                          : 'bg-slate-100 text-slate-500'
+                                      }`}
+                                    >
+                                      {v.matching_elements_count}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -414,6 +422,108 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 );
               })}
             </div>
+
+            {/* DYNAMIC ARCHITECTURE PACKAGE VIEWS SECTION */}
+            {architecturePackages.length > 0 && (
+              <div className="pt-3 mt-2 border-t border-slate-100">
+                {!isCollapsed && (
+                  <div className="px-3 pb-1.5 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400">
+                    <span>Pacchetti & Viste</span>
+                    <span className="bg-slate-100 text-slate-600 px-1.5 py-0.2 rounded-full font-bold">
+                      {architecturePackages.length}
+                    </span>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  {architecturePackages.map((pkg) => {
+                    const isExpanded = expandedPackages[pkg.id] ?? true;
+
+                    return (
+                      <div key={pkg.id} className="space-y-0.5">
+                        {/* Package Header button */}
+                        <button
+                          onClick={() => togglePackageExpand(pkg.id)}
+                          title={isCollapsed ? pkg.name : undefined}
+                          className={`w-full flex items-center justify-between rounded-xl text-xs font-bold transition-all duration-150 ${
+                            isCollapsed ? 'justify-center p-2' : 'px-2.5 py-1.5 text-left'
+                          } text-slate-700 hover:text-emerald-600 hover:bg-slate-50`}
+                        >
+                          <div className="flex items-center space-x-2 min-w-0">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border shrink-0 ${getColorClasses(
+                                pkg.icon_color
+                              )}`}
+                            >
+                              {pkg.code}
+                            </span>
+                            {!isCollapsed && (
+                              <span className="truncate text-xs font-bold text-slate-800" title={pkg.name}>
+                                {pkg.name}
+                              </span>
+                            )}
+                          </div>
+                          {!isCollapsed && (
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 text-slate-400 transition-transform ${
+                                isExpanded ? 'rotate-180' : ''
+                              }`}
+                            />
+                          )}
+                        </button>
+
+                        {/* Submenu of views */}
+                        {(!isCollapsed && isExpanded) && (
+                          <div className="pl-3.5 pr-1 space-y-0.5 border-l-2 border-slate-100 ml-3.5 my-1">
+                            {[...(pkg.views || [])]
+                              .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || a.name.localeCompare(b.name))
+                              .map((v) => {
+                              const Icon = getViewIcon(v.icon, v.view_type);
+                              const isViewActive =
+                                architectureTab === 'package_view' &&
+                                activePackageView?.packageId === pkg.id &&
+                                (activePackageView?.viewId === v.id || activePackageView?.viewId === v.view_key);
+
+                              return (
+                                <button
+                                  key={v.id}
+                                  onClick={() => onSelectPackageView && onSelectPackageView(pkg.id, v.id, 'architecture')}
+                                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                    isViewActive
+                                      ? 'bg-emerald-600 text-white shadow-sm font-bold'
+                                      : 'text-slate-600 hover:text-emerald-600 hover:bg-emerald-50/60'
+                                  }`}
+                                >
+                                  <div className="flex items-center space-x-2 min-w-0">
+                                    <Icon
+                                      className={`w-3.5 h-3.5 shrink-0 ${
+                                        isViewActive ? 'text-white' : 'text-slate-400'
+                                      }`}
+                                    />
+                                    <span className="truncate">{v.name}</span>
+                                  </div>
+                                  {v.matching_elements_count > 0 && (
+                                    <span
+                                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ml-1 shrink-0 ${
+                                        isViewActive
+                                          ? 'bg-white/20 text-white'
+                                          : 'bg-slate-100 text-slate-500'
+                                      }`}
+                                    >
+                                      {v.matching_elements_count}
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

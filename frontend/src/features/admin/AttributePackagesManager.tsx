@@ -86,9 +86,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({
-    'pkg-apm': true
-  });
+  const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
   const [pkgActiveTab, setPkgActiveTab] = useState<Record<string, 'attributes' | 'stereotypes' | 'views'>>({});
   const [pkgDetailsCache, setPkgDetailsCache] = useState<Record<string, any>>({});
   const [loadingPkgDetails, setLoadingPkgDetails] = useState<Record<string, boolean>>({});
@@ -103,6 +101,28 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
       console.error('Failed to load package details', err);
     } finally {
       setLoadingPkgDetails((prev) => ({ ...prev, [pkgId]: false }));
+    }
+  };
+
+  const handleUpdateViewTargetHub = async (pkgId: string, viewId: string, targetHub: 'business' | 'architecture' | 'both') => {
+    try {
+      await api.updatePackageViewTargetHub(viewId, targetHub);
+      setPkgDetailsCache((prev) => {
+        const pkgData = prev[pkgId];
+        if (!pkgData || !pkgData.views) return prev;
+        return {
+          ...prev,
+          [pkgId]: {
+            ...pkgData,
+            views: pkgData.views.map((v: any) => v.id === viewId ? { ...v, target_hub: targetHub } : v)
+          }
+        };
+      });
+      if (onPackageUpdated) {
+        onPackageUpdated();
+      }
+    } catch (err: any) {
+      alert(err.message || "Errore nell'aggiornamento del target hub");
     }
   };
 
@@ -959,6 +979,18 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                                     ))}
                                   </div>
                                 )}
+                                <div className="flex items-center justify-between pt-2 border-t border-slate-100 text-[11px]">
+                                  <span className="font-semibold text-slate-500">Destinazione Hub:</span>
+                                  <select
+                                    value={v.target_hub || 'business'}
+                                    onChange={(e) => handleUpdateViewTargetHub(pkg.id, v.id, e.target.value as any)}
+                                    className="text-[11px] font-bold rounded-lg border border-slate-200 bg-slate-50 text-slate-700 px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-purple-500 cursor-pointer"
+                                  >
+                                    <option value="business">💼 Business Hub</option>
+                                    <option value="architecture">🏛️ Architecture Hub</option>
+                                    <option value="both">🌐 Entrambi (Business & Arch)</option>
+                                  </select>
+                                </div>
                               </div>
                             ))}
                           </div>

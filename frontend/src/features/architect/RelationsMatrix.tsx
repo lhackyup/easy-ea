@@ -16,7 +16,9 @@ import {
   AlertTriangle,
   Sparkles,
   X,
-  CheckCircle2
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -89,6 +91,14 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
   const [newRelDirection, setNewRelDirection] = useState<'row_to_col' | 'col_to_row'>('row_to_col');
   const [savingRel, setSavingRel] = useState<boolean>(false);
 
+  // 2D Matrix Row Pagination (drastically speeds up DOM rendering for hundreds of rows)
+  const [matrixRowPage, setMatrixRowPage] = useState<number>(1);
+  const [matrixRowPageSize, setMatrixRowPageSize] = useState<number | 'all'>(30);
+
+  // Flat Table Pagination
+  const [tablePage, setTablePage] = useState<number>(1);
+  const [tablePageSize, setTablePageSize] = useState<number>(50);
+
   const fetchAllData = async () => {
     setLoading(true);
     try {
@@ -149,9 +159,10 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
       outgoingBySource.set(r.source_id, [...(outgoingBySource.get(r.source_id) || []), r]);
     });
 
-    // 2-hop derived relationships: Row -> Intermediate -> Col (or Col -> Intermediate -> Row)
+    // 2-hop derived relationships: Row -> Intermediate -> Col (optimized with colIds filter)
     const derivedMap = new Map<string, Array<{ viaName: string; viaType: string; relType: string }>>();
     if (showDerived) {
+      const colIds = new Set(colElements.map((c) => c.id));
       rowElements.forEach((rEl) => {
         const firstHops = outgoingBySource.get(rEl.id) || [];
         firstHops.forEach((hop1) => {
@@ -159,7 +170,7 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
           if (!midEl || midEl.id === rEl.id) return;
           const secondHops = outgoingBySource.get(midEl.id) || [];
           secondHops.forEach((hop2) => {
-            if (hop2.target_id === rEl.id) return;
+            if (hop2.target_id === rEl.id || !colIds.has(hop2.target_id)) return;
             const pairKey = `${rEl.id}::${hop2.target_id}`;
             if (!directMap.has(pairKey)) {
               const list = derivedMap.get(pairKey) || [];
@@ -196,6 +207,62 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
 
     return { directMap, derivedMap, rowCoverage, colCoverage };
   }, [elements, relationships, rowElements, colElements, showDerived]);
+
+  const totalMatrixRowPages = useMemo(() => {
+    if (matrixRowPageSize === 'all') return 1;
+    return Math.max(1, Math.ceil(rowElements.length / matrixRowPageSize));
+  }, [rowElements.length, matrixRowPageSize]);
+
+  useEffect(() => {
+    if (matrixRowPage > totalMatrixRowPages) {
+      setMatrixRowPage(1);
+    }
+  }, [totalMatrixRowPages, matrixRowPage]);
+
+  useEffect(() => {
+    setMatrixRowPage(1);
+  }, [rowElementType, colElementType, search]);
+
+  const paginatedRowElements = useMemo(() => {
+    if (matrixRowPageSize === 'all') return rowElements;
+    const start = (matrixRowPage - 1) * matrixRowPageSize;
+    return rowElements.slice(start, start + matrixRowPageSize);
+  }, [rowElements, matrixRowPage, matrixRowPageSize]);
+
+  const filtered = useMemo(() => {
+    return relationships.filter((r) =>
+      r.source_name.toLowerCase().includes(search.toLowerCase()) ||
+      r.target_name.toLowerCase().includes(search.toLowerCase()) ||
+      r.type.toLowerCase().includes(search.toLowerCase())
+    );
+  }, [relationships, search]);
+
+  const totalTablePages = useMemo(() => {
+    return Math.max(1, Math.ceil(filtered.length / tablePageSize));
+  }, [filtered.length, tablePageSize]);
+
+  useEffect(() => {
+    if (tablePage > totalTablePages) {
+      setTablePage(1);
+    }
+  }, [totalTablePages, tablePage]);
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [search, selectedType]);
+
+  const paginatedTableRelations = useMemo(() => {
+    const start = (tablePage - 1) * tablePageSize;
+    return filtered.slice(start, start + tablePageSize);
+  }, [filtered, tablePage, tablePageSize]);
+
+  const orphanRowsCount = useMemo(() => {
+    return rowElements.filter((r) => (matrixData.rowCoverage.get(r.id) || 0) === 0).length;
+  }, [rowElements, matrixData.rowCoverage]);
+
+  const orphanColsCount = useMemo(() => {
+    return colElements.filter((c) => (matrixData.colCoverage.get(c.id) || 0) === 0).length;
+  }, [colElements, matrixData.colCoverage]);
 
   // Open cell modal and load allowed ArchiMate relationship types
   const handleCellClick = async (rowElem: ArchimateElementItem, colElem: ArchimateElementItem) => {
@@ -278,15 +345,6 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
       </div>
     );
   }
-
-  const filtered = relationships.filter((r) =>
-    r.source_name.toLowerCase().includes(search.toLowerCase()) ||
-    r.target_name.toLowerCase().includes(search.toLowerCase()) ||
-    r.type.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const orphanRowsCount = rowElements.filter((r) => (matrixData.rowCoverage.get(r.id) || 0) === 0).length;
-  const orphanColsCount = colElements.filter((c) => (matrixData.colCoverage.get(c.id) || 0) === 0).length;
 
   return (
     <div className="space-y-6 pb-12">
@@ -492,7 +550,7 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
-                    {rowElements.map((rowEl) => {
+                    {paginatedRowElements.map((rowEl) => {
                       const isRowOrphan = highlightOrphans && (matrixData.rowCoverage.get(rowEl.id) || 0) === 0;
                       return (
                         <tr key={rowEl.id} className="hover:bg-slate-50/60">
@@ -577,6 +635,61 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
                 </table>
               </div>
             )}
+
+            {/* Matrix Row Pagination Controls */}
+            {rowElements.length > 0 && (
+              <div className="p-3 border-t border-slate-200 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-semibold text-slate-500">Righe visualizzate:</span>
+                  <select
+                    value={matrixRowPageSize}
+                    onChange={(e) => {
+                      const val = e.target.value === 'all' ? 'all' : Number(e.target.value);
+                      setMatrixRowPageSize(val);
+                      setMatrixRowPage(1);
+                    }}
+                    className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-bold text-slate-700 bg-white hover:border-slate-300 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer"
+                  >
+                    <option value={20}>20 righe</option>
+                    <option value={40}>40 righe</option>
+                    <option value={60}>60 righe</option>
+                    <option value="all">Tutte ({rowElements.length})</option>
+                  </select>
+                </div>
+
+                {matrixRowPageSize !== 'all' && totalMatrixRowPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-semibold text-slate-600">
+                      Righe {Math.min((matrixRowPage - 1) * (matrixRowPageSize as number) + 1, rowElements.length)}-
+                      {Math.min(matrixRowPage * (matrixRowPageSize as number), rowElements.length)} di {rowElements.length} ({rowElementType})
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => setMatrixRowPage((p) => Math.max(1, p - 1))}
+                        disabled={matrixRowPage === 1}
+                        className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                        title="Pagina precedente"
+                      >
+                        <ChevronLeft className="w-3.5 h-3.5" />
+                      </button>
+                      <span className="font-mono text-xs font-bold text-slate-800 px-2 py-0.5 bg-white border border-slate-200 rounded-md">
+                        {matrixRowPage} / {totalMatrixRowPages}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setMatrixRowPage((p) => Math.min(totalMatrixRowPages, p + 1))}
+                        disabled={matrixRowPage === totalMatrixRowPages}
+                        className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                        title="Pagina successiva"
+                      >
+                        <ChevronRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -629,7 +742,7 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filtered.map((r) => (
+                  {paginatedTableRelations.map((r) => (
                     <tr key={r.id} className="hover:bg-slate-50/80 transition">
                       <td className="py-3.5 px-4 font-bold text-slate-900">
                         <div className="flex flex-col">
@@ -657,6 +770,41 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
                 </tbody>
               </table>
             </div>
+
+            {/* Table Pagination Footer */}
+            {filtered.length > 0 && (
+              <div className="p-3.5 border-t border-slate-100 bg-slate-50/70 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-600">
+                <span className="text-[11px] font-semibold text-slate-600">
+                  Visualizzate {Math.min((tablePage - 1) * tablePageSize + 1, filtered.length)}-
+                  {Math.min(tablePage * tablePageSize, filtered.length)} di {filtered.length} relazioni
+                </span>
+                {totalTablePages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => setTablePage((p) => Math.max(1, p - 1))}
+                      disabled={tablePage === 1}
+                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                      title="Pagina precedente"
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                    </button>
+                    <span className="font-mono text-xs font-bold text-slate-800 px-2 py-0.5 bg-white border border-slate-200 rounded-md">
+                      {tablePage} / {totalTablePages}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setTablePage((p) => Math.min(totalTablePages, p + 1))}
+                      disabled={tablePage === totalTablePages}
+                      className="p-1 rounded-lg border border-slate-200 bg-white hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer transition"
+                      title="Pagina successiva"
+                    >
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}

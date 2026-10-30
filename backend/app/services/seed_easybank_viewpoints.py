@@ -52,27 +52,27 @@ def seed_viewpoints(db: Session):
     # ----------------------------------------------------------------------
     print("\n--> [1/4] Creazione/Verifica elementi ausiliari per i viewpoint...")
     aux_elements = [
-        {"id": "actor-pay-clearing", "name": "Direzione Pagamenti & Regolamento Interbancario", "type": "BusinessActor", "layer": "Business", "doc": "Unità operativa responsabile dell'elaborazione flussi SEPA, clearing e settlement interbancario."},
-        {"id": "actor-branch-advisor", "name": "Gestore Consulente Filiale Retail", "type": "BusinessActor", "layer": "Business", "doc": "Consulente commerciale di filiale dedicato all'istruttoria del credito ai privati."},
-        {"id": "actor-appraiser", "name": "Perito Tecnico Immobiliare Asseverato", "type": "BusinessActor", "layer": "Business", "doc": "Professionista abilitato per la perizia estimativa e asseverazione garanzie ipotecarie."},
-        {"id": "actor-credit-underwriter", "name": "Deliberante Fidi & Comitato Crediti", "type": "BusinessActor", "layer": "Business", "doc": "Organo deliberante per la concessione del merito creditizio residenziale e corporate."},
-        {"id": "actor-notary", "name": "Studio Notarile Convenzionato", "type": "BusinessActor", "layer": "Business", "doc": "Pubblico ufficiale rogante per la stipula del mutuo e l'iscrizione dell'ipoteca."},
-        {"id": "actor-private-banker", "name": "Private Banker Wealth Advisor", "type": "BusinessActor", "layer": "Business", "doc": "Consulente finanziario abilitato all'offerta fuori sede per clienti High Net Worth."},
-        {"id": "actor-hnw-client", "name": "Cliente High Net Worth Individual (HNWI)", "type": "BusinessActor", "layer": "Business", "doc": "Cliente private banking titolare di patrimoni e mandati fiduciari complessi."},
-        {"id": "event-mortgage-requested", "name": "Richiesta di Mutuo Inoltrata", "type": "BusinessEvent", "layer": "Business", "doc": "Evento scatenato dal cliente o dalla filiale con acquisizione documentazione reddituale."},
-        {"id": "event-appraisal-completed", "name": "Perizia Immobiliare Asseverata", "type": "BusinessEvent", "layer": "Business", "doc": "Deposito perizia tecnica con valore di stima e conformità catastale dell'immobile."},
-        {"id": "event-credit-approved", "name": "Delibera Creditizia Approvata", "type": "BusinessEvent", "layer": "Business", "doc": "Parere favorevole all'erogazione fidi da parte del comitato crediti."},
-        {"id": "event-funds-disbursed", "name": "Saldo Finanziamento Erogato", "type": "BusinessEvent", "layer": "Business", "doc": "Erogazione effettiva dei fondi con addebito sul conto corrente del mutuatario."},
-        {"id": "goal-dora-resilience", "name": "Resilienza Operativa Digitale (Regolamento DORA)", "type": "Goal", "layer": "Strategy", "doc": "Piena conformità ai requisiti di continuità operativa, gestione dei rischi ICT e incident reporting UE 2022/2554."},
-        {"id": "goal-open-finance", "name": "Espansione Open Finance & Nuove API PSD3", "type": "Goal", "layer": "Strategy", "doc": "Monetizzazione dei dati bancari e interoperabilità con terze parti tramite API aperte e standardizzate."},
-        {"id": "goal-cost-rationalization", "name": "Razionalizzazione IT Portfolio & Riduzione TCO", "type": "Goal", "layer": "Strategy", "doc": "Dismissione sistemi legacy duplicati e consolidamento sui sistemi target Invest identificati nella matrice APM."},
-        {"id": "data-cash-pool-order", "name": "Dispositivo Girofondo Cash Pooling (camt.053)", "type": "DataObject", "layer": "Application", "doc": "Tracciato contabile per il livellamento della liquidità e zero-balancing intersocietario."},
-        {"id": "data-swift-pacs008", "name": "Messaggio Interbancario ISO20022 (pacs.008)", "type": "DataObject", "layer": "Application", "doc": "Messaggio standard di regolamento bonifico bancario su canale SWIFT / RTGS."},
-        {"id": "data-treasury-ledger", "name": "Registro Posizioni di Tesoreria Multivaluta", "type": "DataObject", "layer": "Application", "doc": "Registro delle disponibilità liquide, posizioni FX e tassi a vista."},
-        {"id": "data-reconciliation-stmt", "name": "Estratto Conto Interbancario Riconciliato", "type": "DataObject", "layer": "Application", "doc": "Riconciliazione automatica saldi contabili verso controparti bancarie e BCE."},
-        {"id": "serv-biometric-auth", "name": "Servizio Autenticazione Forte Biometrica (SCA)", "type": "BusinessService", "layer": "Business", "doc": "Servizio di autenticazione sicura a due fattori conforme a PSD2 per canali digitali."},
-        {"id": "serv-digital-onboarding", "name": "Servizio Onboarding Digitale e Riconoscimento e-KYC", "type": "BusinessService", "layer": "Business", "doc": "Apertura conto 100% online con video-riconoscimento biometrico e verifica antiriciclaggio."},
-        {"id": "serv-qualified-sign", "name": "Servizio Firma Elettronica Qualificata a Norma", "type": "BusinessService", "layer": "Business", "doc": "Sottoscrizione digitale dei contratti bancari con valore legale probatorio ex art. 2702 c.c."}
+        {"id": "actor-pay-clearing", "name": "Payments & Interbank Clearing Directorate", "type": "BusinessActor", "layer": "Business", "doc": "Operational unit responsible for SEPA payment processing, interbank clearing, and RTGS settlement."},
+        {"id": "actor-branch-advisor", "name": "Retail Branch Financial Advisor", "type": "BusinessActor", "layer": "Business", "doc": "Commercial branch relationship manager dedicated to consumer lending and retail onboarding."},
+        {"id": "actor-appraiser", "name": "Certified Real Estate Technical Appraiser", "type": "BusinessActor", "layer": "Business", "doc": "Licensed professional for technical property appraisal, collateral inspection, and cadastral compliance."},
+        {"id": "actor-credit-underwriter", "name": "Credit Committee & Lending Underwriter", "type": "BusinessActor", "layer": "Business", "doc": "Decisional underwriting committee for residential mortgages and corporate credit lines."},
+        {"id": "actor-notary", "name": "Notary Public Office", "type": "BusinessActor", "layer": "Business", "doc": "Civil-law notary public executing mortgage deeds and registering first-degree real estate liens."},
+        {"id": "actor-private-banker", "name": "Private Banking Wealth Advisor", "type": "BusinessActor", "layer": "Business", "doc": "Certified wealth advisor managing investment portfolios for High Net Worth Individuals."},
+        {"id": "actor-hnw-client", "name": "High Net Worth Individual (HNWI) Client", "type": "BusinessActor", "layer": "Business", "doc": "Private banking client holding multi-asset portfolios and complex fiduciary mandates."},
+        {"id": "event-mortgage-requested", "name": "Mortgage Loan Application Submitted", "type": "BusinessEvent", "layer": "Business", "doc": "Event triggered by client or branch with financial and income documentation submission."},
+        {"id": "event-appraisal-completed", "name": "Property Appraisal Report Certified", "type": "BusinessEvent", "layer": "Business", "doc": "Filing of technical appraisal report establishing property fair market value and compliance."},
+        {"id": "event-credit-approved", "name": "Credit Underwriting Approved", "type": "BusinessEvent", "layer": "Business", "doc": "Favorable credit decision approved by underwriting committee."},
+        {"id": "event-funds-disbursed", "name": "Mortgage Loan Funds Disbursed", "type": "BusinessEvent", "layer": "Business", "doc": "Funds credited to applicant's checking account and notary deed registered."},
+        {"id": "goal-dora-resilience", "name": "Digital Operational Resilience (DORA Regulation)", "type": "Goal", "layer": "Strategy", "doc": "Full compliance with EU Regulation 2022/2554 on ICT risk management, operational resilience, and incident reporting."},
+        {"id": "goal-open-finance", "name": "Open Finance & PSD3 API Ecosystem Expansion", "type": "Goal", "layer": "Strategy", "doc": "Monetization of open banking data and third-party interoperability through standardized open APIs."},
+        {"id": "goal-cost-rationalization", "name": "IT Portfolio Rationalization & TCO Reduction", "type": "Goal", "layer": "Strategy", "doc": "Decommissioning redundant legacy systems and consolidating on target Invest applications from the APM matrix."},
+        {"id": "data-cash-pool-order", "name": "Cash Pooling Sweeping Instruction (camt.053)", "type": "DataObject", "layer": "Application", "doc": "Intercompany cash sweeping and zero-balancing account statement and balance leveling instruction."},
+        {"id": "data-swift-pacs008", "name": "ISO 20022 Interbank Credit Transfer Message (pacs.008)", "type": "DataObject", "layer": "Application", "doc": "Core financial credit transfer message exchanged across SWIFT GPI and RTGS payment rails."},
+        {"id": "data-treasury-ledger", "name": "Multi-Currency Treasury Position Ledger", "type": "DataObject", "layer": "Application", "doc": "Real-time ledger of FX exposures, intraday liquidity, and sight balances."},
+        {"id": "data-reconciliation-stmt", "name": "Reconciled Interbank Nostro/Vostro Statement", "type": "DataObject", "layer": "Application", "doc": "Automated statement reconciliation against correspondent banks and European Central Bank accounts."},
+        {"id": "serv-biometric-auth", "name": "Strong Customer Biometric Authentication (SCA)", "type": "BusinessService", "layer": "Business", "doc": "Two-factor biometric authentication service compliant with PSD2 RTS for mobile and digital channels."},
+        {"id": "serv-digital-onboarding", "name": "Digital Onboarding & e-KYC Identity Verification", "type": "BusinessService", "layer": "Business", "doc": "Full online account opening service with biometric video verification and real-time AML check."},
+        {"id": "serv-qualified-sign", "name": "Qualified Electronic Signature (QES) Service", "type": "BusinessService", "layer": "Business", "doc": "Legally binding digital contract signing service compliant with eIDAS regulation."}
     ]
 
     for el_data in aux_elements:
@@ -102,7 +102,7 @@ def seed_viewpoints(db: Session):
         folder_vp_arch = SchemaFolder(
             id="folder-ea-viewpoints-arch",
             model_id=MODEL_ID,
-            name="Architetture di Riferimento & Viewpoints ArchiMate",
+            name="Reference Architectures & ArchiMate Viewpoints",
             order_index=4
         )
         db.add(folder_vp_arch)
@@ -480,7 +480,7 @@ def seed_viewpoints(db: Session):
                         target_id=tgt_elem_id,
                         type=rel_type,
                         name=rel_name,
-                        documentation=f"Relazione architetturale dello schema '{s_def['name']}': {rel_name}"
+                        documentation=f"Architectural relationship defined for schema '{s_def['name']}': {rel_name}"
                     )
                     db.add(new_rel)
                     total_rels_created += 1

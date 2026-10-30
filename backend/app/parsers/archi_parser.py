@@ -123,7 +123,9 @@ def detect_layer(elem_type: str, folder_hint: Optional[str] = None) -> str:
     return "Other"
 
 class ArchiModelParser:
-    def __init__(self, xml_content: str):
+    def __init__(self, xml_content: str | bytes):
+        if isinstance(xml_content, bytes):
+            xml_content = xml_content.decode("utf-8")
         self.xml_content = xml_content
         self.root = safe_xml_fromstring(
             xml_content,

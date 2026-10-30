@@ -21,6 +21,7 @@ import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
 import { ADRManager } from './features/architect/ADRManager';
+import { ResilienceDashboard } from './features/business/ResilienceDashboard';
 import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
 import { BusinessViewsManager } from './features/architect/BusinessViewsManager';
 import { SchemaRepository } from './features/schemas/SchemaRepository';
@@ -69,12 +70,24 @@ export function App() {
     }
   }, [selectedModelId]);
 
-  const handleSelectPackageView = (packageId: string, viewId: string) => {
-    setActiveHub('business');
-    setBusinessTab('package_view');
+  const handleSelectPackageView = (packageId: string, viewId: string, hub?: 'business' | 'architecture') => {
+    const targetHub = hub || (activeHub === 'architecture' ? 'architecture' : 'business');
+    if (targetHub === 'architecture') {
+      setActiveHub('architecture');
+      setArchitectureTab('package_view');
+    } else {
+      setActiveHub('business');
+      setBusinessTab('package_view');
+    }
     setActivePackageView({ packageId, viewId });
     setIsMobileSidebarOpen(false);
   };
+
+  const activeViewObj = packagesWithViews
+    .flatMap((p) => p.views || [])
+    .find((v) => v.id === activePackageView?.viewId || v.view_key === activePackageView?.viewId);
+  const isAdrView = activeViewObj?.view_type === 'adr_manager' || activePackageView?.viewId === 'pkv-adr-registry';
+  const isResilienceView = activeViewObj?.view_type === 'resilience_dashboard' || activePackageView?.viewId === 'pview-resilience-dashboard';
 
   // Sidebar Collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -233,12 +246,22 @@ export function App() {
                       />
                     )}
                     {(businessTab === 'package_view' || businessTab === 'insights') && (
-                      <FrameworkInsights
-                        modelId={selectedModelId}
-                        packages={packagesWithViews}
-                        activePackageView={activePackageView}
-                        onSelectPackageView={handleSelectPackageView}
-                      />
+                      isAdrView ? (
+                        <ADRManager
+                          modelId={selectedModelId}
+                          initialAdrId={selectedAdrId}
+                          onClearInitialAdr={() => setSelectedAdrId(null)}
+                        />
+                      ) : isResilienceView ? (
+                        <ResilienceDashboard modelId={selectedModelId} />
+                      ) : (
+                        <FrameworkInsights
+                          modelId={selectedModelId}
+                          packages={packagesWithViews}
+                          activePackageView={activePackageView}
+                          onSelectPackageView={handleSelectPackageView}
+                        />
+                      )
                     )}
                     {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} />}
                     {businessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
@@ -256,26 +279,35 @@ export function App() {
                         onClearInitialView={() => setSelectedSavedView(null)}
                         onOpenAdr={(adrId) => {
                           setSelectedAdrId(adrId || null);
-                          setArchitectureTab('adrs');
+                          handleSelectPackageView('pkg-adr', 'pkv-adr-registry', 'architecture');
                         }}
                       />
                     )}
                     {architectureTab === 'schemas' && <SchemaRepository modelId={selectedModelId} />}
                     {architectureTab === 'relations' && <RelationsMatrix modelId={selectedModelId} />}
-                    {architectureTab === 'adrs' && (
-                      <ADRManager
-                        modelId={selectedModelId}
-                        initialAdrId={selectedAdrId}
-                        onClearInitialAdr={() => setSelectedAdrId(null)}
-                      />
+                    {(architectureTab === 'package_view' || architectureTab === 'adrs') && (
+                      isAdrView || architectureTab === 'adrs' ? (
+                        <ADRManager
+                          modelId={selectedModelId}
+                          initialAdrId={selectedAdrId}
+                          onClearInitialAdr={() => setSelectedAdrId(null)}
+                        />
+                      ) : isResilienceView ? (
+                        <ResilienceDashboard modelId={selectedModelId} />
+                      ) : (
+                        <FrameworkInsights
+                          modelId={selectedModelId}
+                          packages={packagesWithViews}
+                          activePackageView={activePackageView}
+                          onSelectPackageView={(pId, vId) => handleSelectPackageView(pId, vId, 'architecture')}
+                        />
+                      )
                     )}
                     {architectureTab === 'business-views' && (
                       <BusinessViewsManager
                         modelId={selectedModelId}
                         onOpenInBusiness={(viewId) => {
-                          setActivePackageView({ packageId: 'custom-business-views', viewId });
-                          setBusinessTab('package_view');
-                          setActiveHub('business');
+                          handleSelectPackageView('custom-business-views', viewId, 'business');
                         }}
                         onApplyToRepository={(view) => {
                           setSelectedSavedView(view);
@@ -297,6 +329,7 @@ export function App() {
                     selectedModelId={selectedModelId}
                     onRefreshModels={() => loadModels()}
                     onSelectModel={(id) => setSelectedModelId(id)}
+                    onPackageUpdated={() => selectedModelId && loadPackageViews(selectedModelId)}
                     subTab={adminTab}
                     onSelectSubTab={(tab) => setAdminTab(tab)}
                   />
