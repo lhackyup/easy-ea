@@ -126,11 +126,13 @@ export const SchemaPreviewModal: React.FC<SchemaPreviewModalProps> = ({
     });
 
     // Decorate edges with authentic ArchiMate visual markers & styles
-    const enrichedEdges = result.edges.map((e) => {
-      const edgeProps = getArchimateEdgeProps(e.type || '', e.label || '');
+    const enrichedEdges = result.edges.map((e: any) => {
+      const relType = e.relType || e.data?.relType || (e.type !== 'smoothstep' ? e.type : '') || '';
+      const edgeProps = getArchimateEdgeProps(relType, e.label || '');
       return {
         ...e,
         ...edgeProps,
+        type: 'smoothstep',
         labelStyle: { fill: '#334155', fontSize: 10, fontWeight: 700 },
         labelBgStyle: { fill: '#ffffff', fillOpacity: 0.95, stroke: '#cbd5e1', strokeWidth: 1, rx: 4, ry: 4 }
       };

@@ -33,6 +33,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_test_db():
     Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = override_get_db
     db = TestingSessionLocal()
     seed_sample_model(db)
     seed_default_custom_attributes(db)

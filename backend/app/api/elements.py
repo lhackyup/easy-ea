@@ -230,6 +230,7 @@ def list_elements(
             } if e.stereotype else None,
             "incoming_count": len(e.incoming_relations or []),
             "outgoing_count": len(e.outgoing_relations or []),
+            "adr_count": len(e.adr_links or []),
             "apm": {
                 "business_fit": apm.business_fit,
                 "technical_fit": apm.technical_fit,
@@ -403,6 +404,20 @@ def get_element(
                 "source_layer": r.source_element.layer if r.source_element else ""
             }
             for r in e.incoming_relations
+        ],
+        "linked_adrs": [
+            {
+                "link_id": link.id,
+                "adr_id": link.adr.id,
+                "code": link.adr.code,
+                "title": link.adr.title,
+                "status": link.adr.status,
+                "domain": link.adr.domain,
+                "impact_type": link.impact_type,
+                "notes": link.notes or ""
+            }
+            for link in (e.adr_links or [])
+            if link.adr is not None
         ]
     }
 

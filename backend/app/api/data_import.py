@@ -18,11 +18,13 @@ from app.models.archimate import (
     ModelWorkspace,
     ArchimateElement,
     ArchimateRelationship,
+    ArchimateView,
     ApplicationBusinessAttributes,
     CustomAttributeDefinition,
     ImportHistory,
     User
 )
+from app.parsers.archi_parser import ArchiModelParser
 from app.api.deps import (
     get_current_user,
     require_library_permission,
@@ -392,6 +394,7 @@ async def upload_import_file(
 
     parsed_elements: List[Dict[str, Any]] = []
     parsed_relationships: List[Dict[str, Any]] = []
+    parsed_data: Dict[str, Any] = {}
     errors: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
 
@@ -400,6 +403,10 @@ async def upload_import_file(
         file_format = "csv"
     elif lower_filename.endswith(".zip"):
         file_format = "zip"
+    elif lower_filename.endswith(".archimate"):
+        file_format = "archimate"
+    elif lower_filename.endswith(".xml"):
+        file_format = "xml"
 
     # =========================================================================
     # 1. PARSING
@@ -495,6 +502,43 @@ async def upload_import_file(
             raise
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid ZIP archive: {str(e)}")
+
+    elif file_format in ("archimate", "xml"):
+        try:
+            content_str = contents.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            content_str = contents.decode("latin-1")
+        
+        try:
+            parser = ArchiModelParser(content_str)
+            parsed_data = parser.parse()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to parse ArchiMate / Open Exchange XML file: {str(e)}")
+
+        for r_idx, elem in enumerate(parsed_data.get("elements", []), start=1):
+            elem_dict = {
+                "id": elem.get("id"),
+                "name": elem.get("name"),
+                "type": elem.get("type"),
+                "layer": elem.get("layer"),
+                "documentation": elem.get("documentation", ""),
+            }
+            for pk, pv in (elem.get("properties") or {}).items():
+                elem_dict[pk] = pv
+            parsed_elements.append({"row_num": r_idx, "data": elem_dict})
+
+        for r_idx, rel in enumerate(parsed_data.get("relationships", []), start=1):
+            rel_dict = {
+                "id": rel.get("id"),
+                "name": rel.get("name", ""),
+                "type": rel.get("type"),
+                "source": rel.get("source_id"),
+                "target": rel.get("target_id"),
+                "documentation": rel.get("documentation", ""),
+            }
+            for pk, pv in (rel.get("properties") or {}).items():
+                rel_dict[pk] = pv
+            parsed_relationships.append({"row_num": r_idx, "data": rel_dict})
 
     # =========================================================================
     # 2. VALIDATION & TRANSFORMATION: ELEMENTS
@@ -704,6 +748,7 @@ async def upload_import_file(
             "relationships_created": rel_created_count,
             "errors_count": errors_count,
             "warnings_count": warnings_count,
+            "views_count": len(parsed_data.get("views", [])),
             "elements": processed_elements,
             "relationships": processed_relationships,
             "errors": errors,
@@ -785,6 +830,33 @@ async def upload_import_file(
                 if rel_data["documentation"]:
                     existing_rel.documentation = rel_data["documentation"]
 
+        # Save Views if present in Archi / Open Exchange file
+        views_imported = 0
+        if file_format in ("archimate", "xml"):
+            for view in parsed_data.get("views", []):
+                v_id = view.get("id") or f"view-{uuid.uuid4().hex[:8]}"
+                existing_view = db.query(ArchimateView).filter(
+                    ArchimateView.model_id == model_id,
+                    ArchimateView.id == v_id
+                ).first()
+                if not existing_view:
+                    v = ArchimateView(
+                        id=v_id,
+                        model_id=model_id,
+                        name=view.get("name") or "Diagram View",
+                        viewpoint=view.get("viewpoint", "Total"),
+                        documentation=view.get("documentation", ""),
+                        view_data=view.get("view_data", {})
+                    )
+                    db.add(v)
+                    views_imported += 1
+                else:
+                    existing_view.name = view.get("name") or existing_view.name
+                    existing_view.viewpoint = view.get("viewpoint", "Total")
+                    existing_view.documentation = view.get("documentation", "")
+                    existing_view.view_data = view.get("view_data", {})
+                    views_imported += 1
+
         # Record in Import History
         history_id = f"imp-{uuid.uuid4().hex[:8]}"
         history_record = ImportHistory(
@@ -803,6 +875,7 @@ async def upload_import_file(
             details={
                 "errors": errors,
                 "warnings": warnings,
+                "views_imported": views_imported,
                 "created_elements": [{"id": e["id"], "name": e["name"], "type": e["type"]} for e in processed_elements if not e["is_update"]],
                 "updated_elements": [{"id": e["id"], "name": e["name"], "type": e["type"]} for e in processed_elements if e["is_update"]],
                 "created_relationships": [{"source": r["source_name"], "target": r["target_name"], "type": r["type"]} for r in processed_relationships]
@@ -819,6 +892,7 @@ async def upload_import_file(
             "elements_created": created_count,
             "elements_updated": updated_count,
             "relationships_created": rel_created_count,
+            "views_imported": views_imported,
             "errors_count": errors_count,
             "warnings_count": warnings_count,
             "errors": errors,

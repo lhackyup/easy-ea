@@ -26,6 +26,7 @@ class ModelWorkspace(Base):
     schema_folders = relationship("SchemaFolder", back_populates="workspace", cascade="all, delete-orphan")
     schemas = relationship("ArchiSchema", back_populates="workspace", cascade="all, delete-orphan")
     active_packages = relationship("WorkspaceAttributePackage", back_populates="workspace", cascade="all, delete-orphan")
+    adrs = relationship("ArchitectureDecisionRecord", back_populates="workspace", cascade="all, delete-orphan")
 
 
 class ArchimateElement(Base):
@@ -50,6 +51,7 @@ class ArchimateElement(Base):
     apm_attributes = relationship("ApplicationBusinessAttributes", back_populates="element", uselist=False, cascade="all, delete-orphan")
     stereotype = relationship("ElementStereotype", back_populates="elements")
     package = relationship("AttributePackage", back_populates="reference_elements")
+    adr_links = relationship("ADRLinkedElement", back_populates="element", cascade="all, delete-orphan")
 
 
 class ArchimateRelationship(Base):
@@ -398,5 +400,49 @@ class PackageView(Base):
 
     package = relationship("AttributePackage", back_populates="views")
     model_workspace = relationship("ModelWorkspace")
+
+
+class ArchitectureDecisionRecord(Base):
+    __tablename__ = "architecture_decision_records"
+
+    id = Column(String, primary_key=True, index=True)
+    model_id = Column(String, ForeignKey("model_workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    code = Column(String(32), nullable=False, index=True) # e.g. "ADR-0001"
+    title = Column(String(255), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="Draft", index=True) # Draft, Proposed, Accepted, Rejected, Deprecated, Superseded
+    domain = Column(String(64), nullable=False, default="Application", index=True) # Strategy, Business, Application, Data, Technology, Security, Integration, Governance
+    context_and_problem = Column(Text, nullable=True)
+    decision_drivers = Column(JSON, default=list) # List of string drivers
+    considered_options = Column(JSON, default=list) # List of {"title": str, "description": str, "pros": str, "cons": str}
+    decision_outcome = Column(Text, nullable=True)
+    consequences = Column(Text, nullable=True)
+    compliance_impact = Column(Text, nullable=True)
+    deciders = Column(String(255), nullable=True)
+    author_id = Column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    author_name = Column(String(255), nullable=True, default="Enterprise Architect")
+    superseded_by_id = Column(String, ForeignKey("architecture_decision_records.id", ondelete="SET NULL"), nullable=True, index=True)
+    decided_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+    updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+    workspace = relationship("ModelWorkspace", back_populates="adrs")
+    author = relationship("User", foreign_keys=[author_id])
+    superseded_by = relationship("ArchitectureDecisionRecord", remote_side=[id], backref="supersedes_list")
+    linked_elements = relationship("ADRLinkedElement", back_populates="adr", cascade="all, delete-orphan")
+
+
+class ADRLinkedElement(Base):
+    __tablename__ = "adr_linked_elements"
+
+    id = Column(String, primary_key=True, index=True)
+    adr_id = Column(String, ForeignKey("architecture_decision_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    element_id = Column(String, ForeignKey("archimate_elements.id", ondelete="CASCADE"), nullable=False, index=True)
+    impact_type = Column(String(32), nullable=False, default="governs", index=True) # driven_by, introduces, governs, modifies, retires
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=utc_now)
+
+    adr = relationship("ArchitectureDecisionRecord", back_populates="linked_elements")
+    element = relationship("ArchimateElement", back_populates="adr_links")
+
 
 

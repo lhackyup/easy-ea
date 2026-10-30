@@ -6,7 +6,7 @@ export interface ActivePackageViewSelection {
   packageId: string;
   viewId: string;
 }
-export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'saved-views' | 'import' | 'business-views';
+export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'adrs' | 'saved-views' | 'import' | 'business-views';
 export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'roles' | 'auth_config' | 'system';
 
 export interface MetamodelAttribute {
@@ -1022,6 +1022,79 @@ export interface PackageViewExecuteResponse {
     grid?: Record<string, Record<string, number>>;
   };
 }
+
+export type ADRStatus = 'Draft' | 'Proposed' | 'Accepted' | 'Rejected' | 'Deprecated' | 'Superseded';
+export type ADRDomain = 'Strategy' | 'Business' | 'Application' | 'Data' | 'Technology' | 'Security' | 'Integration' | 'Governance';
+export type ADRImpactType = 'driven_by' | 'introduces' | 'governs' | 'modifies' | 'retires';
+
+export interface ADRConsideredOption {
+  title: string;
+  description?: string;
+  pros?: string;
+  cons?: string;
+}
+
+export interface ADRLinkedElementItem {
+  id?: string;
+  element_id: string;
+  element_name?: string;
+  element_type?: string;
+  element_layer?: string;
+  impact_type: ADRImpactType;
+  notes?: string;
+}
+
+export interface ADRRefInfo {
+  id: string;
+  code: string;
+  title: string;
+  status: ADRStatus;
+}
+
+export interface ADRItem {
+  id: string;
+  model_id: string;
+  code: string;
+  title: string;
+  status: ADRStatus;
+  domain: ADRDomain;
+  context_and_problem: string;
+  decision_drivers: string[];
+  considered_options: ADRConsideredOption[];
+  decision_outcome: string;
+  consequences: string;
+  compliance_impact: string;
+  deciders: string;
+  author_id?: string | null;
+  author_name: string;
+  superseded_by_id?: string | null;
+  superseded_by?: ADRRefInfo | null;
+  supersedes?: ADRRefInfo[];
+  linked_elements: ADRLinkedElementItem[];
+  linked_elements_count: number;
+  decided_at?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface ADRListSummary {
+  total: number;
+  accepted: number;
+  proposed: number;
+  draft: number;
+  rejected: number;
+  deprecated: number;
+  superseded: number;
+  by_status: Record<string, number>;
+  by_domain: Record<string, number>;
+}
+
+export interface ADRListResponse {
+  model_id: string;
+  summary: ADRListSummary;
+  items: ADRItem[];
+}
+
 
 
 

@@ -20,6 +20,7 @@ import { OverlapMatrix } from './features/overlap/OverlapMatrix';
 import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
+import { ADRManager } from './features/architect/ADRManager';
 import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
 import { BusinessViewsManager } from './features/architect/BusinessViewsManager';
 import { SchemaRepository } from './features/schemas/SchemaRepository';
@@ -42,6 +43,7 @@ export function App() {
   const [architectureTab, setArchitectureTab] = useState<ArchitectureSubTab>('repository');
   const [adminTab, setAdminTab] = useState<AdminSubTab>('models');
   const [selectedSavedView, setSelectedSavedView] = useState<any | null>(null);
+  const [selectedAdrId, setSelectedAdrId] = useState<string | null>(null);
 
   // Dynamic Package Views State
   const [packagesWithViews, setPackagesWithViews] = useState<PackageWithViews[]>([]);
@@ -252,10 +254,21 @@ export function App() {
                         modelId={selectedModelId}
                         initialSavedView={selectedSavedView}
                         onClearInitialView={() => setSelectedSavedView(null)}
+                        onOpenAdr={(adrId) => {
+                          setSelectedAdrId(adrId || null);
+                          setArchitectureTab('adrs');
+                        }}
                       />
                     )}
                     {architectureTab === 'schemas' && <SchemaRepository modelId={selectedModelId} />}
                     {architectureTab === 'relations' && <RelationsMatrix modelId={selectedModelId} />}
+                    {architectureTab === 'adrs' && (
+                      <ADRManager
+                        modelId={selectedModelId}
+                        initialAdrId={selectedAdrId}
+                        onClearInitialAdr={() => setSelectedAdrId(null)}
+                      />
+                    )}
                     {architectureTab === 'business-views' && (
                       <BusinessViewsManager
                         modelId={selectedModelId}
@@ -271,7 +284,9 @@ export function App() {
                         onViewsChanged={() => loadPackageViews(selectedModelId)}
                       />
                     )}
-                    {architectureTab === 'import' && <DataImportHub modelId={selectedModelId} />}
+                    {architectureTab === 'import' && (
+                      <DataImportHub modelId={selectedModelId} />
+                    )}
                   </>
                 )}
 

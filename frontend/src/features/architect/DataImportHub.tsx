@@ -16,7 +16,10 @@ import {
   Info,
   Check,
   X,
-  Database
+  Database,
+  Upload,
+  Plus,
+  FileCode
 } from 'lucide-react';
 import { api, ImportHistoryItem, ImportPreviewResult } from '../../lib/api';
 import { useLanguage } from '../../context/LanguageContext';
@@ -219,6 +222,60 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
         </div>
       )}
 
+      {/* SECTION: ARCHIMATE & OPEN EXCHANGE FILE IMPORT */}
+      <div className="bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 text-white rounded-3xl p-6 shadow-md border border-indigo-900/40 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2.5">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                ArchiMate 3.x Standard
+              </span>
+              <h2 className="text-base font-bold text-white">{impT.archiStandardCardTitle}</h2>
+            </div>
+            <p className="text-xs text-slate-300 max-w-2xl">
+              {impT.archiStandardCardDesc}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-black shadow-md shadow-emerald-600/20 transition flex items-center space-x-2"
+            >
+              <Upload className="w-4 h-4 text-white" />
+              <span>{impT.btnImportIntoActive}</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-start space-x-3">
+            <div className="p-2.5 bg-amber-500/20 rounded-xl text-amber-300 shrink-0">
+              <FileCode className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white block">The Open Group ArchiMate Exchange (.xml)</span>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                Formato standard interoperabile (ArchiMate Model Exchange Format). Include elementi, layer, relazioni normalizzate, propertyDefinitions e viste/diagrammi.
+              </p>
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-start space-x-3">
+            <div className="p-2.5 bg-blue-500/20 rounded-xl text-blue-300 shrink-0">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-white block">Archi Native (.archimate)</span>
+              <p className="text-[11px] text-slate-300 mt-0.5 leading-relaxed">
+                File nativi dell'Open Source Toolkit Archi. Mappatura completa delle cartelle gerarchiche, elementi, relazioni e diagram view 2D.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* SECTION 1: TEMPLATE DOWNLOADS */}
       <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm">
         <div className="flex items-center space-x-3 mb-4">
@@ -311,7 +368,7 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx,.xls,.csv,.zip"
+            accept=".xlsx,.xls,.csv,.zip,.archimate,.xml"
             onChange={handleFileChange}
             className="hidden"
           />
@@ -328,8 +385,21 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
 
           {file && (
             <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-100 text-emerald-900 rounded-xl text-xs font-bold border border-emerald-200">
-              <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+              {file.name.toLowerCase().endsWith('.xml') ? (
+                <FileCode className="w-4 h-4 text-amber-700" />
+              ) : file.name.toLowerCase().endsWith('.archimate') ? (
+                <Layers className="w-4 h-4 text-blue-700" />
+              ) : file.name.toLowerCase().endsWith('.csv') ? (
+                <FileText className="w-4 h-4 text-indigo-700" />
+              ) : (
+                <FileSpreadsheet className="w-4 h-4 text-emerald-700" />
+              )}
               <span>{file.name}</span>
+              {(file.name.toLowerCase().endsWith('.xml') || file.name.toLowerCase().endsWith('.archimate')) && (
+                <span className="text-[10px] uppercase px-1.5 py-0.2 bg-white/70 text-emerald-800 rounded font-bold">
+                  {file.name.toLowerCase().endsWith('.xml') ? 'Open Exchange XML' : 'Archi Model'}
+                </span>
+              )}
               <span className="text-[10px] text-emerald-600">({formatFileSize(file.size)})</span>
               <button
                 type="button"
@@ -424,7 +494,7 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
           </div>
 
           {/* METRIC BADGES */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-4">
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
               <span className="text-[11px] font-bold text-slate-500 block">{impT.elementsToCreate}</span>
               <span className="text-2xl font-black text-emerald-600">{previewResult.elements_created}</span>
@@ -437,6 +507,14 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
               <span className="text-[11px] font-bold text-slate-500 block">{impT.relationshipsToCreate}</span>
               <span className="text-2xl font-black text-purple-600">{previewResult.relationships_created}</span>
             </div>
+            {((previewResult.views_count ?? 0) > 0 || (previewResult.views_imported ?? 0) > 0) && (
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <span className="text-[11px] font-bold text-slate-500 block">{impT.viewsFound}</span>
+                <span className="text-2xl font-black text-amber-600">
+                  {previewResult.views_count ?? previewResult.views_imported ?? 0}
+                </span>
+              </div>
+            )}
             <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
               <span className="text-[11px] font-bold text-slate-500 block">{impT.errorsFound}</span>
               <span className={`text-2xl font-black ${previewResult.errors_count > 0 ? 'text-rose-600' : 'text-slate-400'}`}>
@@ -666,9 +744,25 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
                     </td>
                     <td className="py-3 px-4 font-bold text-slate-900">
                       <div className="flex items-center space-x-2">
-                        <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                        {h.file_format === 'xml' ? (
+                          <FileCode className="w-4 h-4 text-amber-600 shrink-0" />
+                        ) : h.file_format === 'archimate' ? (
+                          <Layers className="w-4 h-4 text-blue-600 shrink-0" />
+                        ) : h.file_format === 'csv' ? (
+                          <FileText className="w-4 h-4 text-indigo-600 shrink-0" />
+                        ) : (
+                          <FileSpreadsheet className="w-4 h-4 text-emerald-600 shrink-0" />
+                        )}
                         <span className="truncate max-w-[200px]" title={h.filename}>{h.filename}</span>
-                        <span className="text-[10px] uppercase font-bold text-slate-400">({h.file_format})</span>
+                        <span className={`text-[10px] uppercase font-bold px-1.5 py-0.2 rounded border ${
+                          h.file_format === 'xml'
+                            ? 'bg-amber-50 text-amber-800 border-amber-200'
+                            : h.file_format === 'archimate'
+                            ? 'bg-blue-50 text-blue-800 border-blue-200'
+                            : 'bg-slate-100 text-slate-600 border-slate-200'
+                        }`}>
+                          {h.file_format === 'xml' ? 'Open Exchange' : h.file_format}
+                        </span>
                       </div>
                     </td>
                     <td className="py-3 px-4 text-slate-600">{h.user_name || 'Architect'}</td>

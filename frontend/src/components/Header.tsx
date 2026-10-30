@@ -455,14 +455,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <UploadCloud className="w-3.5 h-3.5" />
                 <span>{t.subtabs.dataImport}</span>
               </button>
-
-              <button
-                onClick={onOpenUpload}
-                className="px-3 py-1.5 text-xs font-bold rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-300 hover:bg-emerald-100 transition flex items-center space-x-1.5 shadow-sm"
-              >
-                <Upload className="w-3.5 h-3.5 text-emerald-600" />
-                <span>{t.subtabs.importArchiFile}</span>
-              </button>
             </div>
           )}
 

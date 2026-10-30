@@ -388,4 +388,11 @@ def seed_sample_model(db: Session) -> str:
     except Exception as e:
         print(f"Warning: could not seed EasyBank APM portfolio: {e}")
 
+    # 10. Seed sample Architecture Decision Records (ADRs)
+    try:
+        from app.services.adr_service import seed_sample_adrs
+        seed_sample_adrs(db, workspace.id)
+    except Exception as e:
+        print(f"Warning: could not seed sample ADRs: {e}")
+
     return workspace.id

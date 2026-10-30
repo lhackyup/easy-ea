@@ -35,7 +35,8 @@ import {
   KeyRound,
   UploadCloud,
   BookmarkCheck,
-  FolderGit2
+  FolderGit2,
+  Scale
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -146,6 +147,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'relations' as ArchitectureSubTab,
       label: t.subtabs.relationsMatrix,
       icon: GitMerge
+    },
+    {
+      id: 'adrs' as ArchitectureSubTab,
+      label: t.subtabs.adrRegistry,
+      icon: Scale
     },
     {
       id: 'business-views' as ArchitectureSubTab,
@@ -407,18 +413,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   </button>
                 );
               })}
-
-              {/* Quick Upload Action */}
-              <button
-                onClick={onOpenUpload}
-                title={isCollapsed ? t.subtabs.importArchiFile : undefined}
-                className={`w-full flex items-center rounded-xl text-xs font-bold border border-dashed border-emerald-300 text-emerald-700 bg-emerald-50/50 hover:bg-emerald-100 hover:border-emerald-400 transition-all duration-150 mt-2 ${
-                  isCollapsed ? 'justify-center p-2.5' : 'px-3 py-2 space-x-2.5 text-left'
-                }`}
-              >
-                <Upload className="w-4 h-4 shrink-0 text-emerald-600" />
-                {!isCollapsed && <span className="truncate">{t.subtabs.importArchiFile}</span>}
-              </button>
             </div>
           </div>
         )}

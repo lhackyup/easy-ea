@@ -93,6 +93,14 @@ def clean_tag(tag: str) -> str:
         return tag.split('}', 1)[1]
     return tag
 
+def find_child(elem, tag_name: str):
+    if elem is None:
+        return None
+    child = elem.find(f"{{*}}{tag_name}")
+    if child is not None:
+        return child
+    return elem.find(tag_name)
+
 def get_xsi_type(attrib: Dict[str, str]) -> Optional[str]:
     for key, val in attrib.items():
         if "type" in key.lower():
@@ -124,11 +132,12 @@ class ArchiModelParser:
             forbid_external=True,
         )
         # Determine format from XML header / namespaces / tags
-        if "archimatetool.com" in xml_content or "archimate:" in xml_content:
+        root_tag = clean_tag(self.root.tag).lower()
+        if any(clean_tag(child.tag).lower() == "folder" for child in self.root):
             self.format_type = "archi_native"
-        elif "opengroup.org" in xml_content:
+        elif "opengroup.org" in xml_content or root_tag == "model":
             self.format_type = "open_exchange"
-        elif any(clean_tag(child.tag) == "folder" for child in self.root):
+        elif "archimatetool.com" in xml_content or "archimate:" in xml_content:
             self.format_type = "archi_native"
         else:
             self.format_type = "open_exchange"
@@ -238,14 +247,20 @@ class ArchiModelParser:
             for child in parent:
                 c_tag = clean_tag(child.tag)
                 if c_tag in ["child", "node"]:
-                    child_id = child.attrib.get("id")
+                    child_id = child.attrib.get("id") or child.attrib.get("identifier") or f"node-{uuid.uuid4().hex[:8]}"
                     elem_ref = child.attrib.get("archimateElement") or child.attrib.get("elementRef")
                     
                     bounds_elem = child.find("{*}bounds") if child.find("{*}bounds") is not None else child.find("bounds")
-                    x = int(bounds_elem.attrib.get("x", 0)) if bounds_elem is not None else 0
-                    y = int(bounds_elem.attrib.get("y", 0)) if bounds_elem is not None else 0
-                    w = int(bounds_elem.attrib.get("width", 120)) if bounds_elem is not None else 120
-                    h = int(bounds_elem.attrib.get("height", 55)) if bounds_elem is not None else 55
+                    if bounds_elem is not None:
+                        x = int(bounds_elem.attrib.get("x", 0))
+                        y = int(bounds_elem.attrib.get("y", 0))
+                        w = int(bounds_elem.attrib.get("width") or bounds_elem.attrib.get("w", 120))
+                        h = int(bounds_elem.attrib.get("height") or bounds_elem.attrib.get("h", 55))
+                    else:
+                        x = int(child.attrib.get("x", 0))
+                        y = int(child.attrib.get("y", 0))
+                        w = int(child.attrib.get("width") or child.attrib.get("w", 120))
+                        h = int(child.attrib.get("height") or child.attrib.get("h", 55))
 
                     nodes.append({
                         "id": child_id,
@@ -260,9 +275,9 @@ class ArchiModelParser:
 
                     # Look for source connections
                     for conn in child.findall("{*}sourceConnection") + child.findall("sourceConnection") + child.findall("{*}connection") + child.findall("connection"):
-                        conn_id = conn.attrib.get("id")
+                        conn_id = conn.attrib.get("id") or conn.attrib.get("identifier") or f"conn-{uuid.uuid4().hex[:8]}"
                         rel_ref = conn.attrib.get("archimateRelationship") or conn.attrib.get("relationshipRef")
-                        target_conn_id = conn.attrib.get("target")
+                        target_conn_id = conn.attrib.get("target") or conn.attrib.get("targetConnection")
                         connections.append({
                             "id": conn_id,
                             "relationship_id": rel_ref,
@@ -273,6 +288,18 @@ class ArchiModelParser:
                     # Recursively process nested children (e.g. grouped boxes)
                     traverse_diagram_children(child, parent_node_id=child_id)
 
+                elif c_tag in ["connection", "sourceConnection"]:
+                    conn_id = child.attrib.get("id") or child.attrib.get("identifier") or f"conn-{uuid.uuid4().hex[:8]}"
+                    rel_ref = child.attrib.get("archimateRelationship") or child.attrib.get("relationshipRef")
+                    source_conn_id = child.attrib.get("source") or child.attrib.get("sourceConnection") or parent_node_id
+                    target_conn_id = child.attrib.get("target") or child.attrib.get("targetConnection")
+                    connections.append({
+                        "id": conn_id,
+                        "relationship_id": rel_ref,
+                        "source_node_id": source_conn_id,
+                        "target_node_id": target_conn_id
+                    })
+
         traverse_diagram_children(diag_elem)
         return {
             "nodes": nodes,
@@ -280,76 +307,124 @@ class ArchiModelParser:
         }
 
     def _parse_open_exchange(self) -> Dict[str, Any]:
-        name_elem = self.root.find("{*}name") or self.root.find("name")
-        model_name = name_elem.text if name_elem is not None else "Open Exchange ArchiMate Model"
-        doc_elem = self.root.find("{*}documentation") or self.root.find("documentation")
-        model_desc = doc_elem.text if doc_elem is not None else ""
+        def get_elem_text(parent, tag_name: str) -> str:
+            if parent is None:
+                return ""
+            child = find_child(parent, tag_name)
+            if child is not None and child.text and child.text.strip():
+                return child.text.strip()
+            items = parent.findall(f"{{*}}{tag_name}") + parent.findall(tag_name)
+            for it in items:
+                if it.text and it.text.strip():
+                    return it.text.strip()
+            return parent.attrib.get(tag_name, "")
+
+        model_name = get_elem_text(self.root, "name") or "Open Exchange ArchiMate Model"
+        model_desc = get_elem_text(self.root, "documentation")
+
+        # Parse Property Definitions
+        prop_defs: Dict[str, str] = {}
+        prop_defs_parent = find_child(self.root, "propertyDefinitions")
+        if prop_defs_parent is not None:
+            for pdef in prop_defs_parent.findall("{*}propertyDefinition") + prop_defs_parent.findall("propertyDefinition"):
+                p_id = pdef.attrib.get("identifier") or pdef.attrib.get("id")
+                p_name = get_elem_text(pdef, "name") or p_id
+                if p_id:
+                    prop_defs[p_id] = p_name
+
+        def extract_properties(item_elem) -> Dict[str, Any]:
+            props: Dict[str, Any] = {}
+            # Check Open Exchange <properties><property propertyDefinitionRef="...">
+            props_elem = find_child(item_elem, "properties")
+            if props_elem is not None:
+                for p in props_elem.findall("{*}property") + props_elem.findall("property"):
+                    p_ref = p.attrib.get("propertyDefinitionRef") or p.attrib.get("propertyRef")
+                    val_elem = find_child(p, "value")
+                    val = val_elem.text.strip() if (val_elem is not None and val_elem.text) else p.attrib.get("value", "")
+                    prop_key = prop_defs.get(p_ref, p_ref)
+                    if prop_key:
+                        props[prop_key] = val
+            # Check native <property key="..." value="..."> if present
+            for p in item_elem.findall("{*}property") + item_elem.findall("property"):
+                k = p.attrib.get("key")
+                v = p.attrib.get("value")
+                if k:
+                    props[k] = v
+            return props
 
         elements = []
         relationships = []
         views = []
 
         # Parse Elements
-        elems_parent = self.root.find("{*}elements") or self.root.find("elements")
+        elems_parent = find_child(self.root, "elements")
         if elems_parent is not None:
-            for elem in elems_parent:
-                elem_id = elem.attrib.get("identifier") or elem.attrib.get("id")
-                xsi_type = get_xsi_type(elem.attrib) or "ApplicationComponent"
-                e_name_el = elem.find("{*}name") or elem.find("name")
-                e_name = e_name_el.text if e_name_el is not None else elem.attrib.get("name", "")
-                e_doc_el = elem.find("{*}documentation") or elem.find("documentation")
-                e_doc = e_doc_el.text if e_doc_el is not None else ""
+            for elem in elems_parent.findall("{*}element") + elems_parent.findall("element"):
+                elem_id = elem.attrib.get("identifier") or elem.attrib.get("id") or f"elem-{uuid.uuid4().hex[:8]}"
+                raw_type = get_xsi_type(elem.attrib) or elem.attrib.get("type", "ApplicationComponent")
+                clean_type = raw_type.replace("archimate:", "").strip()
+                
+                e_name = get_elem_text(elem, "name") or elem.attrib.get("name", "")
+                e_doc = get_elem_text(elem, "documentation")
+                props = extract_properties(elem)
 
-                layer = detect_layer(xsi_type)
+                layer = detect_layer(clean_type)
                 elements.append({
                     "id": elem_id,
-                    "name": e_name or f"Unnamed {xsi_type}",
-                    "type": xsi_type,
+                    "name": e_name or f"Unnamed {clean_type}",
+                    "type": clean_type or "ApplicationComponent",
                     "layer": layer,
                     "documentation": e_doc,
-                    "properties": {}
+                    "properties": props
                 })
 
         # Parse Relationships
-        rels_parent = self.root.find("{*}relationships") or self.root.find("relationships")
+        rels_parent = find_child(self.root, "relationships")
         if rels_parent is not None:
-            for rel in rels_parent:
-                rel_id = rel.attrib.get("identifier") or rel.attrib.get("id")
-                xsi_type = get_xsi_type(rel.attrib) or "Association"
+            for rel in rels_parent.findall("{*}relationship") + rels_parent.findall("relationship"):
+                rel_id = rel.attrib.get("identifier") or rel.attrib.get("id") or f"rel-{uuid.uuid4().hex[:8]}"
+                raw_type = get_xsi_type(rel.attrib) or rel.attrib.get("type", "Association")
+                clean_type = raw_type.replace("archimate:", "").strip()
+                
+                # Normalize Open Exchange short relationship names (e.g. "Serving" -> "ServingRelationship")
+                if not clean_type.endswith("Relationship"):
+                    norm_rel_type = f"{clean_type}Relationship"
+                else:
+                    norm_rel_type = clean_type
+
                 source_id = rel.attrib.get("source")
                 target_id = rel.attrib.get("target")
-                r_name_el = rel.find("{*}name") or rel.find("name")
-                r_name = r_name_el.text if r_name_el is not None else ""
-                r_doc_el = rel.find("{*}documentation") or rel.find("documentation")
-                r_doc = r_doc_el.text if r_doc_el is not None else ""
+                r_name = get_elem_text(rel, "name") or rel.attrib.get("name", "")
+                r_doc = get_elem_text(rel, "documentation")
+                props = extract_properties(rel)
 
                 if source_id and target_id:
                     relationships.append({
                         "id": rel_id,
                         "name": r_name,
-                        "type": xsi_type,
+                        "type": norm_rel_type,
                         "source_id": source_id,
                         "target_id": target_id,
                         "documentation": r_doc,
-                        "properties": {}
+                        "properties": props
                     })
 
         # Parse Views
-        views_parent = self.root.find("{*}views") or self.root.find("views")
+        views_parent = find_child(self.root, "views")
         if views_parent is not None:
-            diagrams_parent = views_parent.find("{*}diagrams") or views_parent.find("diagrams") or views_parent
-            for view in diagrams_parent.findall("{*}view") + diagrams_parent.findall("view"):
-                v_id = view.attrib.get("identifier") or view.attrib.get("id")
-                v_name_el = view.find("{*}name") or view.find("name")
-                v_name = v_name_el.text if v_name_el is not None else view.attrib.get("name", "View")
-                v_doc_el = view.find("{*}documentation") or view.find("documentation")
-                v_doc = v_doc_el.text if v_doc_el is not None else ""
+            diagrams_parent = find_child(views_parent, "diagrams")
+            target_container = diagrams_parent if diagrams_parent is not None else views_parent
+            for view in target_container.findall("{*}view") + target_container.findall("view"):
+                v_id = view.attrib.get("identifier") or view.attrib.get("id") or f"view-{uuid.uuid4().hex[:8]}"
+                v_name = get_elem_text(view, "name") or view.attrib.get("name", "View")
+                v_doc = get_elem_text(view, "documentation")
+                viewpoint = view.attrib.get("viewpoint", "Total")
 
                 view_data = self._parse_archi_diagram(view)
                 views.append({
                     "id": v_id,
                     "name": v_name,
-                    "viewpoint": view.attrib.get("viewpoint", "Total"),
+                    "viewpoint": viewpoint,
                     "documentation": v_doc,
                     "view_data": view_data
                 })

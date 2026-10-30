@@ -1,6 +1,6 @@
 from typing import Dict, List, Any, Optional, Set
 from sqlalchemy.orm import Session
-from app.models.archimate import ArchimateElement, ArchimateRelationship
+from app.models.archimate import ArchimateElement, ArchimateRelationship, ArchitectureDecisionRecord
 
 class ProcessService:
     @staticmethod
@@ -440,8 +440,59 @@ class ProcessService:
                         "severity": r["severity"]
                     })
 
-        total_issues = len(spof_risks) + len(lifecycle_risks) + len(sla_risks)
-        risk_index = min(100, (len(spof_risks) * 20) + (len(lifecycle_risks) * 15) + (len(sla_risks) * 10))
+        # 3. ADR Governance Drift & Retirement Mismatches
+        adr_governance_risks = []
+        model_adrs = db.query(ArchitectureDecisionRecord).filter(
+            ArchitectureDecisionRecord.model_id == model_id
+        ).all()
+        for adr in model_adrs:
+            for link in (adr.linked_elements or []):
+                el = all_elements.get(link.element_id)
+                if not el:
+                    continue
+                apm = el.apm_attributes
+                lifecycle = apm.lifecycle_status if apm else "Live"
+                quadrant = apm.time_quadrant if apm else "Tolerate"
+
+                if adr.status in ("Deprecated", "Rejected", "Superseded") and link.impact_type in ("introduces", "governs", "modifies"):
+                    if lifecycle not in ("Retired", "Phase-out"):
+                        adr_governance_risks.append({
+                            "adr_id": adr.id,
+                            "adr_code": adr.code,
+                            "adr_status": adr.status,
+                            "element_id": el.id,
+                            "element_name": el.name,
+                            "type": "ADR_GOVERNANCE_DRIFT",
+                            "severity": "MEDIUM",
+                            "message": (
+                                f"L'elemento attivo '{el.name}' è governato da {adr.code} ('{adr.title}') "
+                                f"il cui stato è '{adr.status}'."
+                            )
+                        })
+                elif adr.status == "Accepted" and link.impact_type == "retires":
+                    if apm and quadrant in ("Invest", "Tolerate") and lifecycle == "Live":
+                        adr_governance_risks.append({
+                            "adr_id": adr.id,
+                            "adr_code": adr.code,
+                            "adr_status": adr.status,
+                            "element_id": el.id,
+                            "element_name": el.name,
+                            "type": "ADR_RETIREMENT_MISMATCH",
+                            "severity": "HIGH",
+                            "message": (
+                                f"La decisione approvata {adr.code} prevede il ritiro ('retires') di '{el.name}', "
+                                f"ma nel catalogo APM risulta ancora '{lifecycle}' nel quadrante '{quadrant}'."
+                            )
+                        })
+
+        total_issues = len(spof_risks) + len(lifecycle_risks) + len(sla_risks) + len(adr_governance_risks)
+        risk_index = min(
+            100,
+            (len(spof_risks) * 20)
+            + (len(lifecycle_risks) * 15)
+            + (len(sla_risks) * 10)
+            + (len(adr_governance_risks) * 10)
+        )
 
         return {
             "model_id": model_id,
@@ -451,9 +502,11 @@ class ProcessService:
                 "total_risks": total_issues,
                 "spof_count": len(spof_risks),
                 "lifecycle_risks_count": len(lifecycle_risks),
-                "sla_risks_count": len(sla_risks)
+                "sla_risks_count": len(sla_risks),
+                "adr_governance_risks_count": len(adr_governance_risks)
             },
             "spof_risks": spof_risks,
             "lifecycle_risks": lifecycle_risks,
-            "sla_risks": sla_risks
+            "sla_risks": sla_risks,
+            "adr_governance_risks": adr_governance_risks
         }

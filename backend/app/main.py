@@ -25,6 +25,7 @@ from app.api.saved_views import router as saved_views_router
 from app.api.schemas import router as schemas_router
 from app.api.plugin_api import router as plugin_router
 from app.api.business_views import router as business_views_router
+from app.api.adrs import router as adrs_router
 
 from sqlalchemy import text
 
@@ -239,6 +240,9 @@ try:
     seed_default_rbac(db)
     from app.services.auth_service import get_system_auth_settings
     get_system_auth_settings(db)
+    from app.services.adr_service import seed_sample_adrs
+    if db.query(ModelWorkspace).filter(ModelWorkspace.id == "sample-easybank-ea").first():
+        seed_sample_adrs(db, "sample-easybank-ea")
 finally:
     db.close()
 
@@ -285,6 +289,7 @@ app.include_router(saved_views_router, prefix=settings.API_V1_STR)
 app.include_router(schemas_router, prefix=settings.API_V1_STR)
 app.include_router(plugin_router, prefix=settings.API_V1_STR)
 app.include_router(business_views_router, prefix=settings.API_V1_STR)
+app.include_router(adrs_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 

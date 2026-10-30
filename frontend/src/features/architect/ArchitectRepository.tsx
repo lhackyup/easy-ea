@@ -55,7 +55,8 @@ import {
   ExternalLink,
   FileSpreadsheet,
   FileArchive,
-  Download
+  Download,
+  Scale
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { useAuth } from '../../context/AuthContext';
@@ -72,6 +73,7 @@ interface ArchitectRepositoryProps {
   modelId: string;
   initialSavedView?: any | null;
   onClearInitialView?: () => void;
+  onOpenAdr?: (adrId?: string) => void;
 }
 
 const LAYERS = ['All', 'Strategy', 'Business', 'Application', 'Technology', 'Motivation', 'Implementation'];
@@ -80,6 +82,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   modelId,
   initialSavedView,
   onClearInitialView,
+  onOpenAdr,
 }) => {
   const { t, interpolate } = useLanguage();
   const { user } = useAuth();
@@ -2601,6 +2604,70 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     ) : (
                       <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-400 italic">
                         {t.architect.noIncomingRelations}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Linked Architecture Decision Records (ADR) */}
+                <div className="space-y-2 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-600 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <Scale className="w-3.5 h-3.5 text-indigo-600" />
+                      <span>Decisioni Architetturali (ADR) ({selectedElement.linked_adrs?.length || 0})</span>
+                    </span>
+                    {onOpenAdr && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenAdr()}
+                        className="text-[11px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                      >
+                        <span>Apri Registro ADR</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {selectedElement.linked_adrs && selectedElement.linked_adrs.length > 0 ? (
+                      selectedElement.linked_adrs.map((adr: any) => (
+                        <div
+                          key={adr.link_id || adr.adr_id}
+                          onClick={() => onOpenAdr && onOpenAdr(adr.adr_id)}
+                          className="p-3 bg-indigo-50/40 hover:bg-indigo-50/90 border border-indigo-200/80 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 transition cursor-pointer"
+                        >
+                          <div className="space-y-0.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-mono font-black text-indigo-950 bg-white border border-indigo-200 px-2 py-0.5 rounded-md text-[11px]">
+                                {adr.code}
+                              </span>
+                              <span className="font-bold text-slate-900">{adr.title}</span>
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-800 font-bold">
+                                {adr.impact_type}
+                              </span>
+                            </div>
+                            {adr.notes && (
+                              <p className="text-[11px] text-slate-500 italic">{adr.notes}</p>
+                            )}
+                          </div>
+                          <span
+                            className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border self-start sm:self-center shrink-0 ${
+                              adr.status === 'Accepted'
+                                ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                : adr.status === 'Proposed'
+                                ? 'bg-amber-100 text-amber-800 border-amber-200'
+                                : adr.status === 'Deprecated' || adr.status === 'Rejected'
+                                ? 'bg-rose-100 text-rose-800 border-rose-200'
+                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                            }`}
+                          >
+                            {adr.status}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                        Nessuna decisione architetturale (ADR) collegata a questo elemento.
                       </div>
                     )}
                   </div>

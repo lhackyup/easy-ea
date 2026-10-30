@@ -15,7 +15,7 @@ class OverlapService:
             ArchimateElement.type.in_(["Capability", "BusinessFunction", "BusinessService", "ApplicationFunction"])
         ).all()
 
-        # 2. Fetch Applications (respecting in_apm_scope != False)
+        # 2. Fetch Applications (respecting in_apm_scope != False and excluding internal sub-components)
         all_applications = db.query(ArchimateElement).filter(
             ArchimateElement.model_id == model_id,
             ArchimateElement.type == "ApplicationComponent"
@@ -25,6 +25,8 @@ class OverlapService:
             if not (
                 (a.apm_attributes and a.apm_attributes.in_apm_scope is False)
                 or (isinstance(a.properties, dict) and str(a.properties.get("eea_in_apm_scope", "true")).lower() == "false")
+                or (isinstance(a.properties, dict) and a.properties.get("is_internal_component") is True)
+                or (a.stereotype_id is None and not a.apm_attributes)
             )
         ]
 
@@ -83,10 +85,33 @@ class OverlapService:
             for app_id, rel_types in linked_app_ids.items():
                 app = app_map[app_id]
                 apm = app.apm_attributes
-                cost = apm.annual_cost if apm else 0.0
-                time_q = apm.time_quadrant if apm else "Tolerate"
-                bfit = apm.business_fit if apm and apm.business_fit is not None else 3
-                tfit = apm.technical_fit if apm and apm.technical_fit is not None else 3
+                props = app.properties if isinstance(app.properties, dict) else {}
+
+                raw_cost = (
+                    apm.annual_cost if apm and apm.annual_cost is not None
+                    else props.get("apm_annual_cost") or props.get("eea_annual_cost") or 0.0
+                )
+                try:
+                    cost = float(raw_cost)
+                except (ValueError, TypeError):
+                    cost = 0.0
+
+                time_q = (
+                    apm.time_quadrant if apm and apm.time_quadrant
+                    else props.get("apm_time_quadrant_override") or props.get("eea_time_quadrant") or "Tolerate"
+                )
+
+                raw_bfit = apm.business_fit if apm and apm.business_fit is not None else props.get("apm_functional_fit") or 3
+                raw_tfit = apm.technical_fit if apm and apm.technical_fit is not None else props.get("apm_technical_fit") or 3
+                try:
+                    bfit = int(str(raw_bfit).split("-")[0].strip())
+                except (ValueError, TypeError):
+                    bfit = 3
+                try:
+                    tfit = int(str(raw_tfit).split("-")[0].strip())
+                except (ValueError, TypeError):
+                    tfit = 3
+
                 serving_apps_info.append({
                     "app_id": app.id,
                     "app_name": app.name,
@@ -152,13 +177,22 @@ class OverlapService:
         total_caps = len(capabilities)
         redundancy_score = round((total_overlap_count / total_caps * 100), 1) if total_caps > 0 else 0.0
 
+        def _get_cost(a: ArchimateElement) -> float:
+            apm = a.apm_attributes
+            props = a.properties if isinstance(a.properties, dict) else {}
+            raw = apm.annual_cost if apm and apm.annual_cost is not None else props.get("apm_annual_cost") or props.get("eea_annual_cost") or 0.0
+            try:
+                return float(raw)
+            except (ValueError, TypeError):
+                return 0.0
+
         return {
             "total_capabilities": total_caps,
             "total_applications": len(applications),
             "redundant_capabilities_count": total_overlap_count,
             "redundancy_score_percentage": redundancy_score,
             "potential_savings_opportunity": potential_cost_waste,
-            "applications_columns": [{"id": a.id, "name": a.name, "annual_cost": a.apm_attributes.annual_cost if a.apm_attributes else 0.0} for a in applications],
+            "applications_columns": [{"id": a.id, "name": a.name, "annual_cost": _get_cost(a)} for a in applications],
             "capability_rows": sorted(capability_rows, key=lambda x: (not x["is_redundant"], -x["app_count"], x["name"])),
             "redundancy_clusters": sorted(redundant_clusters, key=lambda x: x["potential_savings"], reverse=True)
         }

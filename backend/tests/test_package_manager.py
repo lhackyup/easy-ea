@@ -31,6 +31,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def setup_test_db():
     Base.metadata.create_all(bind=engine)
+    app.dependency_overrides[get_db] = override_get_db
     db = TestingSessionLocal()
     # Clean up test packages
     dora_pkgs = db.query(AttributePackage).filter(AttributePackage.code.in_(["dora", "testpkg"])).all()
