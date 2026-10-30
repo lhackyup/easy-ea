@@ -2247,10 +2247,213 @@ def seed_default_attribute_packages(db: Session):
             existing_v.target_types = v_data.get("target_types", [])
             existing_v.config = v_data["config"]
 
+    # 6d. As-Is vs To-Be Gap Analysis & Transition Plateaus System Package (pkg-gap-analysis)
+    gap_pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-gap-analysis").first()
+    if not gap_pkg:
+        gap_pkg = AttributePackage(
+            id="pkg-gap-analysis",
+            code="gap_analysis",
+            name="As-Is vs To-Be Gap Analysis & Transition Plateaus",
+            version="1.0.0",
+            author="EasyEA Architecture Governance",
+            license="Open Standard (TOGAF / ArchiMate 3.2)",
+            description="Enterprise Architecture Gap Analysis package comparing Baseline (As-Is), Transition Plateaus, and Target (To-Be) architectures with change categorization (Retained, Added, Modified, Retired) and financial delta.",
+            icon_color="blue",
+            package_type="attribute_only",
+            standard_version="TOGAF ADM / ArchiMate 3.2",
+            is_default_active=True,
+            is_system=True
+        )
+        db.add(gap_pkg)
+        db.flush()
+    else:
+        gap_pkg.code = "gap_analysis"
+        gap_pkg.name = "As-Is vs To-Be Gap Analysis & Transition Plateaus"
+        gap_pkg.version = "1.0.0"
+        gap_pkg.author = "EasyEA Architecture Governance"
+        gap_pkg.license = "Open Standard (TOGAF / ArchiMate 3.2)"
+        gap_pkg.description = "Enterprise Architecture Gap Analysis package comparing Baseline (As-Is), Transition Plateaus, and Target (To-Be) architectures with change categorization (Retained, Added, Modified, Retired) and financial delta."
+        gap_pkg.icon_color = "blue"
+        gap_pkg.package_type = "attribute_only"
+        gap_pkg.standard_version = "TOGAF ADM / ArchiMate 3.2"
+        gap_pkg.is_default_active = True
+        gap_pkg.is_system = True
+
+    gap_items = [
+        {
+            "id": "item-gap-horizon",
+            "name": "architecture_horizon",
+            "label": "Architecture Horizon",
+            "description": "Lifecycle state of the element across architectural transition stages.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["As-Is (Current)", "Transition Plateau", "To-Be (Target)", "Persistent (Both)"],
+            "default_value": "Persistent (Both)",
+            "is_required": False,
+            "section": "Architecture Lifecycle & Transition",
+            "sort_order": 1
+        },
+        {
+            "id": "item-gap-action",
+            "name": "gap_action",
+            "label": "Gap Action",
+            "description": "Classification of the architectural change required to reach the target state.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "select",
+            "options": ["Retain", "Add / Introduce", "Modify / Migrate", "Retire / Decommission"],
+            "default_value": "Retain",
+            "is_required": False,
+            "section": "Architecture Lifecycle & Transition",
+            "sort_order": 2
+        },
+        {
+            "id": "item-gap-target-plateau",
+            "name": "target_plateau",
+            "label": "Target Plateau / Release",
+            "description": "Destination architecture plateau or release timeframe for this transformation.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "string",
+            "options": [],
+            "default_value": "Target Architecture",
+            "is_required": False,
+            "section": "Architecture Lifecycle & Transition",
+            "sort_order": 3
+        },
+        {
+            "id": "item-gap-cost-impact",
+            "name": "transition_cost_impact",
+            "label": "Financial Cost Delta (€/year)",
+            "description": "Estimated cost variation (positive = added run cost, negative = retirement savings).",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0.0",
+            "is_required": False,
+            "section": "Financial & Migration Impact",
+            "sort_order": 4
+        },
+        {
+            "id": "item-gap-work-package",
+            "name": "work_package_ref",
+            "label": "Associated Work Package / Project",
+            "description": "Reference to the strategic initiative, epic or work package delivering this change.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Financial & Migration Impact",
+            "sort_order": 5
+        },
+        {
+            "id": "item-gap-rationale",
+            "name": "migration_rationale",
+            "label": "Transition Rationale",
+            "description": "Strategic, operational or architectural drivers justifying this lifecycle transition.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "text",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Financial & Migration Impact",
+            "sort_order": 6
+        }
+    ]
+
+    for it_data in gap_items:
+        existing_it = db.query(AttributePackageItem).filter(AttributePackageItem.id == it_data["id"]).first()
+        if not existing_it:
+            item = AttributePackageItem(
+                id=it_data["id"],
+                package_id=gap_pkg.id,
+                name=it_data["name"],
+                label=it_data["label"],
+                description=it_data["description"],
+                element_type=it_data["element_type"],
+                layer=it_data["layer"],
+                data_type=it_data["data_type"],
+                options=it_data["options"],
+                default_value=it_data["default_value"],
+                is_required=it_data["is_required"],
+                section=it_data["section"],
+                sort_order=it_data["sort_order"]
+            )
+            db.add(item)
+        else:
+            existing_it.name = it_data["name"]
+            existing_it.label = it_data["label"]
+            existing_it.description = it_data["description"]
+            existing_it.element_type = it_data["element_type"]
+            existing_it.layer = it_data["layer"]
+            existing_it.data_type = it_data["data_type"]
+            existing_it.options = it_data["options"]
+            existing_it.default_value = it_data["default_value"]
+            existing_it.is_required = it_data["is_required"]
+            existing_it.section = it_data["section"]
+            existing_it.sort_order = it_data["sort_order"]
+
+    gap_views = [
+        {
+            "id": "pview-gap-analysis-matrix",
+            "view_key": "gap_matrix",
+            "name": "As-Is vs To-Be Gap Analysis Matrix",
+            "description": "Interactive matrix and detailed register comparing Baseline, Transition, and Target states with financial delta, swimlanes, and work package coverage.",
+            "category": "Strategy & Transformation",
+            "view_type": "gap_matrix",
+            "icon": "ArrowRightLeft",
+            "sort_order": 1,
+            "target_hub": "both",
+            "target_stereotypes": [],
+            "target_types": ["BusinessProcess", "BusinessService", "ApplicationComponent", "Node", "Plateau"],
+            "config": {}
+        }
+    ]
+
+    # Clean up redundant legacy table view if present
+    db.query(PackageView).filter(PackageView.id == "pview-gap-analysis-table").delete(synchronize_session=False)
+
+    for v_data in gap_views:
+        existing_v = db.query(PackageView).filter(PackageView.id == v_data["id"]).first()
+        if not existing_v:
+            v = PackageView(
+                id=v_data["id"],
+                package_id=gap_pkg.id,
+                view_key=v_data["view_key"],
+                name=v_data["name"],
+                description=v_data["description"],
+                category=v_data["category"],
+                view_type=v_data["view_type"],
+                icon=v_data["icon"],
+                sort_order=v_data.get("sort_order", 0),
+                target_hub=v_data.get("target_hub", "both"),
+                target_stereotypes=v_data["target_stereotypes"],
+                target_types=v_data.get("target_types", []),
+                config=v_data["config"]
+            )
+            db.add(v)
+        else:
+            existing_v.name = v_data["name"]
+            existing_v.description = v_data["description"]
+            existing_v.category = v_data["category"]
+            existing_v.view_type = v_data["view_type"]
+            existing_v.icon = v_data["icon"]
+            existing_v.sort_order = v_data.get("sort_order", 0)
+            if not getattr(existing_v, "target_hub", None):
+                existing_v.target_hub = v_data.get("target_hub", "both")
+            existing_v.target_stereotypes = v_data["target_stereotypes"]
+            existing_v.target_types = v_data.get("target_types", [])
+            existing_v.config = v_data["config"]
+
     # 7. Delete any orphaned package items and packages not belonging to registered packages or frameworks
     legacy_pkgs = db.query(AttributePackage).filter(
         AttributePackage.package_type != "framework",
-        ~AttributePackage.id.in_(["pkg-apm", "pkg-adr", "pkg-resilience"])
+        ~AttributePackage.id.in_(["pkg-apm", "pkg-adr", "pkg-resilience", "pkg-gap-analysis"])
     ).all()
     legacy_ids = [p.id for p in legacy_pkgs if not p.id.startswith("pkg-user-")]
     if legacy_ids:
@@ -2813,6 +3016,50 @@ def seed_default_stereotypes(db: Session):
                     "sort_order": 8
                 }
             ]
+        },
+        {
+            "id": "stereo-plateau-baseline",
+            "base_type": "Plateau",
+            "name": "Baseline Architecture",
+            "label": "«Baseline Architecture»",
+            "description": "Represents the current, verified As-Is operational baseline state of the enterprise architecture.",
+            "icon_color": "amber",
+            "is_system": True,
+            "package_id": "pkg-gap-analysis",
+            "links": []
+        },
+        {
+            "id": "stereo-plateau-transition",
+            "base_type": "Plateau",
+            "name": "Transition Plateau",
+            "label": "«Transition Plateau»",
+            "description": "Represents an intermediate transition architecture state delivering defined milestone increments.",
+            "icon_color": "blue",
+            "is_system": True,
+            "package_id": "pkg-gap-analysis",
+            "links": []
+        },
+        {
+            "id": "stereo-plateau-target",
+            "base_type": "Plateau",
+            "name": "Target Architecture",
+            "label": "«Target Architecture»",
+            "description": "Represents the desired future To-Be target enterprise architecture state.",
+            "icon_color": "emerald",
+            "is_system": True,
+            "package_id": "pkg-gap-analysis",
+            "links": []
+        },
+        {
+            "id": "stereo-workpackage-strategic",
+            "base_type": "WorkPackage",
+            "name": "Strategic Initiative",
+            "label": "«Strategic Initiative»",
+            "description": "A funded transition program, epic or work package delivering deliverables to close architectural gaps.",
+            "icon_color": "indigo",
+            "is_system": True,
+            "package_id": "pkg-gap-analysis",
+            "links": []
         }
     ]
 
@@ -3543,9 +3790,9 @@ def toggle_library_package(
             "message": f"Pacchetto '{pkg.name}' attivato per la libreria '{model.name}'."
         }
     else:
-        # STRICT DEACTIVATION GUARD (except for pkg-adr and pkg-resilience which can be toggled freely to show/hide views)
+        # STRICT DEACTIVATION GUARD (except for pkg-adr, pkg-resilience, and pkg-gap-analysis which can be toggled freely to show/hide views)
         if existing_link:
-            if package_id not in ["pkg-adr", "pkg-resilience"]:
+            if package_id not in ["pkg-adr", "pkg-resilience", "pkg-gap-analysis"]:
                 # 1. Check if any element in the library has populated attributes from this package
                 pkg_attr_names = [it.name for it in pkg.items]
                 elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()

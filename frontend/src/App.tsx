@@ -22,6 +22,7 @@ import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
 import { ADRManager } from './features/architect/ADRManager';
 import { ResilienceDashboard } from './features/business/ResilienceDashboard';
+import { GapAnalysisMatrix } from './features/business/GapAnalysisMatrix';
 import { ArchitectSavedViews } from './features/architect/ArchitectSavedViews';
 import { BusinessViewsManager } from './features/architect/BusinessViewsManager';
 import { SchemaRepository } from './features/schemas/SchemaRepository';
@@ -88,6 +89,7 @@ export function App() {
     .find((v) => v.id === activePackageView?.viewId || v.view_key === activePackageView?.viewId);
   const isAdrView = activeViewObj?.view_type === 'adr_manager' || activePackageView?.viewId === 'pkv-adr-registry';
   const isResilienceView = activeViewObj?.view_type === 'resilience_dashboard' || activePackageView?.viewId === 'pview-resilience-dashboard';
+  const isGapView = activeViewObj?.view_type === 'gap_matrix' || activePackageView?.viewId === 'pview-gap-analysis-matrix';
 
   // Sidebar Collapse state
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
@@ -254,6 +256,8 @@ export function App() {
                         />
                       ) : isResilienceView ? (
                         <ResilienceDashboard modelId={selectedModelId} />
+                      ) : isGapView ? (
+                        <GapAnalysisMatrix modelId={selectedModelId} />
                       ) : (
                         <FrameworkInsights
                           modelId={selectedModelId}
@@ -294,6 +298,8 @@ export function App() {
                         />
                       ) : isResilienceView ? (
                         <ResilienceDashboard modelId={selectedModelId} />
+                      ) : isGapView ? (
+                        <GapAnalysisMatrix modelId={selectedModelId} />
                       ) : (
                         <FrameworkInsights
                           modelId={selectedModelId}

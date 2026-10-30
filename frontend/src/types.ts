@@ -939,7 +939,7 @@ export interface PackageViewSummary {
   name: string;
   description?: string | null;
   category: string;
-  view_type: 'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard';
+  view_type: 'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard' | 'gap_matrix';
   icon?: string;
   sort_order?: number;
   target_hub?: 'business' | 'architecture' | 'both';
@@ -959,7 +959,7 @@ export interface CustomBusinessViewPayload {
   view_key?: string;
   description?: string;
   category: string;
-  view_type: 'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard';
+  view_type: 'table' | 'matrix' | 'kpi_dashboard' | 'adr_manager' | 'resilience_dashboard' | 'gap_matrix';
   icon?: string;
   sort_order?: number;
   target_hub?: 'business' | 'architecture' | 'both';
@@ -1177,6 +1177,58 @@ export interface ResilienceAnalysisResult {
   model_name: string;
   metrics: ResilienceMetrics;
   mismatches: ResilienceMismatchItem[];
+}
+
+export type GapCategory = 'RETAINED' | 'ADDED' | 'MODIFIED' | 'RETIRED';
+
+export interface GapItem {
+  id: string;
+  name: string;
+  type: string;
+  layer: string;
+  category: GapCategory;
+  badge_color: 'slate' | 'emerald' | 'blue' | 'rose';
+  architecture_horizon: string;
+  gap_action: string;
+  target_plateau: string;
+  annual_cost: number;
+  cost_impact: number;
+  work_packages: string[];
+  has_work_package: boolean;
+  migration_rationale: string;
+  plateaus?: string[];
+}
+
+export interface GapMetrics {
+  total_elements: number;
+  retained_count: number;
+  added_count: number;
+  modified_count: number;
+  retired_count: number;
+  total_savings: number;
+  total_added_investments: number;
+  net_financial_delta: number;
+  gaps_missing_work_package: number;
+  available_plateaus_count?: number;
+  available_work_packages_count?: number;
+}
+
+export interface GapAnalysisResult {
+  mode: 'intra_model' | 'cross_model';
+  base_model: {
+    id: string;
+    name: string;
+    code: string;
+  };
+  compare_model?: {
+    id: string;
+    name: string;
+    code: string;
+  } | null;
+  metrics: GapMetrics;
+  plateaus?: Array<{ id: string; name: string }>;
+  work_packages?: Array<{ id: string; name: string }>;
+  items: GapItem[];
 }
 
 

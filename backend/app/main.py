@@ -27,6 +27,7 @@ from app.api.plugin_api import router as plugin_router
 from app.api.business_views import router as business_views_router
 from app.api.adrs import router as adrs_router
 from app.api.resilience import router as resilience_router
+from app.api.gap_analysis import router as gap_analysis_router
 
 from sqlalchemy import text
 
@@ -295,6 +296,7 @@ app.include_router(plugin_router, prefix=settings.API_V1_STR)
 app.include_router(business_views_router, prefix=settings.API_V1_STR)
 app.include_router(adrs_router, prefix=settings.API_V1_STR)
 app.include_router(resilience_router, prefix=settings.API_V1_STR)
+app.include_router(gap_analysis_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 
