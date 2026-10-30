@@ -21,7 +21,6 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 SAMPLE_OPEN_EXCHANGE_XML = """<?xml version="1.0" encoding="UTF-8"?>
@@ -77,6 +76,7 @@ SAMPLE_OPEN_EXCHANGE_XML = """<?xml version="1.0" encoding="UTF-8"?>
 
 @pytest.fixture(scope="module", autouse=True)
 def setup_db():
+    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.drop_all(bind=engine)
     Base.metadata.create_all(bind=engine)
     db = TestingSessionLocal()
@@ -114,6 +114,8 @@ def setup_db():
     db.commit()
     db.close()
     yield
+    app.dependency_overrides.pop(get_db, None)
+    Base.metadata.drop_all(bind=engine)
 
 
 def test_archi_model_parser_open_exchange():

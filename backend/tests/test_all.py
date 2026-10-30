@@ -1987,5 +1987,71 @@ def test_sast_low_01_security_headers_and_docker_non_root():
     assert "chown -R easyea:easyea" in dockerfile_content
 
 
+def test_sast_new_med_01_and_low_01_sac_auth_and_defusedxml():
+    """Verify SAST-NEW-MED-01 (SaC endpoints require authentication & library RBAC) and SAST-NEW-LOW-01 (safe defusedxml in exchange_export_service)."""
+    import os
+    anon_client = TestClient(app)
+
+    # 1. Unauthenticated requests to SaC endpoints must return 401
+    assert anon_client.get("/api/schemas/sample-schema-1/sac").status_code == 401
+    assert anon_client.post("/api/schemas/sac/compile", json={"code": "schema test {}"}).status_code == 401
+    assert anon_client.post("/api/schemas/sac/to-archimate", json={"code": "schema test {}"}).status_code == 401
+    assert anon_client.put("/api/schemas/sample-schema-1/sac", json={"code": "schema test {}"}).status_code == 401
+    assert anon_client.post("/api/schemas/sac/create", json={"code": "schema test {}", "model_id": "sample-easybank-ea"}).status_code == 401
+
+    # 2. Authenticated user with permission can compile SaC code
+    valid_sac = """
+    schema "Security Test Schema" {
+        application {
+            component Comp1 "Portal App"
+        }
+    }
+    """
+    res_compile = client.post("/api/schemas/sac/compile", json={
+        "code": valid_sac,
+        "model_id": "sample-easybank-ea"
+    })
+    assert res_compile.status_code == 200
+    assert res_compile.json()["success"] is True
+
+    # 3. Non-admin user blocked from creating schemas in unassigned library
+    db = TestingSessionLocal()
+    try:
+        marco = db.query(User).filter(User.username == "marco_arch").first()
+        assert marco is not None
+        marco_token = create_access_token(marco)
+    finally:
+        db.close()
+
+    marco_client = TestClient(app)
+    marco_client.headers.update({"Authorization": f"Bearer {marco_token}"})
+
+    # marco has no permission on unassigned/restricted workspace
+    res_forbidden = marco_client.post("/api/schemas/sac/create", json={
+        "code": "schema 'Unauthorized Schema' {}",
+        "model_id": "ws-unassigned-test"
+    })
+    assert res_forbidden.status_code == 403
+
+    # 4. Verify defusedxml in exchange_export_service.py
+    exchange_file = os.path.join(os.path.dirname(__file__), "../app/services/exchange_export_service.py")
+    assert os.path.exists(exchange_file)
+    with open(exchange_file, "r", encoding="utf-8") as f:
+        exchange_content = f.read()
+
+    assert "defusedxml.minidom" in exchange_content
+    assert "safe_minidom_parse_string" in exchange_content
+    assert "from xml.dom import minidom" not in exchange_content
+
+    # 5. Verify setSafeHtml in easyea-plugin.js
+    plugin_file = os.path.join(os.path.dirname(__file__), "../../plugins/drawio-easyea/easyea-plugin.js")
+    assert os.path.exists(plugin_file)
+    with open(plugin_file, "r", encoding="utf-8") as f:
+        plugin_content = f.read()
+
+    assert "setSafeHtml(btn" in plugin_content
+
+
+
 
 

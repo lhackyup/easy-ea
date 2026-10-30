@@ -1,7 +1,7 @@
 import re
 import uuid
-import xml.etree.ElementTree as ET
-from xml.dom import minidom
+from xml.etree.ElementTree import Element, SubElement, register_namespace, tostring as xml_tostring
+from defusedxml.minidom import parseString as safe_minidom_parse_string
 from typing import Dict, List, Any, Optional, Set, Tuple
 from sqlalchemy.orm import Session
 from fastapi import HTTPException
@@ -156,32 +156,32 @@ def export_model_to_exchange_xml(
                 register_prop(k)
 
     # Build XML Document Root with official Open Group ArchiMate 3.0 schema attributes
-    ET.register_namespace("", OPEN_EXCHANGE_NS)
-    ET.register_namespace("xsi", XSI_NS)
+    register_namespace("", OPEN_EXCHANGE_NS)
+    register_namespace("xsi", XSI_NS)
 
-    root = ET.Element(f"{{{OPEN_EXCHANGE_NS}}}model", {
+    root = Element(f"{{{OPEN_EXCHANGE_NS}}}model", {
         f"{{{XSI_NS}}}schemaLocation": f"{OPEN_EXCHANGE_NS} http://www.opengroup.org/xsd/archimate/3.0/archimate3_Diagram.xsd",
         "identifier": f"id-{model.code or model.id}",
         "version": "3.0"
     })
 
     # Model Name & Documentation
-    model_name_tag = ET.SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
+    model_name_tag = SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
     model_name_tag.text = model.name or "EasyEA Enterprise Model"
 
     if model.description:
-        doc_tag = ET.SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
+        doc_tag = SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
         doc_tag.text = model.description
 
     # 1. Property Definitions
     if prop_defs:
-        prop_defs_elem = ET.SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}propertyDefinitions")
+        prop_defs_elem = SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}propertyDefinitions")
         for p_name, p_id in sorted(prop_defs.items(), key=lambda x: x[0]):
-            p_def = ET.SubElement(prop_defs_elem, f"{{{OPEN_EXCHANGE_NS}}}propertyDefinition", {
+            p_def = SubElement(prop_defs_elem, f"{{{OPEN_EXCHANGE_NS}}}propertyDefinition", {
                 "identifier": p_id,
                 "type": "string"
             })
-            p_def_name = ET.SubElement(p_def, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
+            p_def_name = SubElement(p_def, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
             p_def_name.text = p_name
 
     # Helper to serialize properties block
@@ -191,27 +191,27 @@ def export_model_to_exchange_xml(
         valid_items = [(k, v) for k, v in prop_dict.items() if v is not None and v != "" and k in prop_defs]
         if not valid_items:
             return
-        props_container = ET.SubElement(parent_elem, f"{{{OPEN_EXCHANGE_NS}}}properties")
+        props_container = SubElement(parent_elem, f"{{{OPEN_EXCHANGE_NS}}}properties")
         for k, v in sorted(valid_items, key=lambda x: x[0]):
-            p_elem = ET.SubElement(props_container, f"{{{OPEN_EXCHANGE_NS}}}property", {
+            p_elem = SubElement(props_container, f"{{{OPEN_EXCHANGE_NS}}}property", {
                 "propertyDefinitionRef": prop_defs[k]
             })
-            val_elem = ET.SubElement(p_elem, f"{{{OPEN_EXCHANGE_NS}}}value", {f"{{{XML_NS}}}lang": "en"})
+            val_elem = SubElement(p_elem, f"{{{OPEN_EXCHANGE_NS}}}value", {f"{{{XML_NS}}}lang": "en"})
             val_elem.text = _clean_str(v)
 
     # 2. Elements
-    elems_elem = ET.SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}elements")
+    elems_elem = SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}elements")
     for el in sorted(elements, key=lambda x: (x.layer or "", x.type or "", x.name or "")):
         clean_type = el.type.replace("archimate:", "").strip() if el.type else "ApplicationComponent"
-        el_tag = ET.SubElement(elems_elem, f"{{{OPEN_EXCHANGE_NS}}}element", {
+        el_tag = SubElement(elems_elem, f"{{{OPEN_EXCHANGE_NS}}}element", {
             "identifier": el.id,
             f"{{{XSI_NS}}}type": clean_type
         })
-        el_name = ET.SubElement(el_tag, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
+        el_name = SubElement(el_tag, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
         el_name.text = el.name or f"Unnamed {clean_type}"
 
         if el.documentation:
-            el_doc = ET.SubElement(el_tag, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
+            el_doc = SubElement(el_tag, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
             el_doc.text = el.documentation
 
         # Prepare properties
@@ -232,22 +232,22 @@ def export_model_to_exchange_xml(
         serialize_properties(el_tag, el_props)
 
     # 3. Relationships
-    rels_elem = ET.SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}relationships")
+    rels_elem = SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}relationships")
     for rel in sorted(relationships, key=lambda x: (x.type or "", x.id or "")):
         raw_type = rel.type.replace("archimate:", "").strip() if rel.type else "AssociationRelationship"
         norm_type = RELATIONSHIP_TYPE_NORMALIZE.get(raw_type, raw_type.replace("Relationship", ""))
 
-        rel_tag = ET.SubElement(rels_elem, f"{{{OPEN_EXCHANGE_NS}}}relationship", {
+        rel_tag = SubElement(rels_elem, f"{{{OPEN_EXCHANGE_NS}}}relationship", {
             "identifier": rel.id,
             "source": rel.source_id,
             "target": rel.target_id,
             f"{{{XSI_NS}}}type": norm_type
         })
         if rel.name:
-            r_name = ET.SubElement(rel_tag, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
+            r_name = SubElement(rel_tag, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
             r_name.text = rel.name
         if rel.documentation:
-            r_doc = ET.SubElement(rel_tag, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
+            r_doc = SubElement(rel_tag, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
             r_doc.text = rel.documentation
 
         r_props = dict(rel.properties) if isinstance(rel.properties, dict) else {}
@@ -255,19 +255,19 @@ def export_model_to_exchange_xml(
 
     # 4. Views / Diagrams
     if views:
-        views_elem = ET.SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}views")
-        diagrams_elem = ET.SubElement(views_elem, f"{{{OPEN_EXCHANGE_NS}}}diagrams")
+        views_elem = SubElement(root, f"{{{OPEN_EXCHANGE_NS}}}views")
+        diagrams_elem = SubElement(views_elem, f"{{{OPEN_EXCHANGE_NS}}}diagrams")
 
         for v in views:
-            v_tag = ET.SubElement(diagrams_elem, f"{{{OPEN_EXCHANGE_NS}}}view", {
+            v_tag = SubElement(diagrams_elem, f"{{{OPEN_EXCHANGE_NS}}}view", {
                 "identifier": v.id,
                 f"{{{XSI_NS}}}type": "Diagram"
             })
-            v_name = ET.SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
+            v_name = SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}name", {f"{{{XML_NS}}}lang": "en"})
             v_name.text = v.name or "Diagram View"
 
             if getattr(v, "documentation", None):
-                v_doc = ET.SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
+                v_doc = SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}documentation", {f"{{{XML_NS}}}lang": "en"})
                 v_doc.text = v.documentation
 
             v_data = v.view_data if isinstance(v.view_data, dict) else {}
@@ -283,7 +283,7 @@ def export_model_to_exchange_xml(
                 w = str(int(n.get("width") or n.get("w") or 180))
                 h = str(int(n.get("height") or n.get("h") or 80))
 
-                node_tag = ET.SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}node", {
+                node_tag = SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}node", {
                     "identifier": n_id,
                     "elementRef": elem_ref,
                     "x": x,
@@ -298,8 +298,8 @@ def export_model_to_exchange_xml(
                     r_c = int(bg_color[1:3], 16)
                     g_c = int(bg_color[3:5], 16)
                     b_c = int(bg_color[5:7], 16)
-                    style_tag = ET.SubElement(node_tag, f"{{{OPEN_EXCHANGE_NS}}}style")
-                    color_tag = ET.SubElement(style_tag, f"{{{OPEN_EXCHANGE_NS}}}fillColor", {
+                    style_tag = SubElement(node_tag, f"{{{OPEN_EXCHANGE_NS}}}style")
+                    color_tag = SubElement(style_tag, f"{{{OPEN_EXCHANGE_NS}}}fillColor", {
                         "r": str(r_c),
                         "g": str(g_c),
                         "b": str(b_c)
@@ -312,7 +312,7 @@ def export_model_to_exchange_xml(
                 src = c.get("source_node_id") or c.get("source") or ""
                 tgt = c.get("target_node_id") or c.get("target") or ""
                 if src and tgt:
-                    conn_tag = ET.SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}connection", {
+                    conn_tag = SubElement(v_tag, f"{{{OPEN_EXCHANGE_NS}}}connection", {
                         "identifier": c_id,
                         "relationshipRef": rel_ref,
                         "source": src,
@@ -321,8 +321,8 @@ def export_model_to_exchange_xml(
                     })
 
     # Serialize and format pretty XML
-    raw_xml_bytes = ET.tostring(root, encoding="utf-8")
-    parsed_dom = minidom.parseString(raw_xml_bytes)
+    raw_xml_bytes = xml_tostring(root, encoding="utf-8")
+    parsed_dom = safe_minidom_parse_string(raw_xml_bytes)
     pretty_xml = parsed_dom.toprettyxml(indent="  ", encoding="utf-8").decode("utf-8")
 
     # Sanitize multiple blank lines generated by minidom

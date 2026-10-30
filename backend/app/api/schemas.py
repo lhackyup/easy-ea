@@ -378,6 +378,270 @@ def get_schema_detail(
     return res
 
 
+# ============================================================================
+# SCHEMA-AS-CODE (SaC) ENDPOINTS (.eac DSL)
+# (Defined before parameterized /{model_id}/create to prevent route shadowing)
+# ============================================================================
+
+class SaCCompileRequest(BaseModel):
+    code: str
+    model_id: Optional[str] = None
+
+
+class SaCSaveRequest(BaseModel):
+    code: str
+    commit_message: Optional[str] = "Aggiornamento da Schema-as-Code (.eac)"
+
+
+class SaCCreateRequest(BaseModel):
+    code: str
+    model_id: str
+    folder_id: Optional[str] = None
+
+
+@router.post("/sac/compile")
+def compile_sac_code(
+    payload: SaCCompileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Validates and compiles Schema-as-Code (.eac) text.
+    Returns the AST structure, detected elements, relationships, layout, and any syntax errors.
+    """
+    if payload.model_id:
+        require_library_permission(db, current_user, "read_model", payload.model_id)
+    try:
+        compiled = SaCService.compile_sac(payload.code, db=db, model_id=payload.model_id)
+        return {
+            "success": True,
+            "data": compiled,
+            "summary": {
+                "name": compiled["name"],
+                "elements_count": len(compiled["elements"]),
+                "relationships_count": len(compiled["relationships"]),
+                "nodes_count": len(compiled.get("view_data", {}).get("nodes", []))
+            }
+        }
+    except SaCParseError as spe:
+        return {
+            "success": False,
+            "error": spe.message,
+            "line": spe.line,
+            "column": spe.column
+        }
+    except Exception as e:
+        return {
+            "success": False,
+            "error": str(e),
+            "line": 1,
+            "column": 1
+        }
+
+
+@router.post("/sac/to-archimate")
+def convert_sac_to_archimate_download(
+    payload: SaCCompileRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Compiles SaC code and returns a downloadable .archimate file directly.
+    """
+    if payload.model_id:
+        require_library_permission(db, current_user, "read_model", payload.model_id)
+    try:
+        compiled = SaCService.compile_sac(payload.code, db=db, model_id=payload.model_id)
+        xml_content = SaCService.canonical_to_archimate_xml(compiled, db=db)
+        safe_name = compiled.get("name", "Schema").replace(" ", "_").replace("/", "_")
+        return Response(
+            content=xml_content,
+            media_type="application/octet-stream",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.archimate"'}
+        )
+    except SaCParseError as spe:
+        raise HTTPException(status_code=400, detail=f"Errore di sintassi SaC riga {spe.line}: {spe.message}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Errore nella generazione ArchiMate: {str(e)}")
+
+
+@router.post("/sac/create")
+def create_schema_from_sac(
+    payload: SaCCreateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Creates a brand new schema in the specified workspace directly from a Schema-as-Code (.eac) document.
+    """
+    require_library_permission(db, current_user, "edit_diagram", payload.model_id)
+
+    schema_id = f"schema-{uuid.uuid4().hex[:8]}"
+
+    try:
+        compiled = SaCService.compile_sac(payload.code, db=db, model_id=payload.model_id, schema_id=schema_id)
+        archimate_xml = SaCService.canonical_to_archimate_xml(compiled, db=db)
+    except SaCParseError as spe:
+        raise HTTPException(status_code=400, detail=f"Errore di sintassi SaC riga {spe.line}: {spe.message}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Errore nella compilazione SaC: {str(e)}")
+
+    new_schema = ArchiSchema(
+        id=schema_id,
+        model_id=payload.model_id,
+        folder_id=payload.folder_id,
+        name=compiled.get("name") or "Nuovo Schema SaC",
+        viewpoint=compiled.get("viewpoint") or "Total",
+        documentation=compiled.get("documentation") or "",
+        format="archi",
+        current_version="v1.0",
+        status="available",
+        view_data=compiled.get("view_data", {}),
+        raw_xml=archimate_xml
+    )
+    db.add(new_schema)
+
+    # Initial version 1
+    v1_entry = SchemaVersionHistory(
+        id=f"ver-{uuid.uuid4().hex[:8]}",
+        schema_id=schema_id,
+        version_number=1,
+        version_label="v1.0",
+        commit_message="Creazione iniziale da Schema-as-Code (.eac)",
+        author_user_id=current_user.id,
+        author_name=current_user.full_name or current_user.username or "Architetto",
+        view_data_snapshot=compiled.get("view_data", {}),
+        raw_xml_snapshot=archimate_xml
+    )
+    db.add(v1_entry)
+
+    db.commit()
+    db.refresh(new_schema)
+
+    return {
+        "success": True,
+        "message": f"Schema '{new_schema.name}' creato con successo da codice SaC.",
+        "schema": _serialize_schema(new_schema)
+    }
+
+
+@router.get("/{schema_id}/sac")
+def get_schema_sac(
+    schema_id: str,
+    include_layout: bool = True,
+    download: bool = False,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Decompiles an existing schema into Schema-as-Code (.eac) format.
+    Supports either JSON response or direct file download.
+    """
+    schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema non trovato.")
+
+    require_library_permission(db, current_user, "read_model", schema.model_id)
+
+    sac_code = SaCService.decompile_schema_to_sac(
+        schema=schema,
+        db=db,
+        include_layout=include_layout
+    )
+
+    if download:
+        safe_name = (schema.name or "schema").replace(" ", "_").replace("/", "_")
+        return Response(
+            content=sac_code,
+            media_type="text/plain; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{safe_name}.eac"'}
+        )
+
+    return {
+        "success": True,
+        "schema_id": schema.id,
+        "schema_name": schema.name,
+        "code": sac_code
+    }
+
+
+@router.put("/{schema_id}/sac")
+def update_schema_from_sac(
+    schema_id: str,
+    payload: SaCSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Updates an existing schema by compiling the provided Schema-as-Code (.eac) source.
+    Creates a new version history entry and updates view_data and raw_xml.
+    """
+    schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema non trovato.")
+
+    require_library_permission(db, current_user, "edit_diagram", schema.model_id)
+
+    # Check lock permissions
+    if schema.status == "checked_out" and schema.locked_by_user_id != current_user.id and not _is_admin_or_lead(current_user, schema.model_id):
+        raise HTTPException(
+            status_code=403,
+            detail=f"Lo schema è attualmente bloccato da {schema.locked_by_username}. Non puoi modificarlo."
+        )
+
+    try:
+        compiled = SaCService.compile_sac(payload.code, db=db, model_id=schema.model_id, schema_id=schema.id)
+        archimate_xml = SaCService.canonical_to_archimate_xml(compiled, db=db)
+    except SaCParseError as spe:
+        raise HTTPException(status_code=400, detail=f"Errore di sintassi SaC riga {spe.line}: {spe.message}")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Errore nella compilazione SaC: {str(e)}")
+
+    # Update versioning
+    latest_ver = db.query(SchemaVersionHistory).filter(
+        SchemaVersionHistory.schema_id == schema.id
+    ).order_by(SchemaVersionHistory.version_number.desc()).first()
+
+    next_num = (latest_ver.version_number + 1) if latest_ver else 2
+    next_label = f"v1.{next_num - 1}"
+
+    # Snapshot
+    history_entry = SchemaVersionHistory(
+        id=f"ver-{uuid.uuid4().hex[:8]}",
+        schema_id=schema.id,
+        version_number=next_num,
+        version_label=next_label,
+        commit_message=payload.commit_message or "Aggiornamento da Schema-as-Code (.eac)",
+        author_user_id=current_user.id,
+        author_name=current_user.full_name or current_user.username or "Architetto",
+        view_data_snapshot=compiled.get("view_data", {}),
+        raw_xml_snapshot=archimate_xml
+    )
+    db.add(history_entry)
+
+    if compiled.get("name"):
+        schema.name = compiled["name"]
+    if compiled.get("documentation"):
+        schema.documentation = compiled["documentation"]
+    if compiled.get("viewpoint"):
+        schema.viewpoint = compiled["viewpoint"]
+
+    schema.current_version = next_label
+    schema.view_data = compiled.get("view_data", {})
+    schema.raw_xml = archimate_xml
+    schema.updated_at = datetime.now(timezone.utc)
+
+    db.commit()
+    db.refresh(schema)
+
+    return {
+        "success": True,
+        "message": f"Schema aggiornato con successo da Schema-as-Code (Versione {next_label}).",
+        "schema": _serialize_schema(schema),
+        "code": payload.code
+    }
+
+
 @router.post("/{model_id}/create")
 def create_schema(
     model_id: str,
@@ -1292,259 +1556,5 @@ def rollback_to_version(
         "success": True,
         "message": f"Schema ripristinato alla versione {ver.version_label} (Nuova versione: {next_label}).",
         "schema": _serialize_schema(schema)
-    }
-
-
-# ============================================================================
-# SCHEMA-AS-CODE (SaC) ENDPOINTS (.eac DSL)
-# ============================================================================
-
-class SaCCompileRequest(BaseModel):
-    code: str
-    model_id: Optional[str] = None
-
-
-class SaCSaveRequest(BaseModel):
-    code: str
-    commit_message: Optional[str] = "Aggiornamento da Schema-as-Code (.eac)"
-
-
-class SaCCreateRequest(BaseModel):
-    code: str
-    model_id: str
-    folder_id: Optional[str] = None
-
-
-@router.post("/sac/compile")
-def compile_sac_code(
-    payload: SaCCompileRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Validates and compiles Schema-as-Code (.eac) text.
-    Returns the AST structure, detected elements, relationships, layout, and any syntax errors.
-    """
-    try:
-        compiled = SaCService.compile_sac(payload.code, db=db, model_id=payload.model_id)
-        return {
-            "success": True,
-            "data": compiled,
-            "summary": {
-                "name": compiled["name"],
-                "elements_count": len(compiled["elements"]),
-                "relationships_count": len(compiled["relationships"]),
-                "nodes_count": len(compiled.get("view_data", {}).get("nodes", []))
-            }
-        }
-    except SaCParseError as spe:
-        return {
-            "success": False,
-            "error": spe.message,
-            "line": spe.line,
-            "column": spe.column
-        }
-    except Exception as e:
-        return {
-            "success": False,
-            "error": str(e),
-            "line": 1,
-            "column": 1
-        }
-
-
-@router.post("/sac/to-archimate")
-def convert_sac_to_archimate_download(
-    payload: SaCCompileRequest,
-    db: Session = Depends(get_db)
-):
-    """
-    Compiles SaC code and returns a downloadable .archimate file directly.
-    """
-    try:
-        compiled = SaCService.compile_sac(payload.code, db=db, model_id=payload.model_id)
-        xml_content = SaCService.canonical_to_archimate_xml(compiled)
-        safe_name = compiled.get("name", "Schema").replace(" ", "_").replace("/", "_")
-        return Response(
-            content=xml_content,
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{safe_name}.archimate"'}
-        )
-    except SaCParseError as spe:
-        raise HTTPException(status_code=400, detail=f"Errore di sintassi SaC riga {spe.line}: {spe.message}")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore nella generazione ArchiMate: {str(e)}")
-
-
-@router.get("/{schema_id}/sac")
-def get_schema_sac(
-    schema_id: str,
-    include_layout: bool = True,
-    download: bool = False,
-    db: Session = Depends(get_db)
-):
-    """
-    Decompiles an existing schema into Schema-as-Code (.eac) format.
-    Supports either JSON response or direct file download.
-    """
-    schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
-    if not schema:
-        raise HTTPException(status_code=404, detail="Schema non trovato.")
-
-    sac_code = SaCService.decompile_schema_to_sac(
-        schema=schema,
-        db=db,
-        include_layout=include_layout
-    )
-
-    if download:
-        safe_name = (schema.name or "schema").replace(" ", "_").replace("/", "_")
-        return Response(
-            content=sac_code,
-            media_type="text/plain; charset=utf-8",
-            headers={"Content-Disposition": f'attachment; filename="{safe_name}.eac"'}
-        )
-
-    return {
-        "success": True,
-        "schema_id": schema.id,
-        "schema_name": schema.name,
-        "code": sac_code
-    }
-
-
-@router.put("/{schema_id}/sac")
-def update_schema_from_sac(
-    schema_id: str,
-    payload: SaCSaveRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Updates an existing schema by compiling the provided Schema-as-Code (.eac) source.
-    Creates a new version history entry and updates view_data and raw_xml.
-    """
-    user = _require_user(authorization, db)
-    schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
-    if not schema:
-        raise HTTPException(status_code=404, detail="Schema non trovato.")
-
-    # Check lock permissions
-    if schema.status == "checked_out" and schema.locked_by_user_id != user.id and not _is_admin_or_lead(user, schema.model_id):
-        raise HTTPException(
-            status_code=403,
-            detail=f"Lo schema è attualmente bloccato da {schema.locked_by_username}. Non puoi modificarlo."
-        )
-
-    try:
-        compiled = SaCService.compile_sac(payload.code, db=db, model_id=schema.model_id, schema_id=schema.id)
-        archimate_xml = SaCService.canonical_to_archimate_xml(compiled, db=db)
-    except SaCParseError as spe:
-        raise HTTPException(status_code=400, detail=f"Errore di sintassi SaC riga {spe.line}: {spe.message}")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore nella compilazione SaC: {str(e)}")
-
-    # Update versioning
-    latest_ver = db.query(SchemaVersionHistory).filter(
-        SchemaVersionHistory.schema_id == schema.id
-    ).order_by(SchemaVersionHistory.version_number.desc()).first()
-
-    next_num = (latest_ver.version_number + 1) if latest_ver else 2
-    next_label = f"v1.{next_num - 1}"
-
-    # Snapshot
-    history_entry = SchemaVersionHistory(
-        id=f"ver-{uuid.uuid4().hex[:8]}",
-        schema_id=schema.id,
-        version_number=next_num,
-        version_label=next_label,
-        commit_message=payload.commit_message or "Aggiornamento da Schema-as-Code (.eac)",
-        author_user_id=user.id,
-        author_name=user.full_name or user.username or "Architetto",
-        view_data_snapshot=compiled.get("view_data", {}),
-        raw_xml_snapshot=archimate_xml
-    )
-    db.add(history_entry)
-
-    if compiled.get("name"):
-        schema.name = compiled["name"]
-    if compiled.get("documentation"):
-        schema.documentation = compiled["documentation"]
-    if compiled.get("viewpoint"):
-        schema.viewpoint = compiled["viewpoint"]
-
-    schema.current_version = next_label
-    schema.view_data = compiled.get("view_data", {})
-    schema.raw_xml = archimate_xml
-    schema.updated_at = datetime.now(timezone.utc)
-
-    db.commit()
-    db.refresh(schema)
-
-    return {
-        "success": True,
-        "message": f"Schema aggiornato con successo da Schema-as-Code (Versione {next_label}).",
-        "schema": _serialize_schema(schema),
-        "code": payload.code
-    }
-
-
-@router.post("/sac/create")
-def create_schema_from_sac(
-    payload: SaCCreateRequest,
-    authorization: Optional[str] = Header(None),
-    db: Session = Depends(get_db)
-):
-    """
-    Creates a brand new schema in the specified workspace directly from a Schema-as-Code (.eac) document.
-    """
-    user = _require_user(authorization, db)
-    require_library_permission(user, payload.model_id, db=db, write=True)
-
-    schema_id = f"schema-{uuid.uuid4().hex[:8]}"
-
-    try:
-        compiled = SaCService.compile_sac(payload.code, db=db, model_id=payload.model_id, schema_id=schema_id)
-        archimate_xml = SaCService.canonical_to_archimate_xml(compiled, db=db)
-    except SaCParseError as spe:
-        raise HTTPException(status_code=400, detail=f"Errore di sintassi SaC riga {spe.line}: {spe.message}")
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore nella compilazione SaC: {str(e)}")
-
-    new_schema = ArchiSchema(
-        id=schema_id,
-        model_id=payload.model_id,
-        folder_id=payload.folder_id,
-        name=compiled.get("name") or "Nuovo Schema SaC",
-        viewpoint=compiled.get("viewpoint") or "Total",
-        documentation=compiled.get("documentation") or "",
-        format="archi",
-        current_version="v1.0",
-        status="available",
-        view_data=compiled.get("view_data", {}),
-        raw_xml=archimate_xml
-    )
-    db.add(new_schema)
-
-    # Initial version 1
-    v1_entry = SchemaVersionHistory(
-        id=f"ver-{uuid.uuid4().hex[:8]}",
-        schema_id=schema_id,
-        version_number=1,
-        version_label="v1.0",
-        commit_message="Creazione iniziale da Schema-as-Code (.eac)",
-        author_user_id=user.id,
-        author_name=user.full_name or user.username or "Architetto",
-        view_data_snapshot=compiled.get("view_data", {}),
-        raw_xml_snapshot=archimate_xml
-    )
-    db.add(v1_entry)
-
-    db.commit()
-    db.refresh(new_schema)
-
-    return {
-        "success": True,
-        "message": f"Schema '{new_schema.name}' creato con successo da codice SaC.",
-        "schema": _serialize_schema(new_schema)
     }
 

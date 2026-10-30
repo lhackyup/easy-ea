@@ -1125,7 +1125,7 @@
         btn.id = 'easyea-header-button';
         btn.className = 'geBtn';
         btn.style.cssText = 'display:inline-flex;align-items:center;cursor:pointer;padding:4px 10px;margin-right:8px;font-weight:700;font-size:12px;background:#4f46e5;color:#ffffff;border-radius:4px;border:none;box-shadow:0 1px 3px rgba(0,0,0,0.15);user-select:none;vertical-align:middle;';
-        btn.innerHTML = '<span style="margin-right:6px;font-size:13px;">🏛️</span><span>EasyEA</span><span style="margin-left:5px;font-size:9px;opacity:0.8;">▼</span>';
+        setSafeHtml(btn, '<span style="margin-right:6px;font-size:13px;">🏛️</span><span>EasyEA</span><span style="margin-left:5px;font-size:9px;opacity:0.8;">▼</span>');
 
         btn.addEventListener('click', function(evt) {
             checkIncomingExternalSession(function() {

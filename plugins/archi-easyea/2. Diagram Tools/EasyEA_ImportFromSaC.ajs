@@ -134,6 +134,7 @@
             .uri(URI.create(config.server_url + "/api/schemas/sac/to-archimate"))
             .version(HttpClient.Version.HTTP_1_1)
             .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer " + config.token)
             .POST(HttpRequest.BodyPublishers.ofString(payload))
             .build();
 
