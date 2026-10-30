@@ -173,7 +173,8 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
   initialView,
   modelId,
 }) => {
-  const { t, interpolate } = useLanguage();
+  const { t, interpolate, language } = useLanguage();
+  const isIt = language === 'it';
   const [activeStep, setActiveStep] = useState<1 | 2 | 3>(1);
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -1485,7 +1486,7 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
                         onChange={(e) => setFilterLayer(e.target.value)}
                         className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg bg-white font-semibold text-slate-800"
                       >
-                        <option value="All">Tutti i Layer (All)</option>
+                        <option value="All">{isIt ? 'Tutti i Layer (All)' : 'All Layers (All)'}</option>
                         <option value="Strategy">Strategy</option>
                         <option value="Business">Business</option>
                         <option value="Application">Application</option>
@@ -1830,11 +1831,15 @@ export const BusinessViewEditorModal: React.FC<BusinessViewEditorModalProps> = (
                     <div className="space-y-2">
                       <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
                         <span>
-                          Mostrati i primi {Math.min(15, previewData?.rows?.length || 0)} di {previewData?.total ?? 0} elementi corrispondenti
+                          {isIt
+                            ? `Mostrati i primi ${Math.min(15, previewData?.rows?.length || 0)} di ${previewData?.total ?? 0} elementi corrispondenti`
+                            : `Showing first ${Math.min(15, previewData?.rows?.length || 0)} of ${previewData?.total ?? 0} matching elements`}
                         </span>
                         {previewData?.total === 0 && (
                           <span className="text-amber-600 font-bold">
-                            Nessun elemento corrisponde ai filtri selezionati (stereotipi/tipi).
+                            {isIt
+                              ? 'Nessun elemento corrisponde ai filtri selezionati (stereotipi/tipi).'
+                              : 'No elements match the selected filters (stereotypes/types).'}
                           </span>
                         )}
                       </div>

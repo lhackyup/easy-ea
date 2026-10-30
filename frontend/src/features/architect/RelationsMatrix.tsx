@@ -62,7 +62,8 @@ const MATRIX_PRESETS = [
 ];
 
 export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const isIt = language === 'it';
   const [elements, setElements] = useState<ArchimateElementItem[]>([]);
   const [relationships, setRelationships] = useState<ArchimateRelationshipItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -516,8 +517,8 @@ export const RelationsMatrix: React.FC<RelationsMatrixProps> = ({ modelId }) => 
           <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
             {rowElements.length === 0 || colElements.length === 0 ? (
               <div className="p-12 text-center text-xs text-slate-500">
-                Nessun elemento trovato per la combinazione <strong>{rowElementType}</strong> &times;{' '}
-                <strong>{colElementType}</strong>.
+                {isIt ? 'Nessun elemento trovato per la combinazione' : 'No elements found for combination'}{' '}
+                <strong>{rowElementType}</strong> &times; <strong>{colElementType}</strong>.
               </div>
             ) : (
               <div className="overflow-x-auto max-h-[600px]">

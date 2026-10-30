@@ -421,7 +421,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
       });
       setViewData(res);
     } catch (err: any) {
-      setError(err.message || 'Errore durante l\'elaborazione della vista');
+      setError(err.message || 'Error processing view');
     } finally {
       setLoadingData(false);
     }
@@ -1472,7 +1472,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                     onClick={() => selectedView && executeView(selectedView)}
                     className="px-3 py-1 bg-white border border-rose-300 rounded-lg text-xs font-bold text-rose-700 hover:bg-rose-100 transition cursor-pointer"
                   >
-                    Riprova
+                    {t.common.retry}
                   </button>
                 </div>
               ) : !viewData || !viewData.rows || viewData.rows.length === 0 ? (

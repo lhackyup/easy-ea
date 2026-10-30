@@ -3759,11 +3759,11 @@ def toggle_library_package(
     """
     model = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     if not model:
-        raise HTTPException(status_code=404, detail=f"Libreria '{model_id}' non trovata.")
+        raise HTTPException(status_code=404, detail=f"Model workspace '{model_id}' not found.")
 
     pkg = db.query(AttributePackage).filter(AttributePackage.id == package_id).first()
     if not pkg:
-        raise HTTPException(status_code=404, detail=f"Pacchetto '{package_id}' non trovato.")
+        raise HTTPException(status_code=404, detail=f"Package '{package_id}' not found.")
 
     existing_link = db.query(WorkspaceAttributePackage).filter(
         WorkspaceAttributePackage.model_id == model_id,
@@ -3787,7 +3787,7 @@ def toggle_library_package(
             "package_id": package_id,
             "package_name": pkg.name,
             "is_active": True,
-            "message": f"Pacchetto '{pkg.name}' attivato per la libreria '{model.name}'."
+            "message": f"Package '{pkg.name}' activated for library '{model.name}'."
         }
     else:
         # STRICT DEACTIVATION GUARD (except for pkg-adr, pkg-resilience, and pkg-gap-analysis which can be toggled freely to show/hide views)
@@ -3818,7 +3818,7 @@ def toggle_library_package(
                         status_code=409,
                         detail={
                             "error": "package_deactivation_blocked",
-                            "message": f"Impossibile disattivare il pacchetto '{pkg.name}': ci sono {len(populated_elements)} elementi nella libreria che hanno uno o più attributi del pacchetto valorizzati.",
+                            "message": f"Cannot deactivate package '{pkg.name}': {len(populated_elements)} elements in this library have one or more populated package attributes.",
                             "populated_count": len(populated_elements),
                             "affected_elements": populated_elements[:20]
                         }
@@ -3836,7 +3836,7 @@ def toggle_library_package(
                             status_code=409,
                             detail={
                                 "error": "package_deactivation_blocked",
-                                "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(elem_with_st)} elementi nella libreria a cui è applicato uno stereotipo fornito da questo pacchetto.",
+                                "message": f"Cannot deactivate package '{pkg.name}': {len(elem_with_st)} elements in this library have a stereotype provided by this package.",
                                 "populated_count": len(elem_with_st),
                                 "affected_elements": elem_with_st[:20]
                             }
@@ -3854,7 +3854,7 @@ def toggle_library_package(
                             status_code=409,
                             detail={
                                 "error": "package_deactivation_blocked",
-                                "message": f"Impossibile disattivare lo standard '{pkg.name}': ci sono {len(connected_rels)} relazioni nella libreria collegate a elementi canonici di questo framework.",
+                                "message": f"Cannot deactivate framework '{pkg.name}': {len(connected_rels)} relationships connect to canonical reference elements of this framework.",
                                 "populated_count": len(connected_rels),
                                 "affected_elements": [
                                     {"id": r.id, "name": r.name, "type": r.type} for r in connected_rels[:20]
@@ -3870,7 +3870,7 @@ def toggle_library_package(
             "package_id": package_id,
             "package_name": pkg.name,
             "is_active": False,
-            "message": f"Pacchetto '{pkg.name}' disattivato per la libreria '{model.name}'."
+            "message": f"Package '{pkg.name}' deactivated for library '{model.name}'."
         }
 
 
@@ -3878,7 +3878,7 @@ def audit_package_usage(db: Session, package_id: str) -> Dict[str, Any]:
     """Audit which libraries have the package active and which populate attributes of this package."""
     pkg = db.query(AttributePackage).filter(AttributePackage.id == package_id).first()
     if not pkg:
-        raise HTTPException(status_code=404, detail=f"Pacchetto '{package_id}' non trovato.")
+        raise HTTPException(status_code=404, detail=f"Package '{package_id}' not found.")
 
     pkg_attr_map = {it.name: it.label for it in pkg.items}
     workspaces = db.query(ModelWorkspace).all()
@@ -4723,20 +4723,20 @@ def get_plateau_roadmap(elements: List[Any], relationships: List[Any]) -> Dict[s
         "has_explicit_plateaus": False,
         "horizons": [
             {
-                "horizon": "Baseline / As-Is (Corrente)",
-                "description": "Applicazioni attualmente Live o in dismissione/Tolerate.",
+                "horizon": "Baseline / As-Is (Current)",
+                "description": "Applications currently Live, in Phase-out, or classified as Tolerate in TIME matrix.",
                 "app_count": len(as_is_apps),
                 "applications": as_is_apps
             },
             {
-                "horizon": "Transition Plateau (Transitorio)",
-                "description": "Applicazioni in fase di migrazione o valutazione architetturale.",
+                "horizon": "Transition Plateau",
+                "description": "Applications undergoing active migration, transformation, or architectural evaluation.",
                 "app_count": len(transition_apps),
                 "applications": transition_apps
             },
             {
-                "horizon": "Target Architecture / To-Be (Futuro)",
-                "description": "Sistemi target strategici (Invest) e nuove iniziative.",
+                "horizon": "Target Architecture / To-Be (Target)",
+                "description": "Strategic target applications (Invest) and newly planned architectural initiatives.",
                 "app_count": len(to_be_apps),
                 "applications": to_be_apps
             }

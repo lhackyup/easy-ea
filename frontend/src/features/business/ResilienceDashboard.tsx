@@ -5,6 +5,7 @@ import {
   ResilienceMetrics
 } from '../../types';
 import { api } from '../../lib/api';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   ShieldAlert,
   ShieldCheck,
@@ -30,6 +31,8 @@ interface ResilienceDashboardProps {
 }
 
 export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelId }) => {
+  const { t, interpolate } = useLanguage();
+  const resT = t.resilience;
   const [data, setData] = useState<ResilienceAnalysisResult | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
       setData(res);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || 'Errore nel caricamento dell\'analisi di resilienza');
+      setError(err?.message || resT.errorTitle);
     } finally {
       setLoading(false);
     }
@@ -100,7 +103,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
       <div className="flex flex-col items-center justify-center h-96 space-y-4">
         <div className="w-10 h-10 border-4 border-emerald-600 border-t-transparent rounded-full animate-spin" />
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-          Analisi Mismatch RTO/RPO e SLA in corso...
+          {resT.loading}
         </p>
       </div>
     );
@@ -110,13 +113,13 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
     return (
       <div className="bg-white border border-rose-200 rounded-2xl p-8 text-center space-y-3">
         <AlertTriangle className="w-10 h-10 text-rose-500 mx-auto" />
-        <h3 className="text-sm font-bold text-slate-900">Errore Analisi di Resilienza</h3>
-        <p className="text-xs text-slate-500 max-w-md mx-auto">{error || 'Impossibile elaborare i dati'}</p>
+        <h3 className="text-sm font-bold text-slate-900">{resT.errorTitle}</h3>
+        <p className="text-xs text-slate-500 max-w-md mx-auto">{error || resT.errorTitle}</p>
         <button
           onClick={loadData}
           className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition cursor-pointer"
         >
-          Riprova
+          {resT.retry}
         </button>
       </div>
     );
@@ -134,13 +137,13 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h2 className="text-base font-bold text-slate-900">Operational Resilience & SLA Mismatch Engine</h2>
+              <h2 className="text-base font-bold text-slate-900">{resT.title}</h2>
               <span className="px-2 py-0.5 text-[10px] font-bold bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200 uppercase">
-                DORA / ISO 22301
+                {resT.standardBadge}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-0.5">
-              Audit automatico della catena di fornitura tecnica: confronto tra requisiti di Business e capacità reali di Applicazioni e Nodi tecnologici.
+              {resT.subtitle}
             </p>
           </div>
         </div>
@@ -150,7 +153,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
           className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition border border-slate-200 cursor-pointer self-start md:self-auto"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          <span>Ricalcola</span>
+          <span>{resT.recalculate}</span>
         </button>
       </div>
 
@@ -159,7 +162,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
         {/* Compliance Rate */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Tasso di Conformità</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{resT.complianceRate}</span>
             <Activity className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="mt-2 flex items-baseline space-x-2">
@@ -167,7 +170,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
               {metrics.compliance_rate}%
             </span>
             <span className="text-xs text-slate-400">
-              ({metrics.compliant_processes} / {metrics.total_processes} conformi)
+              {interpolate(resT.compliantOutOf, { compliant: metrics.compliant_processes, total: metrics.total_processes })}
             </span>
           </div>
           <div className="w-full bg-slate-100 h-1.5 rounded-full mt-3 overflow-hidden">
@@ -181,47 +184,47 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
         {/* Mismatched Processes */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Processi con Mismatch</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{resT.mismatchedProcesses}</span>
             <AlertTriangle className="w-4 h-4 text-rose-600" />
           </div>
           <div className="mt-2 flex items-baseline space-x-2">
             <span className="text-2xl font-black text-rose-600">{metrics.mismatched_processes}</span>
-            <span className="text-xs text-slate-400">processi a rischio continuità</span>
+            <span className="text-xs text-slate-400">{resT.continuityRisk}</span>
           </div>
           <p className="text-[11px] text-slate-400 mt-2">
-            Violazioni rilevate su SLA di disponibilità, RTO o RPO.
+            {resT.violationsDetected}
           </p>
         </div>
 
         {/* Critical DORA Processes */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Funzioni Critiche DORA / Tier-1</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{resT.doraCriticalFunctions}</span>
             <Zap className="w-4 h-4 text-indigo-600" />
           </div>
           <div className="mt-2 flex items-baseline space-x-2">
             <span className="text-2xl font-black text-indigo-600">{metrics.total_critical_processes}</span>
-            <span className="text-xs text-slate-400">servizi essenziali monitorati</span>
+            <span className="text-xs text-slate-400">{resT.essentialMonitored}</span>
           </div>
           <p className="text-[11px] text-slate-400 mt-2">
-            Sottoposti a requisiti stringenti di resilienza operativa.
+            {resT.resilienceRequirements}
           </p>
         </div>
 
         {/* Worst SLA / RTO Gap */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Peggiori Scostamenti</span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-500">{resT.worstGaps}</span>
             <Clock className="w-4 h-4 text-amber-600" />
           </div>
           <div className="mt-2 flex items-baseline justify-between">
             <div>
               <span className="text-lg font-black text-slate-800">-{metrics.worst_sla_gap}%</span>
-              <p className="text-[10px] text-slate-400 uppercase font-bold">Max SLA Gap</p>
+              <p className="text-[10px] text-slate-400 uppercase font-bold">{resT.maxSlaGap}</p>
             </div>
             <div>
               <span className="text-lg font-black text-slate-800">+{metrics.worst_rto_gap}h</span>
-              <p className="text-[10px] text-slate-400 uppercase font-bold">Max RTO Breach</p>
+              <p className="text-[10px] text-slate-400 uppercase font-bold">{resT.maxRtoBreach}</p>
             </div>
           </div>
         </div>
@@ -234,7 +237,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
           <input
             type="text"
-            placeholder="Cerca processo o collo di bottiglia..."
+            placeholder={resT.searchPlaceholder}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 font-medium text-slate-800"
@@ -243,7 +246,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
 
         {/* Status Filter Badges */}
         <div className="flex flex-wrap items-center gap-1.5 self-start md:self-auto">
-          <span className="text-[11px] font-bold text-slate-400 uppercase mr-1">Filtro:</span>
+          <span className="text-[11px] font-bold text-slate-400 uppercase mr-1">{resT.filterLabel}</span>
           <button
             onClick={() => setStatusFilter('all')}
             className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
@@ -252,7 +255,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                 : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
             }`}
           >
-            Tutti ({data.mismatches.length})
+            {interpolate(resT.filterAll, { count: data.mismatches.length })}
           </button>
           <button
             onClick={() => setStatusFilter('mismatched')}
@@ -262,7 +265,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                 : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
             }`}
           >
-            Solo Mismatch ({metrics.mismatched_processes})
+            {interpolate(resT.filterMismatchedOnly, { count: metrics.mismatched_processes })}
           </button>
           <button
             onClick={() => setStatusFilter('critical')}
@@ -272,7 +275,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                 : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
             }`}
           >
-            Critici DORA Tier-1
+            {resT.filterCriticalDora}
           </button>
           <button
             onClick={() => setStatusFilter('compliant')}
@@ -282,7 +285,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                 : 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
             }`}
           >
-            Conformi ({metrics.compliant_processes})
+            {interpolate(resT.filterCompliant, { count: metrics.compliant_processes })}
           </button>
         </div>
 
@@ -294,10 +297,10 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
             onChange={(e) => setTypeFilter(e.target.value as any)}
             className="text-xs bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 font-bold text-slate-700 focus:outline-none cursor-pointer"
           >
-            <option value="all">Tutti i tipi di mismatch</option>
-            <option value="sla">Solo violazioni SLA</option>
-            <option value="rto">Solo violazioni RTO</option>
-            <option value="rpo">Solo violazioni RPO</option>
+            <option value="all">{resT.typeFilterAll}</option>
+            <option value="sla">{resT.typeFilterSla}</option>
+            <option value="rto">{resT.typeFilterRto}</option>
+            <option value="rpo">{resT.typeFilterRpo}</option>
           </select>
         </div>
       </div>
@@ -309,20 +312,20 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                 <th className="py-3 px-4 w-8"></th>
-                <th className="py-3 px-4">Processo di Business</th>
-                <th className="py-3 px-4">Tier / DORA</th>
-                <th className="py-3 px-4">SLA Disponibilità</th>
-                <th className="py-3 px-4">RTO (Ripristino)</th>
-                <th className="py-3 px-4">RPO (Perdita Dati)</th>
-                <th className="py-3 px-4">Collo di Bottiglia (Weakest Link)</th>
-                <th className="py-3 px-4">Stato Resilienza</th>
+                <th className="py-3 px-4">{resT.thProcess}</th>
+                <th className="py-3 px-4">{resT.thTierDora}</th>
+                <th className="py-3 px-4">{resT.thSla}</th>
+                <th className="py-3 px-4">{resT.thRto}</th>
+                <th className="py-3 px-4">{resT.thRpo}</th>
+                <th className="py-3 px-4">{resT.thBottleneck}</th>
+                <th className="py-3 px-4">{resT.thStatus}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-xs">
               {filteredItems.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
-                    Nessun processo corrispondente ai filtri selezionati.
+                    {resT.noProcessesFound}
                   </td>
                 </tr>
               ) : (
@@ -345,7 +348,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                           <div className="flex flex-col">
                             <span>{item.process_name}</span>
                             <span className="text-[10px] font-medium text-slate-400">
-                              {item.supporting_apps_count} app collegate, {item.supporting_tech_count} nodi tech
+                              {interpolate(resT.connectedSummary, { apps: item.supporting_apps_count, tech: item.supporting_tech_count })}
                             </span>
                           </div>
                         </td>
@@ -364,7 +367,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                             </span>
                             {item.dora_critical_function && (
                               <span className="px-1.5 py-0.2 text-[9px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 rounded">
-                                DORA Critico
+                                {resT.doraCriticalBadge}
                               </span>
                             )}
                           </div>
@@ -379,7 +382,7 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                             </div>
                             {item.has_sla_mismatch && (
                               <span className="text-[10px] font-bold text-rose-500">
-                                Gap: -{item.sla_gap}%
+                                {resT.gapPrefix} -{item.sla_gap}%
                               </span>
                             )}
                           </div>
@@ -390,11 +393,11 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                               <span className={`font-bold ${item.has_rto_breach ? 'text-rose-600' : 'text-slate-800'}`}>
                                 {item.effective_rto_hours}h
                               </span>
-                              <span className="text-[10px] text-slate-400">/ max {item.target_rto_hours}h</span>
+                              <span className="text-[10px] text-slate-400">/ {resT.maxTargetPrefix} {item.target_rto_hours}h</span>
                             </div>
                             {item.has_rto_breach && (
                               <span className="text-[10px] font-bold text-rose-500">
-                                Scostamento: +{item.rto_gap_hours}h
+                                {resT.breachPrefix} +{item.rto_gap_hours}h
                               </span>
                             )}
                           </div>
@@ -405,11 +408,11 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                               <span className={`font-bold ${item.has_rpo_breach ? 'text-rose-600' : 'text-slate-800'}`}>
                                 {item.effective_rpo_hours}h
                               </span>
-                              <span className="text-[10px] text-slate-400">/ max {item.target_rpo_hours}h</span>
+                              <span className="text-[10px] text-slate-400">/ {resT.maxTargetPrefix} {item.target_rpo_hours}h</span>
                             </div>
                             {item.has_rpo_breach && (
                               <span className="text-[10px] font-bold text-rose-500">
-                                Scostamento: +{item.rpo_gap_hours}h
+                                {resT.breachPrefix} +{item.rpo_gap_hours}h
                               </span>
                             )}
                           </div>
@@ -424,29 +427,29 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                               <span className="text-[10px] text-slate-400">{item.bottleneck.issue}</span>
                             </div>
                           ) : (
-                            <span className="text-slate-400 text-xs italic">Nessun collo di bottiglia</span>
+                            <span className="text-slate-400 text-xs italic">{resT.noBottleneck}</span>
                           )}
                         </td>
                         <td className="py-3 px-4">
                           {item.status === 'COMPLIANT' ? (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-lg text-[11px] font-bold">
                               <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                              <span>Conforme</span>
+                              <span>{resT.statusCompliant}</span>
                             </span>
                           ) : item.status === 'CRITICAL_MISMATCH' ? (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg text-[11px] font-bold">
                               <XCircle className="w-3.5 h-3.5 text-rose-600" />
-                              <span>Critico</span>
+                              <span>{resT.statusCritical}</span>
                             </span>
                           ) : item.status === 'HIGH_MISMATCH' ? (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200 rounded-lg text-[11px] font-bold">
                               <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
-                              <span>Alto Rischio</span>
+                              <span>{resT.statusHighRisk}</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-1 bg-orange-50 text-orange-700 border border-orange-200 rounded-lg text-[11px] font-bold">
                               <Info className="w-3.5 h-3.5 text-orange-600" />
-                              <span>Medio Rischio</span>
+                              <span>{resT.statusMediumRisk}</span>
                             </span>
                           )}
                         </td>
@@ -460,10 +463,10 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                               <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                                 <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
                                   <Layers className="w-4 h-4 text-emerald-600" />
-                                  <span>Dettaglio Catena di Fornitura Operativa (Supply Chain Breakdown)</span>
+                                  <span>{resT.supplyChainBreakdownTitle}</span>
                                 </h4>
                                 <span className="text-[11px] text-slate-400">
-                                  Obiettivi: SLA {item.target_sla}%, RTO {item.target_rto_hours}h, RPO {item.target_rpo_hours}h
+                                  {interpolate(resT.targetObjectives, { sla: item.target_sla, rto: item.target_rto_hours, rpo: item.target_rpo_hours })}
                                 </span>
                               </div>
 
@@ -472,10 +475,10 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                                 <div className="space-y-2">
                                   <div className="text-[11px] font-bold uppercase text-slate-500 flex items-center gap-1">
                                     <Layers className="w-3.5 h-3.5 text-indigo-500" />
-                                    <span>Applicazioni di Supporto ({item.supporting_apps.length})</span>
+                                    <span>{interpolate(resT.supportingApps, { count: item.supporting_apps.length })}</span>
                                   </div>
                                   {item.supporting_apps.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic">Nessuna applicazione collegata via relazioni Serving/Realization.</p>
+                                    <p className="text-xs text-slate-400 italic">{resT.noAppsConnected}</p>
                                   ) : (
                                     <div className="space-y-1.5">
                                       {item.supporting_apps.map((app) => (
@@ -505,10 +508,10 @@ export const ResilienceDashboard: React.FC<ResilienceDashboardProps> = ({ modelI
                                 <div className="space-y-2">
                                   <div className="text-[11px] font-bold uppercase text-slate-500 flex items-center gap-1">
                                     <Server className="w-3.5 h-3.5 text-emerald-500" />
-                                    <span>Infrastrutture & Nodi Tecnologici ({item.supporting_tech.length})</span>
+                                    <span>{interpolate(resT.supportingTech, { count: item.supporting_tech.length })}</span>
                                   </div>
                                   {item.supporting_tech.length === 0 ? (
-                                    <p className="text-xs text-slate-400 italic">Nessun nodo tecnologico mappato sotto le applicazioni collegate.</p>
+                                    <p className="text-xs text-slate-400 italic">{resT.noTechMapped}</p>
                                   ) : (
                                     <div className="space-y-1.5">
                                       {item.supporting_tech.map((node) => (

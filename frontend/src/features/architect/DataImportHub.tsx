@@ -29,7 +29,8 @@ interface DataImportHubProps {
 }
 
 export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
+  const isIt = language === 'it';
   const impT = t.importHub;
 
   const [file, setFile] = useState<File | null>(null);
@@ -608,7 +609,7 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
                   {(previewResult.elements || []).length === 0 && (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-slate-400">
-                        Nessun elemento individuato.
+                        {isIt ? 'Nessun elemento individuato.' : 'No elements detected.'}
                       </td>
                     </tr>
                   )}
@@ -645,7 +646,7 @@ export const DataImportHub: React.FC<DataImportHubProps> = ({ modelId }) => {
                   {(previewResult.relationships || []).length === 0 && (
                     <tr>
                       <td colSpan={4} className="py-6 text-center text-slate-400">
-                        Nessuna relazione individuata.
+                        {isIt ? 'Nessuna relazione individuata.' : 'No relationships detected.'}
                       </td>
                     </tr>
                   )}

@@ -71,7 +71,7 @@ def test_stereotypes_lifecycle_and_validation():
         create_resp = client.post("/api/metamodel/stereotypes", json={
             "name": "Event Driven Service",
             "base_type": "ApplicationComponent",
-            "description": "Servizio asincrono guidato da eventi Kafka/RabbitMQ",
+            "description": "Asynchronous service driven by Kafka/RabbitMQ events.",
             "icon_color": "purple",
             "attribute_links": [
                 {

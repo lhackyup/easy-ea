@@ -28,6 +28,7 @@ import {
   FileCode,
   Link2
 } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface CheckinDiffModalProps {
   schema: ArchiSchema;
@@ -40,6 +41,8 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
   onClose,
   onSuccess
 }) => {
+  const { language } = useLanguage();
+  const isIt = language === 'it';
   const [step, setStep] = useState<'upload' | 'diff' | 'confirm'>('upload');
   const [diffViewTab, setDiffViewTab] = useState<'all' | 'elements' | 'relationships'>('all');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -282,20 +285,26 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                   <Upload className="w-7 h-7" />
                 </div>
                 <div className="text-sm font-bold text-slate-800">
-                  {selectedFile ? selectedFile.name : 'Seleziona o trascina qui il file modificato (.archimate o .drawio)'}
+                  {selectedFile
+                    ? selectedFile.name
+                    : isIt
+                    ? 'Seleziona o trascina qui il file modificato (.archimate o .drawio)'
+                    : 'Select or drag the modified file here (.archimate or .drawio)'}
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
-                  Supporta file nativi Archi (.archimate), Draw.io Desktop (.drawio) e Open Exchange Format (.xml)
+                  {isIt
+                    ? 'Supporta file nativi Archi (.archimate), Draw.io Desktop (.drawio) e Open Exchange Format (.xml)'
+                    : 'Supports native Archi (.archimate), Draw.io Desktop (.drawio) and Open Exchange Format (.xml)'}
                 </p>
                 {schema.format === 'drawio' && (
                   <p className="text-[11px] font-mono text-slate-600 bg-slate-200/70 px-2.5 py-1 rounded-md mt-2">
-                    📁 Percorso Draw.io: ~/snap/drawio/current/checked_out/ (o ~/.easyea/checked_out/)
+                    📁 {isIt ? 'Percorso Draw.io:' : 'Draw.io Path:'} ~/snap/drawio/current/checked_out/ (o ~/.easyea/checked_out/)
                   </p>
                 )}
                 {selectedFile && (
                   <div className="mt-3 inline-flex items-center space-x-1.5 px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-semibold rounded-full">
                     <FileCheck className="w-3.5 h-3.5" />
-                    <span>File pronto ({(selectedFile.size / 1024).toFixed(1)} KB)</span>
+                    <span>{isIt ? 'File pronto' : 'File ready'} ({(selectedFile.size / 1024).toFixed(1)} KB)</span>
                   </div>
                 )}
               </div>
@@ -711,22 +720,22 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
-                  Messaggio di Commit / Note di Rilascio
+                  {isIt ? 'Messaggio di Commit / Note di Rilascio' : 'Commit Message / Release Notes'}
                 </label>
                 <textarea
                   value={commitMessage}
                   onChange={(e) => setCommitMessage(e.target.value)}
-                  placeholder="Descrivi brevemente cosa è stato modificato..."
+                  placeholder={isIt ? 'Descrivi brevemente cosa è stato modificato...' : 'Briefly describe what has been modified...'}
                   rows={4}
                   className="w-full px-3.5 py-2.5 text-sm border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                 />
               </div>
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-600 space-y-1">
-                <div className="font-bold text-slate-800">Riepilogo finale operazione:</div>
-                <div>• Verrà creata una nuova versione nello storico ({schema.current_version} &rarr; successiva).</div>
-                <div>• Lo schema verrà sbloccato e tornerà disponibile per gli altri architetti.</div>
-                <div>• Gli attributi, le relazioni e il catalogo EasyEA verranno sincronizzati in base alle scelte effettuate.</div>
+                <div className="font-bold text-slate-800">{isIt ? 'Riepilogo finale operazione:' : 'Final operation summary:'}</div>
+                <div>{isIt ? `• Verrà creata una nuova versione nello storico (${schema.current_version} → successiva).` : `• A new version will be created in history (${schema.current_version} → next).`}</div>
+                <div>{isIt ? '• Lo schema verrà sbloccato e tornerà disponibile per gli altri architetti.' : '• The schema will be unlocked and available again to other architects.'}</div>
+                <div>{isIt ? '• Gli attributi, le relazioni e il catalogo EasyEA verranno sincronizzati in base alle scelte effettuate.' : '• EasyEA attributes, relationships and catalog will be synchronized according to your choices.'}</div>
               </div>
             </div>
           )}

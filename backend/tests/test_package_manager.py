@@ -60,7 +60,7 @@ def create_sample_eap_bundle(code: str = "dora", version: str = "1.0.0", extra_e
             "version": version,
             "package_type": "framework",
             "standard_version": "EU 2022/2554",
-            "description": "Digital Operational Resilience Act - Standard di resilienza operativa digitale per il settore finanziario.",
+            "description": "Digital Operational Resilience Act - Operational resilience standard for the financial sector.",
             "author": "European Union / ESAs",
             "website_url": "https://eur-lex.europa.eu",
             "icon_color": "rose"
@@ -106,7 +106,7 @@ def create_sample_eap_bundle(code: str = "dora", version: str = "1.0.0", extra_e
                 "base_type": "ApplicationComponent",
                 "name": "Critical ICT Service",
                 "label": "«Critical ICT Service»",
-                "description": "Funzione essenziale per la resilienza operativa bancaria.",
+                "description": "Essential ICT function for financial operational resilience.",
                 "icon_color": "rose",
                 "links": [
                     {
