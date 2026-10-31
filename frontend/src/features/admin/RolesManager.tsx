@@ -33,7 +33,9 @@ import {
   Layers,
   HelpCircle,
   Building2,
-  FileCheck2
+  FileCheck2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 
 interface RolesManagerProps {
@@ -56,12 +58,28 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
   // Modals
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [isAssignRoleOpen, setIsAssignRoleOpen] = useState(false);
+  const [isResetPasswordOpen, setIsResetPasswordOpen] = useState(false);
+  const [resetTargetUser, setResetTargetUser] = useState<UserItem | null>(null);
+  const [newPasswordVal, setNewPasswordVal] = useState('');
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   // New User Form State
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserFullName, setNewUserFullName] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+
+  const generateRandomPassword = () => {
+    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%';
+    let res = '';
+    for (let i = 0; i < 12; i++) {
+      res += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return res;
+  };
 
   // Assign Role Form State
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -105,20 +123,64 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
     e.preventDefault();
     if (!newUserEmail.trim() || !newUserFullName.trim()) return;
 
+    if (newUserPassword.trim() && newUserPassword.trim().length < 8) {
+      setFormError(t.rbac.placeholderPassword);
+      return;
+    }
+
     setSubmitting(true);
     setFormError(null);
     try {
       await api.createUser({
         email: newUserEmail.trim(),
-        full_name: newUserFullName.trim()
+        full_name: newUserFullName.trim(),
+        password: newUserPassword.trim() || undefined
       });
       await loadRbacData();
       setIsAddUserOpen(false);
       setNewUserEmail('');
       setNewUserFullName('');
+      setNewUserPassword('');
+      setShowNewUserPassword(false);
     } catch (err: any) {
       console.error(err);
       setFormError(err.message || 'Error creating user');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const openResetPasswordModal = (user: UserItem) => {
+    setResetTargetUser(user);
+    setNewPasswordVal('');
+    setShowResetPassword(false);
+    setFormError(null);
+    setResetSuccessMessage(null);
+    setIsResetPasswordOpen(true);
+  };
+
+  const handleResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resetTargetUser || !newPasswordVal.trim()) return;
+    if (newPasswordVal.trim().length < 8) {
+      setFormError(t.rbac.placeholderPassword);
+      return;
+    }
+
+    setSubmitting(true);
+    setFormError(null);
+    try {
+      await api.resetUserPassword(resetTargetUser.id, newPasswordVal.trim());
+      setResetSuccessMessage(t.rbac.passwordResetSuccess);
+      setTimeout(() => {
+        setIsResetPasswordOpen(false);
+        setResetTargetUser(null);
+        setNewPasswordVal('');
+        setResetSuccessMessage(null);
+      }, 1200);
+    } catch (err: any) {
+      console.error(err);
+      setFormError(err.message || 'Error resetting password');
     } finally {
       setSubmitting(false);
     }
@@ -512,6 +574,7 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                     <th className="p-3 font-bold">{t.rbac.colUser}</th>
                     <th className="p-3 font-bold">{t.rbac.colStatus}</th>
                     <th className="p-3 font-bold">{t.rbac.colAssignedRoles}</th>
+                    <th className="p-3 font-bold text-right">{t.rbac.colActions}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -599,6 +662,16 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                         ) : (
                           <span className="text-slate-400 italic text-[11px]">{t.rbac.noRolesAssigned}</span>
                         )}
+                      </td>
+                      <td className="p-3 text-right">
+                        <button
+                          onClick={() => openResetPasswordModal(u)}
+                          className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 hover:text-slate-900 rounded-xl transition"
+                          title={t.rbac.resetPasswordBtn}
+                        >
+                          <Key className="w-3.5 h-3.5 text-slate-500" />
+                          <span>{t.rbac.resetPasswordBtn}</span>
+                        </button>
                       </td>
                     </tr>
                   ))}
@@ -797,6 +870,45 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                 />
               </div>
 
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t.rbac.labelPassword}
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pwd = generateRandomPassword();
+                      setNewUserPassword(pwd);
+                      setShowNewUserPassword(true);
+                    }}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    {t.rbac.generatePassword}
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showNewUserPassword ? 'text' : 'password'}
+                    placeholder={t.rbac.placeholderPassword}
+                    value={newUserPassword}
+                    onChange={(e) => setNewUserPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 pr-10 text-xs text-slate-900 focus:outline-none focus:border-rose-500 focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showNewUserPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  {t.rbac.passwordHint}
+                </p>
+              </div>
+
               <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
                 <button
                   type="button"
@@ -921,6 +1033,114 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                 >
                   <Check className="w-4 h-4" />
                   <span>{t.rbac.saveAssignmentBtn}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 3: RESET USER PASSWORD                             */}
+      {/* ======================================================== */}
+      {isResetPasswordOpen && resetTargetUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 shadow-2xl relative">
+            <button
+              onClick={() => {
+                setIsResetPasswordOpen(false);
+                setResetTargetUser(null);
+              }}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 p-1 rounded-lg hover:bg-slate-100 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2.5 mb-1">
+              <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                <Key className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">{t.rbac.modalResetPasswordTitle}</h3>
+                <p className="text-xs text-slate-500">{t.rbac.modalResetPasswordSubtitle}</p>
+              </div>
+            </div>
+
+            <div className="my-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+              <div className="text-xs font-bold text-slate-900">{resetTargetUser.full_name}</div>
+              <div className="text-[11px] font-mono text-slate-500">{resetTargetUser.email}</div>
+            </div>
+
+            {formError && (
+              <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-700 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-600" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            {resetSuccessMessage && (
+              <div className="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0 text-emerald-600" />
+                <span>{resetSuccessMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t.rbac.labelNewPassword} *
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const pwd = generateRandomPassword();
+                      setNewPasswordVal(pwd);
+                      setShowResetPassword(true);
+                    }}
+                    className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline flex items-center gap-1"
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    {t.rbac.generatePassword}
+                  </button>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    required
+                    placeholder={t.rbac.placeholderNewPassword}
+                    value={newPasswordVal}
+                    onChange={(e) => setNewPasswordVal(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 pr-10 text-xs text-slate-900 focus:outline-none focus:border-rose-500 focus:bg-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showResetPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsResetPasswordOpen(false);
+                    setResetTargetUser(null);
+                  }}
+                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-100 transition"
+                >
+                  {t.common.cancel}
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || !!resetSuccessMessage}
+                  className="flex items-center space-x-1.5 px-5 py-2 text-xs font-semibold rounded-xl bg-rose-600 hover:bg-rose-700 text-white shadow-md shadow-rose-600/20 transition disabled:opacity-50"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{t.rbac.saveNewPasswordBtn}</span>
                 </button>
               </div>
             </form>

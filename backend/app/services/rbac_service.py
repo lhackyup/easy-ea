@@ -185,6 +185,24 @@ def create_user(
         "role_assignments": []
     }
 
+def reset_user_password(
+    db: Session,
+    user_id: str,
+    new_password: str
+) -> Dict[str, Any]:
+    """Reset a user's password (min 8 chars)."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail=f"User '{user_id}' not found.")
+    
+    clean_pwd = new_password.strip() if new_password else ""
+    if len(clean_pwd) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
+    
+    user.password_hash = hash_password(clean_pwd)
+    db.commit()
+    return {"status": "success", "message": f"Password for user '{user.username}' updated successfully."}
+
 def assign_role(
     db: Session,
     user_id: str,

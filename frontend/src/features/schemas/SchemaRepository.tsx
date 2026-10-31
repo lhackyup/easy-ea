@@ -766,7 +766,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-3.5">
               {filteredSchemas.map((schema) => {
                 const isLocked = schema.status === 'checked_out';
                 const isLockedByMe = isLocked && schema.locked_by_user_id === user?.id;
@@ -776,202 +776,192 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                     key={schema.id}
                     draggable
                     onDragStart={(e) => handleDragStartSchema(e, schema.id)}
-                    className="bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 shadow-sm hover:shadow-md transition p-5 flex flex-col justify-between space-y-4 cursor-grab active:cursor-grabbing group relative"
+                    className="bg-white rounded-2xl border border-slate-200 hover:border-indigo-300 shadow-sm hover:shadow-md transition p-4 sm:p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 cursor-grab active:cursor-grabbing group relative"
                   >
-                    {/* Top Row: Icon, Name, Version */}
-                    <div>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div
-                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                              isLocked
-                                ? 'bg-amber-50 border-amber-200 text-amber-600'
-                                : 'bg-indigo-50 border-indigo-200 text-indigo-600'
-                            }`}
-                          >
-                            <FileCode className="w-5 h-5" />
-                          </div>
-                          <div>
-                            <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition leading-snug">
-                              {schema.name}
-                            </h3>
-                            <div className="flex items-center space-x-2 mt-0.5">
-                              <span className="px-2 py-0.2 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-                                {schema.current_version}
-                              </span>
-                              <span className={`px-2 py-0.2 rounded-md text-[10px] font-bold border ${
-                                schema.format === 'drawio'
-                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
-                                  : 'bg-blue-50 text-blue-700 border-blue-200'
-                              }`}>
-                                {schema.format === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
-                              </span>
-                              {schema.viewpoint && (
-                                <span className="text-[10px] font-semibold text-slate-500">
-                                  {schema.viewpoint}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                    {/* Left Section: Icon, Name, Badges, Lock details and Description */}
+                    <div className="flex items-start space-x-3.5 min-w-0 flex-1">
+                      <div
+                        className={`w-11 h-11 rounded-xl flex items-center justify-center shrink-0 border ${
+                          isLocked
+                            ? 'bg-amber-50 border-amber-200 text-amber-600'
+                            : 'bg-indigo-50 border-indigo-200 text-indigo-600'
+                        }`}
+                      >
+                        <FileCode className="w-5 h-5" />
+                      </div>
 
-                        {/* Status Badge */}
-                        <div>
+                      <div className="min-w-0 flex-1">
+                        {/* Title and Badges Row */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h3 className="text-sm font-bold text-slate-900 group-hover:text-indigo-600 transition truncate max-w-md">
+                            {schema.name}
+                          </h3>
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                            {schema.current_version}
+                          </span>
+                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold border shrink-0 ${
+                            schema.format === 'drawio'
+                              ? 'bg-amber-50 text-amber-700 border-amber-200'
+                              : 'bg-blue-50 text-blue-700 border-blue-200'
+                          }`}>
+                            {schema.format === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
+                          </span>
+                          {schema.viewpoint && (
+                            <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60 shrink-0">
+                              {schema.viewpoint}
+                            </span>
+                          )}
+                          {/* Status Badge */}
                           {isLocked ? (
-                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
                               <Lock className="w-3 h-3" />
                               <span>In Check-out</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
                               <Unlock className="w-3 h-3" />
                               <span>Disponibile</span>
                             </span>
                           )}
                         </div>
-                      </div>
 
-                      {/* Lock details */}
-                      {isLocked && (
-                        <div className="mt-2.5 p-2 bg-amber-50/70 rounded-xl border border-amber-200/60 text-[11px] text-amber-900 flex items-center justify-between">
-                          <span>
-                            Bloccato da <span className="font-bold">{schema.locked_by_username || 'Architetto'}</span>
-                          </span>
-                          {schema.locked_at && (
-                            <span className="text-[10px] text-amber-700 opacity-80">
-                              {new Date(schema.locked_at).toLocaleDateString('it-IT', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                hour: '2-digit',
-                                minute: '2-digit'
-                              })}
+                        {/* Lock details */}
+                        {isLocked && (
+                          <div className="mt-1.5 p-1.5 px-2.5 bg-amber-50/80 rounded-lg border border-amber-200/60 text-[11px] text-amber-900 inline-flex items-center space-x-2">
+                            <span>
+                              Bloccato da <span className="font-bold">{schema.locked_by_username || 'Architetto'}</span>
                             </span>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Documentation */}
-                      <p className="text-xs text-slate-500 mt-2 line-clamp-2 leading-relaxed">
-                        {schema.documentation || 'Nessuna documentazione inserita per questo schema.'}
-                      </p>
-                    </div>
-
-                    {/* Nodes and Connection stats */}
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
-                      <div>
-                        {schema.nodes_count || 0} nodi • {schema.connections_count || 0} connessioni
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setHistorySchema(schema)}
-                        title="Vedi storico versioni"
-                        className="flex items-center space-x-1 text-slate-500 hover:text-purple-600 transition"
-                      >
-                        <History className="w-3.5 h-3.5" />
-                        <span>Storico</span>
-                      </button>
-                    </div>
-
-                    {/* Bottom Action Buttons */}
-                    <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-                      {/* Left: Preview & Download */}
-                      <div className="flex items-center space-x-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewSchema(schema)}
-                          title="Anteprima diagramma nel browser"
-                          className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition flex items-center space-x-1"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                          <span>Anteprima</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => setSacModalSchema(schema)}
-                          title="Visualizza e modifica sorgente Schema-as-Code (.eac)"
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
-                        >
-                          <FileCode2 className="w-4 h-4" />
-                        </button>
-
-                        <a
-                          href={api.downloadSchemaXmlUrl(schema.id)}
-                          download={`${schema.name}.${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
-                          title={`Scarica copia .${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
-                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
-                        >
-                          <Download className="w-4 h-4" />
-                        </a>
-                      </div>
-
-                      {/* Right: Checkout / Checkin / Unlock */}
-                      <div className="flex items-center space-x-1.5">
-                        {!isLocked ? (
-                          <button
-                            type="button"
-                            onClick={() => handleCheckout(schema, true)}
-                            title={`Effettua il check-out e apri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200"
-                          >
-                            <Lock className="w-3.5 h-3.5" />
-                            <span>Check-out</span>
-                            <ExternalLink className="w-3 h-3 opacity-80" />
-                          </button>
-                        ) : isLockedByMe ? (
-                          <>
-                            <button
-                              type="button"
-                              onClick={() => handleLaunchAppOnly(schema)}
-                              title={`Riapri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
-                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center space-x-1"
-                            >
-                              <ExternalLink className="w-3.5 h-3.5" />
-                              <span>Apri</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setCheckinSchema(schema)}
-                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center space-x-1 shadow-sm shadow-emerald-200"
-                            >
-                              <Upload className="w-3.5 h-3.5" />
-                              <span>Check-in</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDiscardCheckout(schema)}
-                              title="Annulla check-out"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition"
-                            >
-                              <Unlock className="w-4 h-4" />
-                            </button>
-                          </>
-                        ) : isAdmin ? (
-                          <button
-                            type="button"
-                            onClick={() => handleForcedUnlock(schema)}
-                            title="Sblocco forzato amministratore"
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition flex items-center space-x-1"
-                          >
-                            <ShieldAlert className="w-3.5 h-3.5" />
-                            <span>Sblocco Forzato</span>
-                          </button>
-                        ) : (
-                          <span className="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded-lg">
-                            In sola lettura
-                          </span>
+                            {schema.locked_at && (
+                              <span className="text-[10px] text-amber-700 opacity-80">
+                                • {new Date(schema.locked_at).toLocaleDateString('it-IT', {
+                                  day: '2-digit',
+                                  month: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </span>
+                            )}
+                          </div>
                         )}
 
-                        {/* Delete Schema */}
+                        {/* Documentation */}
+                        <p className="text-xs text-slate-500 mt-1 line-clamp-1 leading-relaxed">
+                          {schema.documentation || 'Nessuna documentazione inserita per questo schema.'}
+                        </p>
+
+                        {/* Stats and History */}
+                        <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-1.5">
+                          <span>{schema.nodes_count || 0} nodi • {schema.connections_count || 0} connessioni</span>
+                          <span>•</span>
+                          <button
+                            type="button"
+                            onClick={() => setHistorySchema(schema)}
+                            title="Vedi storico versioni"
+                            className="flex items-center space-x-1 text-slate-500 hover:text-purple-600 transition cursor-pointer"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                            <span>Storico ({schema.current_version})</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Right Section: Action Buttons */}
+                    <div className="flex items-center space-x-2 shrink-0 border-t lg:border-t-0 pt-2 lg:pt-0 border-slate-100 justify-end">
+                      {/* Left Actions: Preview, SAC, Download */}
+                      <button
+                        type="button"
+                        onClick={() => setPreviewSchema(schema)}
+                        title="Anteprima diagramma nel browser"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 transition flex items-center space-x-1 cursor-pointer"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                        <span>Anteprima</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setSacModalSchema(schema)}
+                        title="Visualizza e modifica sorgente Schema-as-Code (.eac)"
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
+                      >
+                        <FileCode2 className="w-4 h-4" />
+                      </button>
+
+                      <a
+                        href={api.downloadSchemaXmlUrl(schema.id)}
+                        download={`${schema.name}.${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
+                        title={`Scarica copia .${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+
+                      {/* Primary Actions: Checkout / Open / Check-in / Unlock */}
+                      {!isLocked ? (
                         <button
                           type="button"
-                          onClick={() => handleDeleteSchema(schema)}
-                          title="Elimina schema"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                          onClick={() => handleCheckout(schema, true)}
+                          title={`Effettua il check-out e apri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <Lock className="w-3.5 h-3.5" />
+                          <span>Check-out</span>
+                          <ExternalLink className="w-3 h-3 opacity-80" />
                         </button>
-                      </div>
+                      ) : isLockedByMe ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => handleLaunchAppOnly(schema)}
+                            title={`Riapri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
+                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center space-x-1 cursor-pointer"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            <span>Apri</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCheckinSchema(schema)}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center space-x-1 shadow-sm shadow-emerald-200 cursor-pointer"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Check-in</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDiscardCheckout(schema)}
+                            title="Annulla check-out"
+                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
+                          >
+                            <Unlock className="w-4 h-4" />
+                          </button>
+                        </>
+                      ) : isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => handleForcedUnlock(schema)}
+                          title="Sblocco forzato amministratore"
+                          className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 transition flex items-center space-x-1 cursor-pointer"
+                        >
+                          <ShieldAlert className="w-3.5 h-3.5" />
+                          <span>Sblocco Forzato</span>
+                        </button>
+                      ) : (
+                        <span className="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded-lg">
+                          In sola lettura
+                        </span>
+                      )}
+
+                      {/* Delete Schema */}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteSchema(schema)}
+                        title="Elimina schema"
+                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 );

@@ -375,6 +375,26 @@ def test_rbac_global_vs_library_scoped_permissions():
     }).json()
     u_analyst_id = u_analyst["id"]
 
+    # 3b. Test create user with password and reset-password endpoint
+    u_custom = client.post("/api/rbac/users", json={
+        "email": "custom_user@easyea.local",
+        "full_name": "Custom User",
+        "password": "InitialSecret123!"
+    })
+    assert u_custom.status_code == 200
+    u_custom_id = u_custom.json()["id"]
+
+    res_reset = client.post(f"/api/rbac/users/{u_custom_id}/reset-password", json={
+        "new_password": "NewSecretPass456!"
+    })
+    assert res_reset.status_code == 200
+    assert res_reset.json()["status"] == "success"
+
+    res_short = client.post(f"/api/rbac/users/{u_custom_id}/reset-password", json={
+        "new_password": "short"
+    })
+    assert res_short.status_code == 400
+
     # 4. Assign roles:
     # Architect -> Library sample-easybank-ea
     assign_arch = client.post("/api/rbac/assignments", json={

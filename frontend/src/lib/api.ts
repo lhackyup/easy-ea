@@ -1024,7 +1024,7 @@ export const api = {
     return res.json();
   },
 
-  createUser: async (data: { email: string; full_name: string }): Promise<any> => {
+  createUser: async (data: { email: string; full_name: string; password?: string }): Promise<any> => {
     const res = await fetch(`${API_BASE}/rbac/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -1033,6 +1033,19 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Failed to create user' }));
       throw new Error(err.detail || 'Failed to create user');
+    }
+    return res.json();
+  },
+
+  resetUserPassword: async (userId: string, newPassword: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/rbac/users/${userId}/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ new_password: newPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to reset password' }));
+      throw new Error(err.detail || 'Failed to reset password');
     }
     return res.json();
   },

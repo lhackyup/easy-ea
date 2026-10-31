@@ -10,6 +10,7 @@ from app.services.rbac_service import (
     get_roles_metadata,
     list_users,
     create_user,
+    reset_user_password,
     assign_role,
     remove_role_assignment,
     check_user_permission
@@ -21,6 +22,9 @@ class UserCreateRequest(BaseModel):
     email: str
     full_name: str
     password: Optional[str] = None
+
+class ResetPasswordRequest(BaseModel):
+    new_password: str
 
 class RoleAssignRequest(BaseModel):
     user_id: str
@@ -54,6 +58,16 @@ def add_user(
 ):
     """Creates a new user account."""
     return create_user(db, email=payload.email, full_name=payload.full_name, password=payload.password)
+
+@router.post("/users/{user_id}/reset-password")
+def reset_password(
+    user_id: str,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Resets a user's password (requires administrator role)."""
+    return reset_user_password(db, user_id=user_id, new_password=payload.new_password)
 
 @router.post("/assignments")
 def create_role_assignment(
