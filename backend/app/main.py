@@ -214,9 +214,13 @@ if engine.dialect.name == "sqlite":
             print(f"Migration note (nullable model_id/package_id): {exc}")
 
 
-# Auto-seed sample model, backfill codes and default custom attributes if needed
+# Auto-seed standard metadata, sample model, and default RBAC
 db = SessionLocal()
 try:
+    # 1. Seed standard packages, stereotypes, and business views FIRST
+    # (Required for PostgreSQL FK constraints on archimate_elements.stereotype_id)
+    seed_default_custom_attributes(db)
+
     if not db.query(ModelWorkspace).first():
         seed_sample_model(db)
     else:
@@ -243,7 +247,6 @@ try:
             used_codes.add(candidate)
         db.commit()
 
-    seed_default_custom_attributes(db)
     seed_default_rbac(db)
     from app.services.auth_service import get_system_auth_settings
     get_system_auth_settings(db)
