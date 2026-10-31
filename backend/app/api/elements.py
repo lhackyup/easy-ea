@@ -16,7 +16,9 @@ from app.models.archimate import (
     ArchitectureDecisionRecord,
     User,
     ElementStereotype,
-    WorkspaceAttributePackage
+    WorkspaceAttributePackage,
+    ArchiSchema,
+    ArchimateView
 )
 from app.api.deps import get_current_user, require_library_permission
 from app.parsers.archi_parser import detect_layer
@@ -302,6 +304,18 @@ def list_elements(
         ).group_by(ADRLinkedElement.element_id).all()
         adr_counts = {r[0]: r[1] for r in adr_rows}
 
+        schema_counts = {}
+        all_schemas = db.query(ArchiSchema.view_data).filter(ArchiSchema.model_id == model_id).all()
+        for s_row in all_schemas:
+            vd = s_row[0] if s_row and s_row[0] else {}
+            nodes = vd.get("nodes", []) if isinstance(vd, dict) else []
+            seen_in_s = set()
+            for n in nodes:
+                eid = n.get("element_id") or n.get("id")
+                if eid and eid not in seen_in_s:
+                    seen_in_s.add(eid)
+                    schema_counts[eid] = schema_counts.get(eid, 0) + 1
+
     results = []
     for e in elements:
         apm = e.apm_attributes
@@ -348,6 +362,7 @@ def list_elements(
             "incoming_count": incoming_counts.get(e.id, 0),
             "outgoing_count": outgoing_counts.get(e.id, 0),
             "adr_count": adr_counts.get(e.id, 0),
+            "schemas_count": schema_counts.get(e.id, 0),
             "apm": {
                 "business_fit": apm.business_fit,
                 "technical_fit": apm.technical_fit,
@@ -476,6 +491,52 @@ def get_element(
             if k not in props and v is not None:
                 props[k] = v
 
+    # Schemas and diagrams where this element is used
+    schemas = db.query(ArchiSchema).options(joinedload(ArchiSchema.folder)).filter(
+        ArchiSchema.model_id == e.model_id
+    ).order_by(ArchiSchema.name.asc()).all()
+
+    used_in_schemas = []
+    for s in schemas:
+        nodes = (s.view_data or {}).get("nodes", []) if isinstance(s.view_data, dict) else []
+        if any(n.get("element_id") == e.id or n.get("id") == e.id for n in nodes):
+            used_in_schemas.append({
+                "id": s.id,
+                "name": s.name,
+                "format": s.format or "archi",
+                "viewpoint": s.viewpoint,
+                "current_version": s.current_version or "v1.0",
+                "status": s.status or "available",
+                "folder_id": s.folder_id,
+                "folder_name": s.folder.name if s.folder else None,
+                "documentation": s.documentation,
+                "nodes_count": len(nodes),
+                "connections_count": len((s.view_data or {}).get("connections", [])) if isinstance(s.view_data, dict) else 0
+            })
+
+    # Also check native views if any
+    views = db.query(ArchimateView).filter(
+        ArchimateView.model_id == e.model_id
+    ).order_by(ArchimateView.name.asc()).all()
+    for v in views:
+        if any(s["name"] == v.name or s["id"] == v.id for s in used_in_schemas):
+            continue
+        v_nodes = (v.view_data or {}).get("nodes", []) if isinstance(v.view_data, dict) else []
+        if any(n.get("element_id") == e.id or n.get("id") == e.id for n in v_nodes):
+            used_in_schemas.append({
+                "id": v.id,
+                "name": v.name,
+                "format": "archi",
+                "viewpoint": v.viewpoint,
+                "current_version": "v1.0",
+                "status": "available",
+                "folder_id": None,
+                "folder_name": None,
+                "documentation": v.documentation,
+                "nodes_count": len(v_nodes),
+                "connections_count": len((v.view_data or {}).get("connections", [])) if isinstance(v.view_data, dict) else 0
+            })
+
     return {
         "id": e.id,
         "model_id": e.model_id,
@@ -547,7 +608,9 @@ def get_element(
             }
             for link in (e.adr_links or [])
             if link.adr is not None
-        ]
+        ],
+        "used_in_schemas": used_in_schemas,
+        "schemas_count": len(used_in_schemas)
     }
 
 @router.post("")

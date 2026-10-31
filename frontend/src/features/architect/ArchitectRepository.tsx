@@ -7,9 +7,11 @@ import {
   ArchiMateRelationshipType,
   SavedFilterView,
   SavedViewCreatePayload,
-  SavedViewUpdatePayload
+  SavedViewUpdatePayload,
+  ArchiSchema
 } from '../../types';
 import { api } from '../../lib/api';
+import { SchemaPreviewModal } from '../schemas/SchemaPreviewModal';
 import {
   Database,
   Filter,
@@ -28,6 +30,7 @@ import {
   Folder,
   Tag,
   Lock,
+  Unlock,
   AlertCircle,
   CheckCircle2,
   Sliders,
@@ -49,6 +52,8 @@ import {
   ArrowUpDown,
   RotateCcw,
   FileCode,
+  FolderGit2,
+  Eye,
   BookmarkPlus,
   BookmarkCheck,
   Bookmark,
@@ -76,6 +81,7 @@ interface ArchitectRepositoryProps {
   initialSavedView?: any | null;
   onClearInitialView?: () => void;
   onOpenAdr?: (adrId?: string) => void;
+  onOpenSchema?: (schemaId?: string) => void;
 }
 
 const LAYERS = ['All', 'Strategy', 'Business', 'Application', 'Technology', 'Motivation', 'Implementation'];
@@ -85,6 +91,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   initialSavedView,
   onClearInitialView,
   onOpenAdr,
+  onOpenSchema,
 }) => {
   const { t, interpolate } = useLanguage();
   const { user } = useAuth();
@@ -94,6 +101,20 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
   const [selectedLayer, setSelectedLayer] = useState('All');
   const [search, setSearch] = useState('');
   const [selectedElement, setSelectedElement] = useState<any | null>(null);
+  const [previewSchema, setPreviewSchema] = useState<ArchiSchema | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const handlePreviewSchema = async (schemaId: string) => {
+    setPreviewLoading(true);
+    try {
+      const sDetail = await api.getSchemaDetail(schemaId);
+      setPreviewSchema(sDetail);
+    } catch (err: any) {
+      console.error('Failed to load schema preview', err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   // Advanced Multi-Filter & Search State
   const [selectedType, setSelectedType] = useState<string>('All');
@@ -2831,6 +2852,107 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                   </div>
                 </div>
 
+                {/* Schemas and Views where this element is used */}
+                <div className="space-y-2 pt-3 border-t border-slate-100">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-600 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                      <FolderGit2 className="w-3.5 h-3.5 text-purple-600" />
+                      <span>{interpolate(t.architect.usedInSchemasTitle || 'Schemi & Viste di Utilizzo ({count})', { count: selectedElement.used_in_schemas?.length || 0 })}</span>
+                    </span>
+                    {onOpenSchema && (
+                      <button
+                        type="button"
+                        onClick={() => onOpenSchema()}
+                        className="text-[11px] font-bold text-purple-600 hover:text-purple-800 flex items-center gap-1 cursor-pointer"
+                        title={t.architect.openSchemaRepositoryTooltip}
+                      >
+                        <span>Tutti gli Schemi</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="space-y-2">
+                    {selectedElement.used_in_schemas && selectedElement.used_in_schemas.length > 0 ? (
+                      selectedElement.used_in_schemas.map((sItem: any) => (
+                        <div
+                          key={sItem.id}
+                          className="p-3 bg-purple-50/40 hover:bg-purple-50/80 border border-purple-200/80 rounded-xl text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition"
+                        >
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-bold text-slate-900 truncate max-w-sm" title={sItem.name}>
+                                {sItem.name}
+                              </span>
+                              <span className="px-2 py-0.2 rounded-md text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                {sItem.current_version || 'v1.0'}
+                              </span>
+                              <span className={`px-2 py-0.2 rounded-md text-[10px] font-bold border ${
+                                sItem.format === 'drawio'
+                                  ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                  : 'bg-blue-50 text-blue-700 border-blue-200'
+                              }`}>
+                                {sItem.format === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
+                              </span>
+                              {sItem.folder_name && (
+                                <span className="text-[10px] font-semibold text-slate-500 bg-white/80 border border-slate-200 px-2 py-0.2 rounded-md">
+                                  📁 {sItem.folder_name}
+                                </span>
+                              )}
+                              {sItem.viewpoint && (
+                                <span className="text-[10px] font-semibold text-slate-500">
+                                  {sItem.viewpoint}
+                                </span>
+                              )}
+                              {sItem.status === 'checked_out' ? (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.2 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  <Lock className="w-2.5 h-2.5" />
+                                  <span>In Check-out</span>
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center space-x-1 px-2 py-0.2 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  <Unlock className="w-2.5 h-2.5" />
+                                  <span>Disponibile</span>
+                                </span>
+                              )}
+                            </div>
+                            {sItem.documentation && (
+                              <p className="text-[11px] text-slate-500 line-clamp-1 italic">{sItem.documentation}</p>
+                            )}
+                          </div>
+
+                          <div className="flex items-center space-x-1.5 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => handlePreviewSchema(sItem.id)}
+                              disabled={previewLoading}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-purple-700 bg-white hover:bg-purple-100/70 border border-purple-200 transition flex items-center space-x-1 shadow-2xs cursor-pointer"
+                              title={t.architect.previewSchemaTooltip}
+                            >
+                              <Eye className="w-3.5 h-3.5 text-purple-600" />
+                              <span>Anteprima</span>
+                            </button>
+                            {onOpenSchema && (
+                              <button
+                                type="button"
+                                onClick={() => onOpenSchema(sItem.id)}
+                                className="p-1.5 text-purple-600 hover:text-purple-800 hover:bg-purple-100/70 rounded-lg border border-purple-200/60 transition cursor-pointer"
+                                title="Apri in Schema Repository"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="p-3 bg-slate-50 border border-dashed border-slate-200 rounded-xl text-xs text-slate-400 italic">
+                        {t.architect.noSchemasForElement || 'Questo elemento non è ancora inserito in alcuno schema o diagramma.'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
               </div>
 
             </div>
@@ -3927,6 +4049,15 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
             </form>
           </div>
         </div>
+      )}
+
+      {/* Schema Preview Modal */}
+      {previewSchema && (
+        <SchemaPreviewModal
+          schema={previewSchema}
+          elements={elements}
+          onClose={() => setPreviewSchema(null)}
+        />
       )}
 
     </div>

@@ -577,6 +577,20 @@ export interface DerivedRelationshipItem {
   chain: Array<{ source_name: string; rel_type: string; target_name: string }>;
 }
 
+export interface SchemaUsageSummary {
+  id: string;
+  name: string;
+  format?: string;
+  viewpoint?: string | null;
+  current_version?: string;
+  status?: string;
+  folder_id?: string | null;
+  folder_name?: string | null;
+  documentation?: string | null;
+  nodes_count?: number;
+  connections_count?: number;
+}
+
 export interface ArchimateElementItem {
   id: string;
   model_id: string;
@@ -594,6 +608,8 @@ export interface ArchimateElementItem {
   incoming_count?: number;
   outgoing_count?: number;
   adr_count?: number;
+  schemas_count?: number;
+  used_in_schemas?: SchemaUsageSummary[];
   apm?: Partial<ApplicationInfo>;
 }
 

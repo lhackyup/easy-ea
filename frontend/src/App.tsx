@@ -285,6 +285,9 @@ export function App() {
                           setSelectedAdrId(adrId || null);
                           handleSelectPackageView('pkg-adr', 'pkv-adr-registry', 'architecture');
                         }}
+                        onOpenSchema={(schemaId) => {
+                          setArchitectureTab('schemas');
+                        }}
                       />
                     )}
                     {architectureTab === 'schemas' && <SchemaRepository modelId={selectedModelId} />}

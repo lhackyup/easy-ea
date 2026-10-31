@@ -5,10 +5,12 @@ import {
   PackageViewExecuteResponse,
   ActivePackageViewSelection,
   MetamodelLayer,
-  CustomAttributeDefinition
+  CustomAttributeDefinition,
+  ArchiSchema
 } from '../../types';
 import { api } from '../../lib/api';
 import { useLanguage } from '../../context/LanguageContext';
+import { SchemaPreviewModal } from '../schemas/SchemaPreviewModal';
 import {
   Layers,
   Table as TableIcon,
@@ -34,6 +36,9 @@ import {
   Copy,
   Check,
   Folder,
+  FolderGit2,
+  Lock,
+  Unlock,
   Share2,
   FileText,
   Info,
@@ -280,6 +285,20 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
   const [elementDetail, setElementDetail] = useState<any | null>(null);
   const [activeSectionTab, setActiveSectionTab] = useState<string>('');
   const [copiedId, setCopiedId] = useState(false);
+  const [previewSchema, setPreviewSchema] = useState<ArchiSchema | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
+
+  const handlePreviewSchema = async (schemaId: string) => {
+    setPreviewLoading(true);
+    try {
+      const sDetail = await api.getSchemaDetail(schemaId);
+      setPreviewSchema(sDetail);
+    } catch (err: any) {
+      console.error('Failed to load schema preview', err);
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
 
   // Horizontal scrolling for section tabs
   const tabsContainerRef = useRef<HTMLDivElement>(null);
@@ -1211,6 +1230,66 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                             ) : (
                               <div className="p-4 text-center text-xs text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
                                 {t.insights?.noIncomingRelations || 'No incoming relationships.'}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Schemas and Views where this element is used */}
+                          <div className="space-y-2 pt-2 border-t border-slate-100">
+                            <span className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                              <FolderGit2 className="w-3.5 h-3.5 text-purple-600" />
+                              <span>{t.insights?.usedInSchemasTitle?.replace('{count}', String(elementDetail.used_in_schemas?.length || 0)) || `Schemi & Viste di Utilizzo (${elementDetail.used_in_schemas?.length || 0})`}</span>
+                            </span>
+
+                            {elementDetail.used_in_schemas && elementDetail.used_in_schemas.length > 0 ? (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                                {elementDetail.used_in_schemas.map((sItem: any) => (
+                                  <div
+                                    key={sItem.id}
+                                    className="p-3 rounded-xl border border-purple-200/80 bg-purple-50/30 hover:bg-purple-50/70 text-xs flex items-center justify-between gap-3 shadow-2xs transition"
+                                  >
+                                    <div className="space-y-1 min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-1.5">
+                                        <span className="font-bold text-slate-900 truncate max-w-xs" title={sItem.name}>
+                                          {sItem.name}
+                                        </span>
+                                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                          {sItem.current_version || 'v1.0'}
+                                        </span>
+                                        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${
+                                          sItem.format === 'drawio'
+                                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                                            : 'bg-blue-50 text-blue-700 border-blue-200'
+                                        }`}>
+                                          {sItem.format === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
+                                        </span>
+                                        {sItem.folder_name && (
+                                          <span className="text-[10px] font-medium text-slate-500 bg-white border border-slate-200 px-1.5 py-0.2 rounded">
+                                            📁 {sItem.folder_name}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {sItem.documentation && (
+                                        <p className="text-[11px] text-slate-500 line-clamp-1 italic">{sItem.documentation}</p>
+                                      )}
+                                    </div>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => handlePreviewSchema(sItem.id)}
+                                      disabled={previewLoading}
+                                      className="px-2.5 py-1.5 rounded-lg text-xs font-semibold text-purple-700 bg-white hover:bg-purple-100/70 border border-purple-200 transition flex items-center space-x-1 shrink-0 shadow-2xs cursor-pointer"
+                                      title="Anteprima diagramma"
+                                    >
+                                      <Eye className="w-3.5 h-3.5 text-purple-600" />
+                                      <span>Anteprima</span>
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="p-4 text-center text-xs text-slate-400 italic bg-slate-50 rounded-xl border border-dashed border-slate-200">
+                                {t.insights?.noSchemasForElement || 'Questo elemento non è ancora inserito in alcuno schema o diagramma.'}
                               </div>
                             )}
                           </div>
@@ -2666,6 +2745,14 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
             </div>
           )}
         </div>
+      )}
+
+      {/* Schema Preview Modal */}
+      {previewSchema && (
+        <SchemaPreviewModal
+          schema={previewSchema}
+          onClose={() => setPreviewSchema(null)}
+        />
       )}
     </div>
   );
