@@ -35,7 +35,15 @@ import {
   Download,
   Loader2,
   FileUp,
-  FileArchive
+  FileArchive,
+  Globe,
+  RefreshCw,
+  DownloadCloud,
+  ExternalLink,
+  CheckCircle2,
+  ArrowUpCircle,
+  Settings,
+  ShoppingBag
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -273,6 +281,117 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
   useEffect(() => {
     fetchPackages();
   }, [selectedScope]);
+
+  // Repository / Marketplace State
+  const [mainTab, setMainTab] = useState<'installed' | 'repository'>('installed');
+  const [repoData, setRepoData] = useState<any | null>(null);
+  const [repoLoading, setRepoLoading] = useState(false);
+  const [repoError, setRepoError] = useState<string | null>(null);
+  const [repoSearch, setRepoSearch] = useState('');
+  const [repoCategory, setRepoCategory] = useState<string>('all');
+  const [installingPkgCode, setInstallingPkgCode] = useState<string | null>(null);
+  const [isRepoConfigModalOpen, setIsRepoConfigModalOpen] = useState(false);
+  const [repoConfigUrl, setRepoConfigUrl] = useState('');
+  const [testingRepoUrl, setTestingRepoUrl] = useState(false);
+  const [testRepoResult, setTestRepoResult] = useState<any | null>(null);
+  const [savingRepoConfig, setSavingRepoConfig] = useState(false);
+
+  const fetchRepoPackages = async () => {
+    setRepoLoading(true);
+    setRepoError(null);
+    try {
+      const data = await api.getRepositoryPackages();
+      setRepoData(data);
+    } catch (err: any) {
+      setRepoError(err.message || 'Errore durante il caricamento del repository dei pacchetti');
+    } finally {
+      setRepoLoading(false);
+    }
+  };
+
+  const handleOpenRepoConfig = async () => {
+    setIsRepoConfigModalOpen(true);
+    setTestRepoResult(null);
+    try {
+      const cfg = await api.getRepositoryConfig();
+      setRepoConfigUrl(cfg.configured_url || '');
+    } catch (err) {
+      console.error('Failed to load repo config', err);
+    }
+  };
+
+  const handleTestRepoConnection = async () => {
+    setTestingRepoUrl(true);
+    setTestRepoResult(null);
+    try {
+      const res = await api.testRepositoryConnection(repoConfigUrl.trim() || 'local');
+      setTestRepoResult({ success: true, message: `Connessione riuscita! Trovati ${res.packages_count} pacchetti.` });
+    } catch (err: any) {
+      setTestRepoResult({ success: false, message: err.message || 'Errore di connessione al repository' });
+    } finally {
+      setTestingRepoUrl(false);
+    }
+  };
+
+  const handleSaveRepoConfig = async () => {
+    setSavingRepoConfig(true);
+    try {
+      await api.updateRepositoryConfig(repoConfigUrl.trim());
+      setIsRepoConfigModalOpen(false);
+      await fetchRepoPackages();
+    } catch (err: any) {
+      alert(err.message || 'Errore durante il salvataggio della configurazione');
+    } finally {
+      setSavingRepoConfig(false);
+    }
+  };
+
+  const handleInstallFromRepo = async (pkgCode: string, force: boolean = false) => {
+    setInstallingPkgCode(pkgCode);
+    try {
+      await api.installPackageFromRepository(pkgCode, force);
+      await fetchRepoPackages();
+      await fetchPackages();
+      if (onPackageUpdated) onPackageUpdated();
+    } catch (err: any) {
+      alert(err.message || "Errore durante l'installazione dal repository");
+    } finally {
+      setInstallingPkgCode(null);
+    }
+  };
+
+  useEffect(() => {
+    if (mainTab === 'repository' && !repoData && !repoLoading) {
+      fetchRepoPackages();
+    }
+  }, [mainTab]);
+
+  const filteredRepoPackages = useMemo(() => {
+    if (!repoData?.packages) return [];
+    let list = repoData.packages;
+    if (repoCategory !== 'all') {
+      list = list.filter((p: any) => p.category === repoCategory);
+    }
+    const q = repoSearch.trim().toLowerCase();
+    if (q) {
+      list = list.filter((p: any) =>
+        p.name.toLowerCase().includes(q) ||
+        p.code.toLowerCase().includes(q) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.tags && p.tags.some((t: string) => t.toLowerCase().includes(q)))
+      );
+    }
+    return list;
+  }, [repoData, repoCategory, repoSearch]);
+
+  const repoCategories = useMemo(() => {
+    if (!repoData?.packages) return ['all'];
+    const cats = new Set<string>();
+    repoData.packages.forEach((p: any) => {
+      if (p.category) cats.add(p.category);
+    });
+    return ['all', ...Array.from(cats)];
+  }, [repoData]);
 
   const toggleExpand = (pkgId: string) => {
     setExpandedPackages((prev) => ({
@@ -584,7 +703,66 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
         </div>
       </div>
 
-      {/* Packages List */}
+      {/* Navigation Tabs: Catalogo Installato vs Repository & Marketplace */}
+      <div className="flex items-center justify-between border-b border-slate-200">
+        <div className="flex items-center space-x-1">
+          <button
+            onClick={() => setMainTab('installed')}
+            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer ${
+              mainTab === 'installed'
+                ? 'border-purple-600 text-purple-700 bg-purple-50/50 rounded-t-lg'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>Catalogo Pacchetti Installati</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
+              {packages.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setMainTab('repository')}
+            className={`flex items-center space-x-2 px-4 py-2.5 text-xs font-bold border-b-2 transition cursor-pointer ${
+              mainTab === 'repository'
+                ? 'border-indigo-600 text-indigo-700 bg-indigo-50/50 rounded-t-lg'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <ShoppingBag className="w-4 h-4" />
+            <span>Repository Esterno (Marketplace)</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700 font-mono">
+              {repoData?.total ?? 2}
+            </span>
+          </button>
+        </div>
+
+        {mainTab === 'repository' && (
+          <div className="flex items-center space-x-2 mb-1">
+            <button
+              onClick={fetchRepoPackages}
+              disabled={repoLoading}
+              className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              title="Sincronizza catalogo repository"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${repoLoading ? 'animate-spin' : ''}`} />
+              <span>Sincronizza</span>
+            </button>
+            <button
+              onClick={handleOpenRepoConfig}
+              className="flex items-center space-x-1 px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+              title="Configura URL repository"
+            >
+              <Settings className="w-3.5 h-3.5" />
+              <span>Impostazioni URL</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {mainTab === 'installed' ? (
+        <>
+          {/* Packages List */}
       {loading ? (
         <div className="p-12 text-center text-slate-400 text-xs font-medium">
           Caricamento pacchetti di attributi...
@@ -1004,6 +1182,228 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
           })}
         </div>
       )}
+    </>
+  ) : (
+    /* Marketplace / External Repository View */
+    <div className="space-y-5">
+      {/* Repository Subheader: Filter & Search */}
+      <div className="bg-slate-50/80 border border-slate-200 rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+          <span className="text-xs font-bold text-slate-600 mr-1">Categoria:</span>
+          {repoCategories.map((cat) => (
+            <button
+              key={cat}
+              onClick={() => setRepoCategory(cat)}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition cursor-pointer ${
+                repoCategory === cat
+                  ? 'bg-indigo-600 text-white shadow-xs'
+                  : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
+              }`}
+            >
+              {cat === 'all' ? 'Tutti i Pacchetti' : cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center space-x-2">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={repoSearch}
+              onChange={(e) => setRepoSearch(e.target.value)}
+              placeholder="Cerca nel repository..."
+              className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 w-52 shadow-2xs"
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Repo Loading / Error */}
+      {repoLoading ? (
+        <div className="p-16 text-center text-slate-400 text-xs font-medium flex flex-col items-center justify-center space-y-2">
+          <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+          <span>Connessione e lettura catalogo dal repository esterno...</span>
+        </div>
+      ) : repoError ? (
+        <div className="p-5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold">Errore di comunicazione con il repository</div>
+            <div>{repoError}</div>
+            <button
+              onClick={fetchRepoPackages}
+              className="mt-2 px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition cursor-pointer"
+            >
+              Riprova
+            </button>
+          </div>
+        </div>
+      ) : filteredRepoPackages.length === 0 ? (
+        <div className="p-16 text-center bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-500">
+          Nessun pacchetto trovato nel repository per i criteri selezionati.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {filteredRepoPackages.map((pkg: any) => {
+            const theme = THEME_COLORS[pkg.icon_color || 'blue'] || THEME_COLORS.blue;
+            const isInstalling = installingPkgCode === pkg.code;
+
+            return (
+              <div
+                key={pkg.id || pkg.code}
+                className="bg-white border border-slate-200 rounded-2xl shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
+              >
+                <div className="p-5 space-y-3.5">
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center space-x-2.5">
+                      <span className={`p-2.5 rounded-xl border ${theme.bg} ${theme.text} ${theme.border}`}>
+                        <Package className="w-5 h-5" />
+                      </span>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h5 className="text-sm font-extrabold text-slate-900 group-hover:text-indigo-600 transition">
+                            {pkg.name}
+                          </h5>
+                        </div>
+                        <span className="text-[10px] font-mono text-slate-400 font-bold uppercase">
+                          [{pkg.code}]
+                        </span>
+                      </div>
+                    </div>
+
+                    {pkg.category && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                        {pkg.category}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Versions & Metadata Badges */}
+                  <div className="flex items-center flex-wrap gap-2 text-xs">
+                    <span className="px-2 py-0.5 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 font-mono font-bold text-[11px]">
+                      v{pkg.version}
+                    </span>
+                    {pkg.standard_version && (
+                      <span className="px-2 py-0.5 rounded-md bg-slate-50 text-slate-600 border border-slate-200 text-[11px] font-medium">
+                        Standard {pkg.standard_version}
+                      </span>
+                    )}
+                    {pkg.package_type === 'framework' && (
+                      <span className="px-2 py-0.5 rounded-md bg-purple-50 text-purple-700 border border-purple-200 text-[10px] font-bold uppercase">
+                        Framework
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  <p className="text-xs text-slate-600 line-clamp-3 leading-relaxed">
+                    {pkg.description || 'Nessuna descrizione disponibile.'}
+                  </p>
+
+                  {/* Tags */}
+                  {pkg.tags && pkg.tags.length > 0 && (
+                    <div className="flex items-center flex-wrap gap-1 pt-1">
+                      {pkg.tags.map((tag: string) => (
+                        <span key={tag} className="text-[9px] px-1.5 py-0.5 bg-slate-100 text-slate-500 rounded font-medium">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Author / License */}
+                  {(pkg.author || pkg.license) && (
+                    <div className="text-[10px] text-slate-400 border-t border-slate-100 pt-2 flex items-center justify-between">
+                      <span>{pkg.author || 'Open Standard'}</span>
+                      <span>{pkg.license || ''}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Card Footer / Action */}
+                <div className="p-4 bg-slate-50/70 border-t border-slate-100 flex items-center justify-between gap-3">
+                  <div>
+                    {pkg.status === 'installed' && (
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
+                        <CheckCircle2 className="w-3.5 h-3.5" />
+                        <span>Installato (v{pkg.installed_version})</span>
+                      </span>
+                    )}
+                    {pkg.status === 'update_available' && (
+                      <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-xl">
+                        <ArrowUpCircle className="w-3.5 h-3.5" />
+                        <span>Aggiorna a v{pkg.version}</span>
+                      </span>
+                    )}
+                    {pkg.status === 'available' && (
+                      <span className="text-xs text-slate-500 font-medium">
+                        Disponibile nel Repository
+                      </span>
+                    )}
+                  </div>
+
+                  <div>
+                    {pkg.status === 'available' && (
+                      <button
+                        onClick={() => handleInstallFromRepo(pkg.code, false)}
+                        disabled={isInstalling}
+                        className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm shadow-indigo-600/20 transition cursor-pointer"
+                      >
+                        {isInstalling ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Installazione...</span>
+                          </>
+                        ) : (
+                          <>
+                            <DownloadCloud className="w-3.5 h-3.5" />
+                            <span>Installa nel Catalogo</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {pkg.status === 'update_available' && (
+                      <button
+                        onClick={() => handleInstallFromRepo(pkg.code, true)}
+                        disabled={isInstalling}
+                        className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-sm shadow-amber-600/20 transition cursor-pointer"
+                      >
+                        {isInstalling ? (
+                          <>
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            <span>Aggiornamento...</span>
+                          </>
+                        ) : (
+                          <>
+                            <ArrowUpCircle className="w-3.5 h-3.5" />
+                            <span>Aggiorna a v{pkg.version}</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {pkg.status === 'installed' && (
+                      <button
+                        onClick={() => handleInstallFromRepo(pkg.code, true)}
+                        disabled={isInstalling}
+                        className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 transition cursor-pointer"
+                        title="Forza reinstallazione dal repository"
+                      >
+                        {isInstalling ? 'In corso...' : 'Reinstalla'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  )}
 
       {/* ======================================================== */}
       {/* MODAL 1: CREATE / EDIT PACKAGE                           */}
@@ -1766,6 +2166,99 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                   </>
                 )}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 6: REPOSITORY URL CONFIGURATION                    */}
+      {/* ======================================================== */}
+      {isRepoConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-lg w-full shadow-2xl border border-slate-200 p-6 space-y-5 animate-in fade-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center space-x-2.5">
+                <span className="p-2.5 rounded-xl bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  <Globe className="w-5 h-5" />
+                </span>
+                <div>
+                  <h4 className="text-sm font-extrabold text-slate-900">
+                    Configurazione Repository Pacchetti
+                  </h4>
+                  <p className="text-[11px] text-slate-500">
+                    Definisci l'endpoint del registro esterno (HTTP/HTTPS) o usa il repository locale predefinito.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsRepoConfigModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  URL del Catalogo Repository (index.json)
+                </label>
+                <input
+                  type="text"
+                  value={repoConfigUrl}
+                  onChange={(e) => setRepoConfigUrl(e.target.value)}
+                  placeholder="Lascia vuoto per usare il repository locale predefinito (packages_repository/index.json)"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Esempio: <code>https://packages.easyea.org/index.json</code> oppure <code>https://raw.githubusercontent.com/.../index.json</code>
+                </p>
+              </div>
+
+              {testRepoResult && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                    testRepoResult.success
+                      ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                      : 'bg-rose-50 border-rose-200 text-rose-800'
+                  }`}
+                >
+                  {testRepoResult.success ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                  <span>{testRepoResult.message}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-slate-100 pt-4">
+              <button
+                type="button"
+                onClick={handleTestRepoConnection}
+                disabled={testingRepoUrl}
+                className="flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition cursor-pointer"
+              >
+                {testingRepoUrl ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                <span>Testa Connessione</span>
+              </button>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setIsRepoConfigModalOpen(false)}
+                  className="px-3.5 py-2 border border-slate-200 text-slate-600 hover:bg-slate-100 rounded-xl text-xs font-bold transition cursor-pointer"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveRepoConfig}
+                  disabled={savingRepoConfig}
+                  className="flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold shadow-sm transition cursor-pointer"
+                >
+                  {savingRepoConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
+                  <span>Salva Configurazione</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

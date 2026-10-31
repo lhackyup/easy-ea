@@ -58,7 +58,7 @@ def test_pkg_gap_analysis_seeding():
     pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-gap-analysis").first()
     assert pkg is not None, "pkg-gap-analysis should be registered in database"
     assert pkg.code == "gap_analysis"
-    assert pkg.is_default_active is True
+    assert pkg.is_default_active is False
     assert pkg.is_system is True
 
     # Check items exist

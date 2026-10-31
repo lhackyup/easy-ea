@@ -1935,7 +1935,7 @@ def seed_default_attribute_packages(db: Session):
             icon_color="emerald",
             package_type="attribute_only",
             standard_version="DORA / ISO 22301",
-            is_default_active=True,
+            is_default_active=False,
             is_system=True
         )
         db.add(res_pkg)
@@ -1950,7 +1950,7 @@ def seed_default_attribute_packages(db: Session):
         res_pkg.icon_color = "emerald"
         res_pkg.package_type = "attribute_only"
         res_pkg.standard_version = "DORA / ISO 22301"
-        res_pkg.is_default_active = True
+        res_pkg.is_default_active = False
         res_pkg.is_system = True
 
     res_items = [
@@ -2261,7 +2261,7 @@ def seed_default_attribute_packages(db: Session):
             icon_color="blue",
             package_type="attribute_only",
             standard_version="TOGAF ADM / ArchiMate 3.2",
-            is_default_active=True,
+            is_default_active=False,
             is_system=True
         )
         db.add(gap_pkg)
@@ -2276,7 +2276,7 @@ def seed_default_attribute_packages(db: Session):
         gap_pkg.icon_color = "blue"
         gap_pkg.package_type = "attribute_only"
         gap_pkg.standard_version = "TOGAF ADM / ArchiMate 3.2"
-        gap_pkg.is_default_active = True
+        gap_pkg.is_default_active = False
         gap_pkg.is_system = True
 
     gap_items = [
@@ -2745,15 +2745,12 @@ def seed_default_archimate_views(db: Session):
 
 
 def seed_default_custom_attributes(db: Session):
-    """Seed standard attribute packages, BIAN and IT4IT frameworks, default stereotypes, and clean up non-package attributes."""
-    # First seed attribute packages
+    """Seed standard base attribute packages and layer packages, default stereotypes, and clean up non-package attributes."""
+    # First seed standard base attribute packages (APM, ADR, Resilience, Gap Analysis)
     seed_default_attribute_packages(db)
-    # Seed BIAN framework
-    from app.services.bian_seed import seed_bian_framework
-    seed_bian_framework(db)
-    # Seed IT4IT framework
-    from app.services.it4it_seed import seed_it4it_framework
-    seed_it4it_framework(db)
+    # Seed standard ArchiMate layer packages (bcm, bsc, alc, cld, eol, req, ppm)
+    from app.services.archimate_packages_seed import seed_archimate_standard_packages
+    seed_archimate_standard_packages(db)
     # Seed default stereotypes
     seed_default_stereotypes(db)
     # Seed default ArchiMate core business views

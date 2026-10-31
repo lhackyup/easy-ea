@@ -11,6 +11,7 @@ from app.services.package_manager import (
     install_package_bundle,
     export_package_bundle
 )
+from app.services.package_repository_service import PackageRepositoryService
 from app.services.metamodel_service import (
     get_full_metamodel_with_custom_attributes,
     list_custom_attributes,
@@ -114,6 +115,16 @@ class SectionRenameRequest(BaseModel):
     new_section: str
     model_id: Optional[str] = None
     element_type: Optional[str] = None
+
+class RepositoryInstallRequest(BaseModel):
+    package_id_or_code: str
+    force: Optional[bool] = False
+
+class RepositoryConfigUpdate(BaseModel):
+    url: Optional[str] = None
+
+class RepositoryTestRequest(BaseModel):
+    url: str
 
 class StereotypeCreate(BaseModel):
     name: str
@@ -246,6 +257,89 @@ def get_attribute_packages(
 ):
     """List all attribute packages in the global catalog, with active status for model_id if provided."""
     return list_attribute_packages(db, model_id=model_id)
+
+
+# ==========================================
+# PACKAGE REPOSITORY & MARKETPLACE ENDPOINTS
+# ==========================================
+
+@router.get("/packages/repository")
+def get_repository_packages(
+    url: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Lists all available packages from the external package registry, correlated with local catalog."""
+    try:
+        return PackageRepositoryService.list_packages(db, custom_url=url)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/packages/repository/install")
+def install_package_from_repository(
+    payload: RepositoryInstallRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Installs or upgrades an .eap package bundle directly from the external repository (Admin only)."""
+    try:
+        installed = PackageRepositoryService.install_from_repository(
+            payload.package_id_or_code,
+            db,
+            force=bool(payload.force)
+        )
+        return {
+            "status": "success",
+            "message": f"Pacchetto '{installed.name}' ({installed.code} v{getattr(installed, 'version', '1.0.0')}) installato con successo dal repository.",
+            "package": get_attribute_package(db, installed.id)
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Errore durante l'installazione dal repository: {exc}")
+
+
+@router.get("/packages/repository/config")
+def get_repository_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Returns the currently configured repository URL and status."""
+    configured_url = PackageRepositoryService.get_configured_url(db)
+    return {
+        "configured_url": configured_url,
+        "is_default": not bool(configured_url),
+        "source": "database" if configured_url else "default_local"
+    }
+
+
+@router.put("/packages/repository/config")
+def update_repository_config(
+    payload: RepositoryConfigUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Updates the package repository URL (Admin only)."""
+    saved_url = PackageRepositoryService.set_configured_url(db, payload.url)
+    return {
+        "status": "success",
+        "message": "Configurazione repository aggiornata.",
+        "configured_url": saved_url
+    }
+
+
+@router.post("/packages/repository/test")
+def test_repository_connection(
+    payload: RepositoryTestRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin)
+):
+    """Tests connectivity to a given repository URL without saving (Admin only)."""
+    try:
+        return PackageRepositoryService.test_connection(payload.url)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Connessione al repository fallita: {exc}")
 
 
 @router.get("/packages/{package_id}")

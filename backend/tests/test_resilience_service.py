@@ -58,7 +58,7 @@ def test_pkg_resilience_seeded_correctly():
     pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-resilience").first()
     assert pkg is not None, "pkg-resilience should be registered in database"
     assert pkg.code == "resilience"
-    assert pkg.is_default_active is True
+    assert pkg.is_default_active is False
     assert pkg.is_system is True
 
     # Check items exist across all 3 layers

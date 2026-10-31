@@ -71,7 +71,7 @@ _safe_add_column("archimate_elements", "package_id VARCHAR")
 _safe_add_column("archimate_relationships", "is_reference BOOLEAN DEFAULT FALSE")
 _safe_add_column("archimate_relationships", "package_id VARCHAR")
 _safe_add_column("attribute_packages", "package_type VARCHAR(32) DEFAULT 'attribute_only'")
-_safe_add_column("attribute_packages", "standard_version VARCHAR(32)")
+_safe_add_column("attribute_packages", "standard_version VARCHAR(128)")
 _safe_add_column("attribute_packages", "website_url VARCHAR(255)")
 _safe_add_column("attribute_packages", "version VARCHAR(32) DEFAULT '1.0.0'")
 _safe_add_column("attribute_packages", "author VARCHAR(255)")
@@ -85,6 +85,7 @@ _safe_add_column("package_views", "author VARCHAR")
 _safe_add_column("package_views", "is_active BOOLEAN DEFAULT TRUE")
 _safe_add_column("package_views", "target_hub VARCHAR(32) DEFAULT 'business'")
 _safe_add_column("architecture_decision_records", "archimate_element_id VARCHAR")
+_safe_add_column("system_auth_settings", "package_registry_url VARCHAR(512)")
 
 def _safe_alter_column(table_name: str, sql_action: str):
     with engine.connect() as conn:
@@ -96,6 +97,7 @@ def _safe_alter_column(table_name: str, sql_action: str):
             print(f"Migration note ({table_name} {sql_action}): {exc}")
 
 _safe_alter_column("attribute_packages", "ALTER COLUMN code TYPE VARCHAR(32)")
+_safe_alter_column("attribute_packages", "ALTER COLUMN standard_version TYPE VARCHAR(128)")
 _safe_alter_column("archimate_elements", "ALTER COLUMN model_id DROP NOT NULL")
 _safe_alter_column("archimate_relationships", "ALTER COLUMN model_id DROP NOT NULL")
 _safe_alter_column("package_views", "ALTER COLUMN package_id DROP NOT NULL")
@@ -248,6 +250,8 @@ try:
     from app.services.adr_service import seed_sample_adrs
     if db.query(ModelWorkspace).filter(ModelWorkspace.id == "sample-easybank-ea").first():
         seed_sample_adrs(db, "sample-easybank-ea")
+        from app.services.archimate_packages_seed import seed_easybank_layer_elements_and_views
+        seed_easybank_layer_elements_and_views(db, "sample-easybank-ea")
 finally:
     db.close()
 

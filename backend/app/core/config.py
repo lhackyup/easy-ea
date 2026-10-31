@@ -106,6 +106,9 @@ class Settings(BaseSettings):
     #            'idp_sync' (strict sync from IdP claims)
     AUTH_RBAC_MODE: str = os.getenv("EASYEA_RBAC_MODE", "hybrid")
 
+    # External Package Registry URL (Marketplace for .eap bundles)
+    PACKAGE_REGISTRY_URL: str = os.getenv("EASYEA_PACKAGE_REGISTRY_URL", "").strip()
+
     model_config = SettingsConfigDict(case_sensitive=True)
 
 

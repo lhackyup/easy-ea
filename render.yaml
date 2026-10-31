@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: easyea-app
+    runtime: image
+    # Sostituisci <tuo-github-username> o il percorso dell'immagine sul tuo registry (es. ghcr.io o docker.io)
+    image:
+      url: ghcr.io/<YOUR_GITHUB_USERNAME>/easyea:latest
+    plan: free
+    region: frankfurt # oppure oregon, ohio, singapore
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: EASYEA_ENV
+        value: production
+      - key: EASYEA_SECRET_KEY
+        generateValue: true
+      - key: EASYEA_SEED_DEMO_USERS
+        value: "false"
+      - key: EASYEA_RBAC_MODE
+        value: hybrid
+      # OPZIONE 1: Collegato al PostgreSQL gestito da Render definito sotto.
+      # OPZIONE 2: Quando passerai a un PostgreSQL esterno gratuito (es. Neon o Supabase),
+      # basterà sovrascrivere DATABASE_URL dalla dashboard di Render o sostituire questo blocco con:
+      # - key: DATABASE_URL
+      #   value: postgresql://<user>:<password>@<host>/<database>?sslmode=require
+      - key: DATABASE_URL
+        fromDatabase:
+          name: easyea-postgres
+          property: connectionString
+
+databases:
+  # NOTA BENE: Il database PostgreSQL Free di Render scade e viene eliminato dopo 30 giorni.
+  # È utile per il test iniziale. Per persistenza permanente gratuita, si consiglia un DB esterno (es. Neon.tech).
+  # Quando collegherai il DB esterno, puoi rimuovere questa sezione e cancellare il DB su Render.
+  - name: easyea-postgres
+    databaseName: easyea_db
+    user: easyea_user
+    plan: free
+    region: frankfurt

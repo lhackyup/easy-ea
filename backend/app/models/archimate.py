@@ -145,7 +145,7 @@ class AttributePackage(Base):
     description = Column(Text, nullable=True)
     icon_color = Column(String, default="blue") # e.g. "blue", "emerald", "amber", "purple", "rose", "cyan"
     package_type = Column(String(32), default="attribute_only", nullable=False, server_default='attribute_only', index=True) # 'attribute_only', 'framework'
-    standard_version = Column(String(32), nullable=True) # e.g. "12.0", "4.0", "R5", "v3.0"
+    standard_version = Column(String(128), nullable=True) # e.g. "12.0", "4.0", "R5", "v3.0", "ArchiMate 3.2 / ITIL / CIS Controls"
     website_url = Column(String(255), nullable=True)
     is_default_active = Column(Boolean, default=True) # Activated by default on newly created libraries
     is_system = Column(Boolean, default=False, nullable=False, server_default='0', index=True)
@@ -277,6 +277,7 @@ class SystemAuthSettings(Base):
     rbac_mode = Column(String, default="hybrid") # hybrid, idp_sync, internal
     role_mappings = Column(JSON, default=list) # List of mapping rule objects
     max_schema_versions = Column(Integer, default=10) # Max versions to keep per schema in repository
+    package_registry_url = Column(String(512), nullable=True) # Custom package registry URL (Marketplace)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 
