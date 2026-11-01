@@ -1,3 +1,4 @@
+import uuid
 from sqlalchemy import Column, String, Text, Float, Integer, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
@@ -242,9 +243,49 @@ class User(Base):
     auth_provider = Column(String, default="local", index=True) # "local", "keycloak", "google", etc.
     external_id = Column(String, unique=True, index=True, nullable=True) # sub from IdP
     is_active = Column(Boolean, default=True)
+    totp_secret = Column(String, nullable=True) # Base32 TOTP Secret Key (RFC 6238)
+    is_mfa_enabled = Column(Boolean, default=False)
+    mfa_enrolled_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=utc_now)
 
     role_assignments = relationship("UserRoleAssignment", back_populates="user", cascade="all, delete-orphan")
+    api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
+    revoked_tokens = relationship("RevokedToken", back_populates="user", cascade="all, delete-orphan")
+
+
+class RevokedToken(Base):
+    """
+    JTI Blacklist table for token invalidation / revocation on logout or admin action.
+    Persistent in database (PostgreSQL/SQLite) without requiring Redis.
+    Includes expires_at timestamp for automated garbage collection of expired tokens.
+    """
+    __tablename__ = "revoked_tokens"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    jti = Column(String(64), unique=True, index=True, nullable=False)
+    token_type = Column(String(32), default="access_token", nullable=False) # access_token, refresh_token
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    reason = Column(String(128), default="logout", nullable=True) # logout, admin_revoked, mfa_reset
+    revoked_at = Column(DateTime, default=utc_now, nullable=False)
+    expires_at = Column(DateTime, nullable=False, index=True)
+
+    user = relationship("User", back_populates="revoked_tokens")
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, nullable=False) # e.g. "Antigravity EA Agent", "CI/CD Pipeline"
+    prefix = Column(String(16), nullable=False, index=True) # e.g. "eea_live_a1b2c3" (safe display prefix)
+    hashed_key = Column(String, nullable=False, index=True) # SHA-256 hex digest of secret key
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = Column(DateTime, default=utc_now)
+    expires_at = Column(DateTime, nullable=True)
+    is_active = Column(Boolean, default=True)
+    last_used_at = Column(DateTime, nullable=True)
+
+    user = relationship("User", back_populates="api_keys")
 
 
 
@@ -267,6 +308,7 @@ class SystemAuthSettings(Base):
     id = Column(String, primary_key=True, default="default") # single row configuration
     allow_local_login = Column(Boolean, default=True)
     allow_idp_login = Column(Boolean, default=True)
+    allow_mcp_access = Column(Boolean, default=True) # Controls AI Agent & MCP queries access
     provider_name = Column(String, default="Keycloak SSO")
     issuer_url = Column(String, default="http://localhost:18000/realms/dev-realm")
     client_id = Column(String, default="easyea-client")
@@ -278,7 +320,37 @@ class SystemAuthSettings(Base):
     role_mappings = Column(JSON, default=list) # List of mapping rule objects
     max_schema_versions = Column(Integer, default=10) # Max versions to keep per schema in repository
     package_registry_url = Column(String(512), nullable=True) # Custom package registry URL (Marketplace)
+    mfa_policy = Column(String, default="disabled") # "disabled", "admin_only", "write_roles", "all"
+    show_demo_banner = Column(Boolean, default=True) # Show demo credentials banner on login page
+    demo_banner_message = Column(String(512), nullable=True, default="Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!")
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
+
+
+class SecurityAuditLog(Base):
+    """
+    Structured Tamper-Evident Security Audit Log.
+    Uses SHA-256 cryptographic hash chaining (blockchain-style). Each record
+    contains the hash of the preceding block (`prev_hash`) plus canonical fields,
+    making any unauthorized database tampering or deletion immediately detectable.
+    """
+    __tablename__ = "security_audit_logs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    sequence_number = Column(Integer, nullable=False, unique=True, index=True)
+    timestamp = Column(DateTime, default=utc_now, nullable=False, index=True)
+    event_id = Column(String(36), unique=True, nullable=False, index=True, default=lambda: str(uuid.uuid4()))
+    action = Column(String(64), nullable=False, index=True) # e.g. AUTH_LOGIN_SUCCESS, RBAC_ROLE_ASSIGNED
+    outcome = Column(String(16), nullable=False, default="SUCCESS", index=True) # SUCCESS, FAILURE, DENIED
+    actor_id = Column(String(64), nullable=True, index=True)
+    actor_username = Column(String(128), nullable=True, index=True)
+    actor_role = Column(String(64), nullable=True)
+    ip_address = Column(String(64), nullable=True)
+    user_agent = Column(String(255), nullable=True)
+    target_type = Column(String(64), nullable=True, index=True) # user, role, workspace, schema, api_key, config
+    target_id = Column(String(64), nullable=True, index=True)
+    details = Column(JSON, default=dict) # Sanitized contextual metadata (no secrets/passwords)
+    prev_hash = Column(String(64), nullable=False) # SHA-256 of preceding audit log
+    current_hash = Column(String(64), nullable=False, index=True) # SHA-256(prev_hash + sequence + data)
 
 
 class ImportHistory(Base):

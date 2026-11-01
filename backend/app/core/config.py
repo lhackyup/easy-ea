@@ -60,7 +60,7 @@ def _resolve_cors_origins() -> List[str]:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EasyEA - Business-Oriented Enterprise Architecture"
-    VERSION: str = "0.1.0"
+    VERSION: str = "1.0.0"
     API_V1_STR: str = "/api"
     ENVIRONMENT: str = os.getenv("EASYEA_ENV", "development").strip().lower()
 
@@ -108,6 +108,15 @@ class Settings(BaseSettings):
 
     # External Package Registry URL (Marketplace for .eap bundles)
     PACKAGE_REGISTRY_URL: str = os.getenv("EASYEA_PACKAGE_REGISTRY_URL", "").strip()
+
+    # HTTP Strict Transport Security (HSTS Preload - RFC 6797)
+    HSTS_ENABLED: bool = os.getenv("EASYEA_HSTS_ENABLED", "true").lower() in ("1", "true", "yes")
+    HSTS_MAX_AGE: int = int(os.getenv("EASYEA_HSTS_MAX_AGE", "63072000")) # 2 years for HSTS Preload
+    HSTS_INCLUDE_SUBDOMAINS: bool = os.getenv("EASYEA_HSTS_INCLUDE_SUBDOMAINS", "true").lower() in ("1", "true", "yes")
+    HSTS_PRELOAD: bool = os.getenv("EASYEA_HSTS_PRELOAD", "true").lower() in ("1", "true", "yes")
+
+    # Content Security Policy (CSP)
+    CUSTOM_CSP_POLICY: Optional[str] = os.getenv("EASYEA_CSP_POLICY") or None
 
     model_config = SettingsConfigDict(case_sensitive=True)
 

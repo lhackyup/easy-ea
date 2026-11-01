@@ -9,7 +9,9 @@ interface AuthContextType {
   loading: boolean;
   authError: string | null;
   clearAuthError: () => void;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, totp_code?: string) => Promise<any>;
+  completeMfaLogin: (data: { token: string; user: AuthUser }) => void;
+  refreshUserProfile: () => Promise<void>;
   logout: () => void;
 }
 
@@ -81,13 +83,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const data = await api.login({ username, password });
+  const login = async (username: string, password: string, totp_code?: string) => {
+    const data = await api.login({ username, password, totp_code });
+    if (data.mfa_required) {
+      return data;
+    }
     setToken(data.token);
     setUser(data.user);
     sessionStorage.setItem(TOKEN_KEY, data.token);
     sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setAuthError(null);
+    return data;
+  };
+
+  const completeMfaLogin = (data: { token: string; user: AuthUser }) => {
+    setToken(data.token);
+    setUser(data.user);
+    sessionStorage.setItem(TOKEN_KEY, data.token);
+    sessionStorage.setItem(USER_KEY, JSON.stringify(data.user));
+    setAuthError(null);
+  };
+
+  const refreshUserProfile = async () => {
+    const activeToken = token || sessionStorage.getItem(TOKEN_KEY);
+    if (activeToken) {
+      try {
+        const freshUser = await api.getCurrentUser(activeToken);
+        setUser(freshUser);
+        sessionStorage.setItem(USER_KEY, JSON.stringify(freshUser));
+      } catch (err) {
+        console.warn('Failed to refresh user profile:', err);
+      }
+    }
   };
 
   const logout = () => {
@@ -115,6 +142,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         authError,
         clearAuthError,
         login,
+        completeMfaLogin,
+        refreshUserProfile,
         logout
       }}
     >

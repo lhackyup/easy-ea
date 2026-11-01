@@ -50,6 +50,7 @@ import { useLanguage } from '../../context/LanguageContext';
 interface AttributePackagesManagerProps {
   models?: ModelWorkspace[];
   selectedScope: string; // 'global' or a specific model_id
+  readOnly?: boolean;
   onSelectScope?: (scope: string) => void;
   onPackageUpdated?: () => void;
 }
@@ -85,6 +86,7 @@ const ARCHIMATE_LAYERS = ['All', 'Strategy', 'Business', 'Application', 'Technol
 export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> = ({
   models = [],
   selectedScope,
+  readOnly = false,
   onSelectScope,
   onPackageUpdated
 }) => {
@@ -682,23 +684,31 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
           </div>
 
           {/* Install Package (.eap) Button */}
-          <button
-            onClick={handleOpenInstallModal}
-            className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 hover:border-indigo-300 rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
-            title={t.metamodel.installPackageBtn}
-          >
-            <Upload className="w-3.5 h-3.5 text-indigo-600" />
-            <span>{t.metamodel.installPackageBtn}</span>
-          </button>
+          {!readOnly ? (
+            <>
+              <button
+                onClick={handleOpenInstallModal}
+                className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-white hover:bg-slate-50 text-indigo-700 border border-indigo-200 hover:border-indigo-300 rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
+                title={t.metamodel.installPackageBtn}
+              >
+                <Upload className="w-3.5 h-3.5 text-indigo-600" />
+                <span>{t.metamodel.installPackageBtn}</span>
+              </button>
 
-          {selectedScope === 'global' && (
-            <button
-              onClick={handleOpenCreatePkg}
-              className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-purple-600/20 transition cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t.metamodel.addPackageBtn}</span>
-            </button>
+              {selectedScope === 'global' && (
+                <button
+                  onClick={handleOpenCreatePkg}
+                  className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-sm shadow-purple-600/20 transition cursor-pointer"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>{t.metamodel.addPackageBtn}</span>
+                </button>
+              )}
+            </>
+          ) : (
+            <span className="text-xs font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 px-3 py-1.5 rounded-xl">
+              👁️ Sola Lettura
+            </span>
           )}
         </div>
       </div>

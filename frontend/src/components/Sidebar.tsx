@@ -33,10 +33,12 @@ import {
   Building2,
   Server,
   KeyRound,
+  Bot,
   UploadCloud,
   BookmarkCheck,
   FolderGit2,
-  Scale
+  Scale,
+  ScrollText
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -200,6 +202,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'auth_config' as AdminSubTab,
       label: t.subtabs.authConfig,
       icon: KeyRound
+    },
+    {
+      id: 'api_keys' as AdminSubTab,
+      label: t.subtabs.apiKeys,
+      icon: Bot
+    },
+    {
+      id: 'audit_logs' as AdminSubTab,
+      label: t.subtabs.auditLogs,
+      icon: ScrollText
     },
     {
       id: 'system' as AdminSubTab,

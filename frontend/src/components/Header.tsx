@@ -32,6 +32,7 @@ import {
   Shield,
   User as UserIcon,
   KeyRound,
+  Bot,
   UploadCloud,
   BookmarkCheck,
   FolderGit2,
@@ -523,6 +524,18 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <KeyRound className="w-3.5 h-3.5" />
                 <span>{t.subtabs.authConfig}</span>
+              </button>
+
+              <button
+                onClick={() => onSelectAdminTab('api_keys')}
+                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
+                  adminTab === 'api_keys'
+                    ? 'bg-rose-600 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-rose-700 hover:bg-rose-50/60'
+                }`}
+              >
+                <Bot className="w-3.5 h-3.5" />
+                <span>{t.subtabs.apiKeys}</span>
               </button>
 
               <button

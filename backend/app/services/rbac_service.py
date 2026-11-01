@@ -75,6 +75,20 @@ ROLE_DEFINITIONS = [
             {"domain": "Processes", "action": "view_process_lineage", "description": "Consult business process end-to-end lineage"},
             {"domain": "Security", "action": "write_operations", "allowed": False, "description": "Strictly read-only access to preserve data integrity"}
         ]
+    },
+    {
+        "role": "viewer",
+        "name": "Demo / Read-Only Viewer",
+        "scope_type": "global",
+        "badge_color": "cyan",
+        "description": "Global read-only access across all architectural libraries, business views, diagrams, metamodels, packages, and system administration status. All write/mutating operations are disabled.",
+        "permissions": [
+            {"domain": "Navigation", "action": "browse_all_hubs", "description": "Browse Business, Architecture and Administration Hubs"},
+            {"domain": "Libraries", "action": "read_all_libraries", "description": "Read-only access to all workspaces"},
+            {"domain": "Architecture", "action": "view_repository", "description": "Browse elements, relationships, matrices and schemas"},
+            {"domain": "Administration", "action": "view_admin_hub", "description": "Inspect metamodels, package definitions, RBAC directory and system status"},
+            {"domain": "Mutations", "action": "write_operations", "allowed": False, "description": "Strictly read-only to preserve demo data integrity"}
+        ]
     }
 ]
 
@@ -89,6 +103,11 @@ def get_roles_metadata() -> Dict[str, Any]:
                 "scope_type": "global",
                 "requires_model_id": False,
                 "description": "Global administrator not restricted by library boundary."
+            },
+            "viewer": {
+                "scope_type": "global",
+                "requires_model_id": False,
+                "description": "Global demo/viewer role with read-only access across all workspaces and hubs."
             },
             "architect": {
                 "scope_type": "library",
@@ -214,13 +233,13 @@ def assign_role(
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{user_id}' not found.")
     
-    valid_roles = {"admin", "architect", "analyst", "executive"}
+    valid_roles = {"admin", "architect", "analyst", "executive", "viewer"}
     if role not in valid_roles:
         raise HTTPException(status_code=400, detail=f"Invalid role '{role}'. Must be one of {valid_roles}.")
     
     # Enforce scope rules
-    if role == "admin":
-        model_id = None # Admin is always global
+    if role in ("admin", "viewer"):
+        model_id = None # Admin and Viewer are global
     else:
         if not model_id or model_id == "global":
             raise HTTPException(
@@ -302,6 +321,29 @@ def check_user_permission(
             "scope": "global",
             "reason": "Authorized via Global System Administrator role."
         }
+
+    # 2. Global Demo / Viewer check
+    if any(a.role == "viewer" for a in assignments):
+        read_actions = {
+            "read_repository", "view_executive_overview", "view_time_portfolio",
+            "view_overlap_matrix", "view_process_lineage", "view_reports",
+            "read_all_libraries", "browse_all_hubs", "view_repository", "view_admin_hub",
+            "view_schemas", "read_element", "read_model"
+        }
+        if action in read_actions or action.startswith("read_") or action.startswith("view_"):
+            return {
+                "allowed": True,
+                "role": "viewer",
+                "scope": "global",
+                "reason": "Authorized for read-only access via Demo / Viewer role."
+            }
+        else:
+            return {
+                "allowed": False,
+                "role": "viewer",
+                "scope": "global",
+                "reason": "Action not permitted: user has Demo / Read-Only role."
+            }
 
     # If action requires target_model_id and none was supplied
     if not target_model_id:
@@ -464,6 +506,16 @@ def seed_default_rbac(db: Session):
             "password": demo_pwd,
             "assignments": [
                 {"role": "executive", "model_id": "sample-easybank-ea"}
+            ]
+        },
+        {
+            "id": "usr-demo-viewer",
+            "username": "demo",
+            "email": "demo@easyea.local",
+            "full_name": "Demo User (Sola Lettura)",
+            "password": demo_pwd,
+            "assignments": [
+                {"role": "viewer", "model_id": None}
             ]
         }
     ]

@@ -28,6 +28,8 @@ from app.api.business_views import router as business_views_router
 from app.api.adrs import router as adrs_router
 from app.api.resilience import router as resilience_router
 from app.api.gap_analysis import router as gap_analysis_router
+from app.api.api_keys import router as api_keys_router
+from app.api.audit import router as audit_router
 
 from sqlalchemy import text
 
@@ -64,7 +66,11 @@ _safe_add_column("users", "username VARCHAR")
 _safe_add_column("users", "password_hash VARCHAR")
 _safe_add_column("users", "auth_provider VARCHAR DEFAULT 'local'")
 _safe_add_column("users", "external_id VARCHAR")
+_safe_add_column("users", "totp_secret VARCHAR")
+_safe_add_column("users", "is_mfa_enabled BOOLEAN DEFAULT FALSE")
+_safe_add_column("users", "mfa_enrolled_at TIMESTAMP")
 _safe_add_column("system_auth_settings", "max_schema_versions INTEGER DEFAULT 10")
+_safe_add_column("system_auth_settings", "mfa_policy VARCHAR DEFAULT 'disabled'")
 _safe_add_column("archimate_elements", "stereotype_id VARCHAR")
 _safe_add_column("archimate_elements", "is_reference BOOLEAN DEFAULT FALSE")
 _safe_add_column("archimate_elements", "package_id VARCHAR")
@@ -86,6 +92,9 @@ _safe_add_column("package_views", "is_active BOOLEAN DEFAULT TRUE")
 _safe_add_column("package_views", "target_hub VARCHAR(32) DEFAULT 'business'")
 _safe_add_column("architecture_decision_records", "archimate_element_id VARCHAR")
 _safe_add_column("system_auth_settings", "package_registry_url VARCHAR(512)")
+_safe_add_column("system_auth_settings", "allow_mcp_access BOOLEAN DEFAULT TRUE")
+_safe_add_column("system_auth_settings", "show_demo_banner BOOLEAN DEFAULT TRUE")
+_safe_add_column("system_auth_settings", "demo_banner_message VARCHAR(512) DEFAULT 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'")
 
 def _safe_alter_column(table_name: str, sql_action: str):
     with engine.connect() as conn:
@@ -273,7 +282,24 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
 
-# HTTP Security Headers Middleware (SAST-LOW-01: OWASP Secure Headers)
+# Content Security Policy (CSP) & HSTS Preload (OWASP Secure Headers & RFC 6797)
+DEFAULT_CSP_DIRECTIVES = [
+    "default-src 'self'",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "font-src 'self' https://fonts.gstatic.com data:",
+    "img-src 'self' data: blob: https:",
+    "connect-src 'self' http: https: ws: wss:",
+    "frame-src 'self' https://embed.diagrams.net",
+    "frame-ancestors 'self'",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'self' http: https:",
+]
+DEFAULT_CSP_POLICY = "; ".join(DEFAULT_CSP_DIRECTIVES)
+
+
+# HTTP Security Headers Middleware (OWASP Secure Headers, CSP & HSTS Preload)
 @app.middleware("http")
 async def security_headers_middleware(request: Request, call_next):
     response = await call_next(request)
@@ -282,8 +308,20 @@ async def security_headers_middleware(request: Request, call_next):
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     response.headers["X-XSS-Protection"] = "1; mode=block"
+
+    # HTTP Strict Transport Security (HSTS Preload - RFC 6797)
+    if settings.HSTS_ENABLED:
+        hsts_elements = [f"max-age={settings.HSTS_MAX_AGE}"]
+        if settings.HSTS_INCLUDE_SUBDOMAINS:
+            hsts_elements.append("includeSubDomains")
+        if settings.HSTS_PRELOAD:
+            hsts_elements.append("preload")
+        response.headers["Strict-Transport-Security"] = "; ".join(hsts_elements)
+
+    # Content Security Policy (CSP Level 3)
     if "Content-Security-Policy" not in response.headers:
-        response.headers["Content-Security-Policy"] = "frame-ancestors 'self';"
+        response.headers["Content-Security-Policy"] = settings.CUSTOM_CSP_POLICY or DEFAULT_CSP_POLICY
+
     return response
 
 # Include Routers
@@ -304,6 +342,8 @@ app.include_router(business_views_router, prefix=settings.API_V1_STR)
 app.include_router(adrs_router, prefix=settings.API_V1_STR)
 app.include_router(resilience_router, prefix=settings.API_V1_STR)
 app.include_router(gap_analysis_router, prefix=settings.API_V1_STR)
+app.include_router(api_keys_router, prefix=settings.API_V1_STR)
+app.include_router(audit_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 

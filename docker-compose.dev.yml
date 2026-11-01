@@ -1,0 +1,69 @@
+# Docker Compose per Ambiente di Sviluppo (Hot-Reloading)
+# Avvio: docker compose -f docker-compose.dev.yml up -d
+# Arresto: docker compose -f docker-compose.dev.yml down
+
+services:
+  easyea-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: easyea-dev-app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Live-mount del codice backend per hot-reload istantaneo senza dover fare rebuild
+      - ./backend/app:/app/app:ro
+      - ./plugins:/app/plugins:ro
+    environment:
+      - EASYEA_ENV=development
+      - EASYEA_SECRET_KEY=${EASYEA_SECRET_KEY:-dev_secret_key_easyea_2026}
+      - EASYEA_SEED_DEMO_USERS=true
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-easyea_user}:${POSTGRES_PASSWORD:-easyea_secret}@db:5432/${POSTGRES_DB:-easyea_db}
+      - PORT=8000
+      - OIDC_ENABLED=${OIDC_ENABLED:-true}
+      - OIDC_ISSUER_URL=${OIDC_ISSUER_URL:-http://host.docker.internal:18000/realms/dev-realm}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-easyea-client}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:8000/api/auth/oidc/callback}
+      - OIDC_FRONTEND_REDIRECT_URL=${OIDC_FRONTEND_REDIRECT_URL:-http://localhost:8000}
+      - EASYEA_RBAC_MODE=${EASYEA_RBAC_MODE:-hybrid}
+    networks:
+      - default
+      - shared-idp-net
+    depends_on:
+      db:
+        condition: service_healthy
+    # Modalità dev: avvia uvicorn con hot-reload
+    command: ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+
+  db:
+    image: postgres:16-alpine
+    container_name: easyea-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-easyea_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-easyea_secret}
+      POSTGRES_DB: ${POSTGRES_DB:-easyea_db}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - default
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U easyea_user -d easyea_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+networks:
+  default:
+  shared-idp-net:
+    name: shared-idp-net
+    external: true
+
+volumes:
+  postgres_data:

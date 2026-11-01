@@ -95,6 +95,11 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
     );
   }, [user, modelId]);
 
+  const isViewer = useMemo(() => {
+    if (!user) return false;
+    return user.assignments.some((a) => a.role === 'viewer') && !isAdmin;
+  }, [user, isAdmin]);
+
   const loadData = async () => {
     setLoading(true);
     try {
@@ -434,43 +439,45 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             )}
 
             {/* Folder context actions */}
-            <div className="hidden group-hover:flex items-center space-x-0.5">
-              <button
-                type="button"
-                title={t.schemas.newSubfolderTooltip}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setNewSubfolderParentId(folder.id);
-                  setExpandedFolders((prev) => ({ ...prev, [folder.id]: true }));
-                }}
-                className="p-1 hover:bg-slate-200 text-slate-500 rounded"
-              >
-                <FolderPlus className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                title={t.common.edit}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setEditingFolderId(folder.id);
-                  setEditingFolderName(folder.name);
-                }}
-                className="p-1 hover:bg-slate-200 text-slate-500 rounded"
-              >
-                <Edit2 className="w-3 h-3" />
-              </button>
-              <button
-                type="button"
-                title={t.schemas.deleteFolderTooltip}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteFolder(folder.id);
-                }}
-                className="p-1 hover:bg-rose-100 text-rose-500 rounded"
-              >
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
+            {!isViewer && (
+              <div className="hidden group-hover:flex items-center space-x-0.5">
+                <button
+                  type="button"
+                  title={t.schemas.newSubfolderTooltip}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setNewSubfolderParentId(folder.id);
+                    setExpandedFolders((prev) => ({ ...prev, [folder.id]: true }));
+                  }}
+                  className="p-1 hover:bg-slate-200 text-slate-500 rounded"
+                >
+                  <FolderPlus className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  title={t.common.edit}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingFolderId(folder.id);
+                    setEditingFolderName(folder.name);
+                  }}
+                  className="p-1 hover:bg-slate-200 text-slate-500 rounded"
+                >
+                  <Edit2 className="w-3 h-3" />
+                </button>
+                <button
+                  type="button"
+                  title={t.schemas.deleteFolderTooltip}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteFolder(folder.id);
+                  }}
+                  className="p-1 hover:bg-rose-100 text-rose-500 rounded"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -532,14 +539,16 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             <Folder className="w-5 h-5 text-indigo-600" />
             <h3 className="text-sm font-bold text-slate-800">Cartelle Schemi</h3>
           </div>
-          <button
-            type="button"
-            onClick={() => setNewSubfolderParentId(null)}
-            title={t.schemas.newRootFolderTooltip}
-            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
-          >
-            <FolderPlus className="w-4 h-4" />
-          </button>
+          {!isViewer && (
+            <button
+              type="button"
+              onClick={() => setNewSubfolderParentId(null)}
+              title={t.schemas.newRootFolderTooltip}
+              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
+            >
+              <FolderPlus className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <div className="p-3 overflow-y-auto flex-1 space-y-1">
@@ -721,26 +730,34 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <span>Plugin Camunda</span>
             </button>
 
-            {/* Schema as Code Button */}
-            <button
-              type="button"
-              onClick={() => setIsNewSacOpen(true)}
-              title="Crea uno schema scrivendo codice con Schema-as-Code (.eac)"
-              className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-indigo-300 border border-slate-700 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
-            >
-              <FileCode2 className="w-4 h-4 text-indigo-400" />
-              <span>Schema as Code</span>
-            </button>
+            {/* Schema as Code & New Schema Buttons */}
+            {!isViewer ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setIsNewSacOpen(true)}
+                  title="Crea uno schema scrivendo codice con Schema-as-Code (.eac)"
+                  className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-indigo-300 border border-slate-700 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
+                >
+                  <FileCode2 className="w-4 h-4 text-indigo-400" />
+                  <span>Schema as Code</span>
+                </button>
 
-            {/* New Schema Button */}
-            <button
-              type="button"
-              onClick={() => setIsCreateOpen(true)}
-              className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t.schemas.newSchemaBtn}</span>
-            </button>
+                <button
+                  type="button"
+                  onClick={() => setIsCreateOpen(true)}
+                  className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{t.schemas.newSchemaBtn}</span>
+                </button>
+              </>
+            ) : (
+              <span className="px-3.5 py-1.5 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-2xs">
+                <span>👁️</span>
+                <span>Modalità Demo (Sola Lettura)</span>
+              </span>
+            )}
           </div>
         </div>
 
@@ -899,16 +916,28 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
 
                       {/* Primary Actions: Checkout / Open / Check-in / Unlock */}
                       {!isLocked ? (
-                        <button
-                          type="button"
-                          onClick={() => handleCheckout(schema, true)}
-                          title={`Effettua il check-out e apri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
-                          className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
-                        >
-                          <Lock className="w-3.5 h-3.5" />
-                          <span>Check-out</span>
-                          <ExternalLink className="w-3 h-3 opacity-80" />
-                        </button>
+                        !isViewer ? (
+                          <button
+                            type="button"
+                            onClick={() => handleCheckout(schema, true)}
+                            title={`Effettua il check-out e apri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                            <span>Check-out</span>
+                            <ExternalLink className="w-3 h-3 opacity-80" />
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            title="Il Check-out per modifica esterna non è disponibile in modalità Demo (Sola Lettura)"
+                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200 transition flex items-center space-x-1.5 cursor-not-allowed select-none opacity-80"
+                          >
+                            <Lock className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Check-out</span>
+                          </button>
+                        )
                       ) : isLockedByMe ? (
                         <>
                           <button

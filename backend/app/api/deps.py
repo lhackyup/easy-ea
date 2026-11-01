@@ -1,25 +1,65 @@
 import io
 import zipfile
+import hashlib
 from typing import Optional, Dict, Any
-from fastapi import Depends, Header, HTTPException, Query, UploadFile
+from fastapi import Depends, Header, HTTPException, Query, UploadFile, Request
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.archimate import User
-from app.services.auth_service import get_user_from_token
+from app.services.auth_service import get_user_from_token, get_system_auth_settings, decode_access_token, is_token_revoked
+from app.services.api_key_service import verify_api_key
 from app.services.rbac_service import check_user_permission
+from app.services.audit_service import log_security_event
 
 
 def get_current_user(
+    request: Request = None,
     authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    x_mcp_agent: Optional[str] = Header(None, alias="X-MCP-Agent"),
     token: Optional[str] = Query(None, include_in_schema=False),
     db: Session = Depends(get_db)
 ) -> User:
     """
-    Validates the caller's Bearer JWT token (from Authorization header or query token for direct file downloads)
-    and returns the authenticated active User.
+    Validates caller authentication via:
+    1. 'X-API-Key' header or 'Bearer eea_live_...' (B2B & AI Agent authentication)
+    2. Bearer JWT token in 'Authorization' header or query token for downloads (User session)
+    Also verifies whether MCP access is globally permitted if X-MCP-Agent header is set.
+    Returns the authenticated active User.
     """
+    # Verify MCP access setting if caller is an MCP agent
+    if x_mcp_agent and x_mcp_agent.strip().lower() in ("true", "1", "yes"):
+        auth_cfg = get_system_auth_settings(db)
+        if not getattr(auth_cfg, "allow_mcp_access", True):
+            raise HTTPException(
+                status_code=403,
+                detail="L'accesso tramite MCP (Model Context Protocol) è disabilitato dall'amministratore."
+            )
+
+    # 1. API Key Check (M2M / Agent)
+    api_key_candidate = x_api_key
+    if not api_key_candidate and authorization and authorization.startswith("Bearer eea_live_"):
+        api_key_candidate = authorization.split("Bearer ", 1)[1].strip()
+
+    if api_key_candidate:
+        user = verify_api_key(db, api_key_candidate)
+        if not user or not user.is_active:
+            log_security_event(
+                db=db,
+                action="AUTH_API_KEY",
+                outcome="FAILURE",
+                request=request,
+                details={
+                    "prefix": api_key_candidate[:12] if len(api_key_candidate) >= 12 else "invalid",
+                    "reason": "invalid_or_expired_key"
+                }
+            )
+            raise HTTPException(status_code=401, detail="Invalid or expired API Key.")
+        return user
+
+    # 2. JWT Session Token Check
     raw_token: Optional[str] = None
     if authorization and authorization.startswith("Bearer "):
         raw_token = authorization.split("Bearer ", 1)[1].strip()
@@ -29,9 +69,24 @@ def get_current_user(
     if not raw_token:
         raise HTTPException(status_code=401, detail="Authentication required.")
 
+    payload = decode_access_token(raw_token)
+    if not payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired session token.")
+
+    jti = payload.get("jti") or hashlib.sha256(raw_token.encode('utf-8')).hexdigest()
+    if is_token_revoked(db, jti):
+        log_security_event(
+            db=db,
+            action="AUTH_TOKEN_REVOKED_ATTEMPT",
+            outcome="DENIED",
+            actor_id=payload.get("sub"),
+            details={"jti": jti}
+        )
+        raise HTTPException(status_code=401, detail="Token revoked. Session terminated.")
+
     user = get_user_from_token(db, raw_token)
     if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid or expired session token.")
+        raise HTTPException(status_code=401, detail="User account not found or deactivated.")
 
     return user
 
@@ -44,6 +99,19 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
         raise HTTPException(
             status_code=403,
             detail="Global System Administrator privileges required."
+        )
+    return current_user
+
+
+def require_admin_or_viewer(current_user: User = Depends(get_current_user)) -> User:
+    """
+    Ensures the authenticated user holds either the 'admin' or global 'viewer' (demo) role.
+    Used for read-only inspection endpoints in Administration Hub (view users, view system status, view auth config).
+    """
+    if not any(a.role in ("admin", "viewer") for a in current_user.role_assignments):
+        raise HTTPException(
+            status_code=403,
+            detail="Administrator or Viewer privileges required."
         )
     return current_user
 

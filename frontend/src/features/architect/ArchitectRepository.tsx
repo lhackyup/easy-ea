@@ -95,6 +95,8 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
 }) => {
   const { t, interpolate } = useLanguage();
   const { user } = useAuth();
+  const isAdmin = user?.assignments?.some((a) => a.role === 'admin');
+  const isViewer = Boolean(user?.assignments?.some((a) => a.role === 'viewer') && !isAdmin);
   const currentAuthor = user?.full_name || user?.username || user?.email || 'Architetto';
   const [elements, setElements] = useState<ArchimateElementItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1624,13 +1626,20 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
         </div>
 
         <div className="flex items-center space-x-3">
-          <button
-            onClick={handleOpenCreateModal}
-            className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>{t.architect.createObjectBtn}</span>
-          </button>
+          {!isViewer ? (
+            <button
+              onClick={handleOpenCreateModal}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20 transition cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{t.architect.createObjectBtn}</span>
+            </button>
+          ) : (
+            <span className="flex items-center space-x-1.5 px-3.5 py-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-bold shadow-2xs">
+              <span>👁️</span>
+              <span>Modalità Demo (Sola Lettura)</span>
+            </span>
+          )}
         </div>
       </div>
 
@@ -2517,6 +2526,11 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                         <Lock className="w-3.5 h-3.5 text-slate-400" />
                         <span>Standard Protetto</span>
                       </span>
+                    ) : isViewer ? (
+                      <span className="flex items-center space-x-1 px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-xl text-xs font-bold">
+                        <span>👁️</span>
+                        <span>Sola Lettura</span>
+                      </span>
                     ) : (
                       <>
                         <button
@@ -2645,13 +2659,15 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     <span>{t.architect.archimateRelations}</span>
                   </h4>
 
-                  <button
-                    onClick={() => handleOpenAddRelationModal('outgoing')}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{t.architect.addRelationBtn}</span>
-                  </button>
+                  {!isViewer && (
+                    <button
+                      onClick={() => handleOpenAddRelationModal('outgoing')}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>{t.architect.addRelationBtn}</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Outgoing Relations */}
@@ -2692,7 +2708,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                               >
                                 <Lock className="w-3.5 h-3.5 text-slate-400" />
                               </span>
-                            ) : (
+                            ) : !isViewer ? (
                               <>
                                 <button
                                   onClick={() => handleOpenEditRelationModal(rel)}
@@ -2709,7 +2725,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       ))
@@ -2759,7 +2775,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                               >
                                 <Lock className="w-3.5 h-3.5 text-slate-400" />
                               </span>
-                            ) : (
+                            ) : !isViewer ? (
                               <>
                                 <button
                                   onClick={() => handleOpenEditRelationModal(rel)}
@@ -2776,7 +2792,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       ))

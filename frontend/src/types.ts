@@ -7,7 +7,7 @@ export interface ActivePackageViewSelection {
   viewId: string;
 }
 export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'adrs' | 'saved-views' | 'import' | 'business-views' | 'package_view';
-export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'roles' | 'auth_config' | 'system';
+export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'roles' | 'auth_config' | 'api_keys' | 'audit_logs' | 'system';
 
 export interface MetamodelAttribute {
   name: string;
@@ -669,7 +669,7 @@ export interface DiagramViewDetail {
 }
 
 // RBAC Types
-export type RoleType = 'admin' | 'architect' | 'analyst' | 'executive';
+export type RoleType = 'admin' | 'architect' | 'analyst' | 'executive' | 'viewer';
 
 export interface UserRoleAssignmentItem {
   id: string;
@@ -726,13 +726,39 @@ export interface AuthUser {
   username?: string | null;
   email: string;
   full_name: string;
+  auth_provider?: string;
   is_active: boolean;
+  is_local?: boolean;
+  is_mfa_enabled?: boolean;
+  mfa_enrolled_at?: string | null;
   assignments: UserRoleAssignmentItem[];
 }
 
 export interface LoginResponse {
-  token: string;
-  user: AuthUser;
+  token?: string;
+  user?: AuthUser;
+  mfa_required?: boolean;
+  mfa_setup_required?: boolean;
+  mfa_token?: string;
+  secret?: string;
+  otpauth_url?: string;
+  qr_code_svg?: string;
+  qr_code_data_url?: string;
+}
+
+export interface MfaStatus {
+  is_local: boolean;
+  is_mfa_enabled: boolean;
+  mfa_enrolled_at?: string | null;
+  mfa_policy: 'disabled' | 'admin_only' | 'write_roles' | 'all';
+  is_enforced: boolean;
+}
+
+export interface MfaSetupResponse {
+  secret: string;
+  otpauth_url: string;
+  qr_code_svg: string;
+  qr_code_data_url?: string;
 }
 
 export type ClaimType = 'realm_role' | 'client_role' | 'group' | 'custom_claim';
@@ -750,6 +776,7 @@ export interface RoleMappingRule {
 export interface SystemAuthSettings {
   allow_local_login: boolean;
   allow_idp_login: boolean;
+  allow_mcp_access?: boolean;
   provider_name: string;
   issuer_url: string;
   client_id: string;
@@ -758,8 +785,11 @@ export interface SystemAuthSettings {
   prompt_login: boolean;
   enable_single_logout: boolean;
   rbac_mode: 'hybrid' | 'idp_sync' | 'internal';
+  mfa_policy?: 'disabled' | 'admin_only' | 'write_roles' | 'all';
   role_mappings: RoleMappingRule[];
   max_schema_versions?: number;
+  show_demo_banner?: boolean;
+  demo_banner_message?: string;
 }
 export interface IdpConnectionTestResult {
   success: boolean;
@@ -769,6 +799,22 @@ export interface IdpConnectionTestResult {
   token_endpoint?: string;
   userinfo_endpoint?: string;
   end_session_endpoint?: string;
+}
+
+export interface ApiKeyItem {
+  id: string;
+  name: string;
+  prefix: string;
+  user_id: string;
+  created_at: string | null;
+  expires_at: string | null;
+  is_active: boolean;
+  last_used_at: string | null;
+}
+
+export interface ApiKeyCreatedResponse extends ApiKeyItem {
+  raw_key: string;
+  warning: string;
 }
 
 export interface SavedViewAttributeRule {
@@ -1245,6 +1291,44 @@ export interface GapAnalysisResult {
   plateaus?: Array<{ id: string; name: string }>;
   work_packages?: Array<{ id: string; name: string }>;
   items: GapItem[];
+}
+
+export interface SecurityAuditItem {
+  id: string;
+  sequence_number: number;
+  timestamp: string;
+  event_id: string;
+  action: string;
+  outcome: 'SUCCESS' | 'FAILURE' | 'DENIED';
+  actor_id?: string | null;
+  actor_username?: string | null;
+  actor_role?: string | null;
+  ip_address?: string | null;
+  user_agent?: string | null;
+  target_type?: string | null;
+  target_id?: string | null;
+  details: Record<string, any>;
+  prev_hash: string;
+  current_hash: string;
+}
+
+export interface AuditVerificationResult {
+  is_valid: boolean;
+  total_records: number;
+  first_event_at?: string | null;
+  last_event_at?: string | null;
+  tampered_at_sequence?: number | null;
+  broken_event_id?: string | null;
+  reason?: string | null;
+  message: string;
+}
+
+export interface AuditSummary {
+  total_records: number;
+  recent_24h_events: number;
+  recent_24h_failures: number;
+  recent_24h_logins: number;
+  top_actions: Array<{ action: string; count: number }>;
 }
 
 

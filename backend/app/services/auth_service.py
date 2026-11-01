@@ -10,14 +10,26 @@ import secrets
 import threading
 import uuid
 import urllib.parse
+import io
 from collections import defaultdict
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, Any, List, Set, Tuple
 from fastapi import HTTPException
 import httpx
+try:
+    import pyotp
+except ImportError:
+    pyotp = None
+
+try:
+    import qrcode
+    import qrcode.image.svg
+except ImportError:
+    qrcode = None
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.models.archimate import User, UserRoleAssignment, SystemAuthSettings
+from app.models.archimate import User, UserRoleAssignment, SystemAuthSettings, RevokedToken
 
 # In-memory cache for OIDC Discovery metadata and JWKS
 _OIDC_DISCOVERY_CACHE: Dict[str, Any] = {}
@@ -91,6 +103,7 @@ def get_system_auth_settings(db: Session) -> SystemAuthSettings:
             id="default",
             allow_local_login=True,
             allow_idp_login=settings.OIDC_ENABLED,
+            allow_mcp_access=True,
             provider_name=settings.OIDC_PROVIDER_NAME,
             issuer_url=settings.OIDC_ISSUER_URL,
             client_id=settings.OIDC_CLIENT_ID,
@@ -99,11 +112,21 @@ def get_system_auth_settings(db: Session) -> SystemAuthSettings:
             prompt_login=False,
             enable_single_logout=True,
             rbac_mode=settings.AUTH_RBAC_MODE,
-            role_mappings=DEFAULT_ROLE_MAPPINGS
+            role_mappings=DEFAULT_ROLE_MAPPINGS,
+            mfa_policy="disabled",
+            show_demo_banner=True,
+            demo_banner_message="Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!"
         )
         db.add(auth_cfg)
         db.commit()
         db.refresh(auth_cfg)
+    else:
+        if getattr(auth_cfg, "mfa_policy", None) is None:
+            auth_cfg.mfa_policy = "disabled"
+        if getattr(auth_cfg, "show_demo_banner", None) is None:
+            auth_cfg.show_demo_banner = True
+        if getattr(auth_cfg, "demo_banner_message", None) is None:
+            auth_cfg.demo_banner_message = "Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!"
     return auth_cfg
 
 
@@ -240,11 +263,18 @@ def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemA
     if "issuer_url" in updates and updates["issuer_url"]:
         updates["issuer_url"] = validate_oidc_issuer_url(updates["issuer_url"], resolve_dns=False)
 
+    if "mfa_policy" in updates and updates["mfa_policy"]:
+        clean_policy = str(updates["mfa_policy"]).strip().lower()
+        allowed_policies = {"disabled", "admin_only", "write_roles", "all"}
+        if clean_policy not in allowed_policies:
+            raise ValueError(f"Policy MFA non valida '{updates['mfa_policy']}'. Valori ammessi: {', '.join(sorted(allowed_policies))}")
+        updates["mfa_policy"] = clean_policy
+
     for field in [
-        "allow_local_login", "allow_idp_login", "provider_name",
+        "allow_local_login", "allow_idp_login", "allow_mcp_access", "provider_name",
         "issuer_url", "client_id", "client_secret", "scopes",
         "prompt_login", "enable_single_logout", "rbac_mode", "role_mappings",
-        "max_schema_versions"
+        "max_schema_versions", "mfa_policy", "show_demo_banner", "demo_banner_message"
     ]:
         if field in updates:
             if field == "client_secret" and updates[field] == "********":
@@ -411,17 +441,20 @@ def _base64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode((data + padding).encode('utf-8'))
 
 
-def create_access_token(user: User) -> str:
-    """Generate secure signed JWT-like token for user session."""
+def create_access_token(user: User, expires_delta: Optional[int] = None) -> str:
+    """Generate secure signed JWT-like token for user session with unique JTI."""
+    now = int(time.time())
+    expiry = now + (expires_delta if expires_delta is not None else settings.TOKEN_EXPIRY_SECONDS)
     header = {"alg": "HS256", "typ": "JWT"}
     payload = {
+        "jti": str(uuid.uuid4()),
         "sub": user.id,
         "username": user.username or user.email,
         "email": user.email,
         "full_name": user.full_name,
         "auth_provider": user.auth_provider or "local",
-        "exp": int(time.time()) + settings.TOKEN_EXPIRY_SECONDS,
-        "iat": int(time.time())
+        "exp": expiry,
+        "iat": now
     }
 
     header_b64 = _base64url_encode(json.dumps(header).encode('utf-8'))
@@ -459,6 +492,81 @@ def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def is_token_revoked(db: Session, jti: str) -> bool:
+    """Check if token JTI is present in the database blacklist."""
+    if not jti:
+        return False
+    try:
+        return db.query(RevokedToken.id).filter(RevokedToken.jti == jti).first() is not None
+    except Exception:
+        return False
+
+
+def clean_expired_revoked_tokens(db: Session) -> int:
+    """Remove expired entries from revoked_tokens to prevent table bloat."""
+    try:
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        deleted = db.query(RevokedToken).filter(RevokedToken.expires_at < now).delete(synchronize_session=False)
+        db.commit()
+        return deleted
+    except Exception:
+        db.rollback()
+        return 0
+
+
+def revoke_token(db: Session, token: str, reason: str = "logout") -> bool:
+    """
+    Revoke a token by extracting its JTI and writing it to the revoked_tokens database table.
+    Stores expiration timestamp to enable periodic cleanup.
+    """
+    if not token:
+        return False
+
+    payload = decode_access_token(token)
+    if not payload:
+        # Decode payload without exp check in case token is expiring/expired
+        try:
+            parts = token.split('.')
+            if len(parts) == 3:
+                payload = json.loads(_base64url_decode(parts[1]).decode('utf-8'))
+        except Exception:
+            pass
+
+    if not payload:
+        return False
+
+    jti = payload.get("jti") or hashlib.sha256(token.encode('utf-8')).hexdigest()
+    exp_ts = payload.get("exp")
+    if exp_ts:
+        expires_at = datetime.fromtimestamp(exp_ts, tz=timezone.utc).replace(tzinfo=None)
+    else:
+        expires_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(days=1)
+
+    user_id = payload.get("sub")
+
+    try:
+        existing = db.query(RevokedToken.id).filter(RevokedToken.jti == jti).first()
+        if not existing:
+            record = RevokedToken(
+                id=str(uuid.uuid4()),
+                jti=jti,
+                token_type="access_token",
+                user_id=user_id,
+                reason=reason,
+                revoked_at=datetime.now(timezone.utc).replace(tzinfo=None),
+                expires_at=expires_at
+            )
+            db.add(record)
+            db.commit()
+
+        # Opportunistic garbage collection of expired tokens
+        clean_expired_revoked_tokens(db)
+        return True
+    except Exception:
+        db.rollback()
+        return False
+
+
 def authenticate_user(db: Session, identifier: str, password: str) -> Optional[User]:
     """Authenticate user by username or email and plain password."""
     clean_id = identifier.strip().lower()
@@ -477,15 +585,162 @@ def authenticate_user(db: Session, identifier: str, password: str) -> Optional[U
 
 
 def get_user_from_token(db: Session, token: str) -> Optional[User]:
-    """Fetch active user from token."""
+    """Fetch active user from token, verifying it is not in the JTI blacklist."""
     payload = decode_access_token(token)
     if not payload:
+        return None
+    jti = payload.get("jti") or hashlib.sha256(token.encode('utf-8')).hexdigest()
+    if is_token_revoked(db, jti):
         return None
     user_id = payload.get("sub")
     if not user_id:
         return None
     user = db.query(User).filter(User.id == user_id, User.is_active == True).first()
     return user
+
+
+# ============================================================================
+# MFA / 2FA Engine (RFC 6238 TOTP) for Local Accounts
+# ============================================================================
+
+def generate_totp_secret() -> str:
+    """Generates a secure random 32-character Base32 secret for RFC 6238 TOTP."""
+    if pyotp is not None:
+        return pyotp.random_base32()
+    return secrets.token_hex(16).upper()
+
+
+def get_totp_uri(secret: str, username: str, issuer: str = "EasyEA") -> str:
+    """Returns the standard otpauth:// URI for authenticator applications."""
+    if pyotp is not None:
+        totp = pyotp.TOTP(secret)
+        return totp.provisioning_uri(name=username, issuer_name=issuer)
+    return f"otpauth://totp/{issuer}:{username}?secret={secret}&issuer={issuer}"
+
+
+def generate_qr_code_svg(otpauth_url: str) -> str:
+    """Generates a clean inline SVG string for the QR Code with white background and responsive viewBox."""
+    if qrcode is not None:
+        import re
+        factory = qrcode.image.svg.SvgPathFillImage
+        img = qrcode.make(otpauth_url, image_factory=factory, box_size=10, border=2)
+        stream = io.BytesIO()
+        img.save(stream)
+        raw_svg = stream.getvalue().decode("utf-8")
+        clean_svg = raw_svg
+        if clean_svg.startswith("<?xml"):
+            clean_svg = clean_svg.split("?>", 1)[-1].strip()
+        clean_svg = re.sub(r'width="[^"]+"', 'width="100%"', clean_svg, count=1)
+        clean_svg = re.sub(r'height="[^"]+"', 'height="100%"', clean_svg, count=1)
+        return clean_svg
+    return "<svg xmlns='http://www.w3.org/2000/svg' width='100%' height='100%' viewBox='0 0 100 100'><rect width='100%' height='100%' fill='white'/><text x='10' y='50' fill='black'>QR Code</text></svg>"
+
+
+def generate_qr_code_data_url(otpauth_url: str) -> str:
+    """Generates a data:image/svg+xml;base64,... URL for embedding directly in <img src="..." />."""
+    svg_str = generate_qr_code_svg(otpauth_url)
+    b64 = base64.b64encode(svg_str.encode("utf-8")).decode("utf-8")
+    return f"data:image/svg+xml;base64,{b64}"
+
+
+def verify_totp_code(secret: str, code: str) -> bool:
+    """Verifies a 6-digit TOTP code against the Base32 secret allowing 1 step window drift."""
+    if not secret or not code or pyotp is None:
+        return False
+    clean_code = str(code).strip().replace(" ", "").replace("-", "")
+    if not clean_code.isdigit() or len(clean_code) != 6:
+        return False
+    try:
+        totp = pyotp.TOTP(secret)
+        return bool(totp.verify(clean_code, valid_window=1))
+    except Exception:
+        return False
+
+
+def is_user_subject_to_mfa_policy(user: User, mfa_policy: str) -> bool:
+    """
+    Evaluates whether a user is required to have MFA enabled based on the admin policy.
+    CRITICAL: Applies exclusively to local accounts. Federated users (Keycloak/OIDC)
+    rely on the external IdP's policies and return False.
+    """
+    if not user:
+        return False
+
+    # Check if user is federated (e.g. auth_provider != 'local' or external_id is present)
+    is_federated = (user.auth_provider and user.auth_provider != "local") or (user.external_id is not None)
+    if is_federated:
+        return False
+
+    policy = (mfa_policy or "disabled").strip().lower()
+    if policy == "disabled":
+        return False
+    if policy == "all":
+        return True
+
+    user_roles = {a.role for a in (user.role_assignments or [])}
+
+    if policy == "admin_only":
+        return "admin" in user_roles
+
+    if policy == "write_roles":
+        # 'admin', 'architect', 'analyst' have modification rights
+        write_roles = {"admin", "architect", "analyst"}
+        return bool(user_roles.intersection(write_roles))
+
+    return False
+
+
+def is_mfa_required_for_user(user: User, db: Session) -> Tuple[bool, bool]:
+    """
+    Returns (is_required, is_enforced_by_policy).
+    True if user already has MFA enabled or if current admin policy mandates it.
+    """
+    auth_cfg = get_system_auth_settings(db)
+    enforced = is_user_subject_to_mfa_policy(user, getattr(auth_cfg, "mfa_policy", "disabled"))
+    required = bool(user.is_mfa_enabled or enforced)
+    return required, enforced
+
+
+def create_mfa_challenge_token(user_id: str, username: str, pending_secret: Optional[str] = None) -> str:
+    """Creates a short-lived (5 min) HMAC-SHA256 signed token for the 2-step login challenge."""
+    exp = int(time.time()) + 300
+    payload = {
+        "sub": user_id,
+        "username": username,
+        "purpose": "mfa_challenge",
+        "pending_secret": pending_secret,
+        "exp": exp
+    }
+    payload_json = json.dumps(payload, separators=(',', ':'))
+    payload_b64 = _base64url_encode(payload_json.encode('utf-8'))
+    signature = hmac.new(settings.SECRET_KEY.encode('utf-8'), payload_b64.encode('utf-8'), hashlib.sha256).digest()
+    sig_b64 = _base64url_encode(signature)
+    return f"{payload_b64}.{sig_b64}"
+
+
+def verify_mfa_challenge_token(token: str) -> Optional[Dict[str, Any]]:
+    """Verifies and decodes the HMAC-SHA256 signed MFA challenge token."""
+    try:
+        parts = token.split('.')
+        if len(parts) != 2:
+            return None
+        payload_b64, sig_b64 = parts
+        expected_sig = hmac.new(settings.SECRET_KEY.encode('utf-8'), payload_b64.encode('utf-8'), hashlib.sha256).digest()
+        provided_sig = _base64url_decode(sig_b64)
+        if not hmac.compare_digest(expected_sig, provided_sig):
+            return None
+
+        payload_json = _base64url_decode(payload_b64).decode('utf-8')
+        payload = json.loads(payload_json)
+
+        if payload.get("purpose") != "mfa_challenge":
+            return None
+        if payload.get("exp", 0) < int(time.time()):
+            return None
+
+        return payload
+    except Exception:
+        return None
 
 
 # ============================================================================

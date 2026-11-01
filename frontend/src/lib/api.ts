@@ -24,7 +24,14 @@ import {
   ResilienceAnalysisResult,
   ResilienceMetrics,
   GapAnalysisResult,
-  GapMetrics
+  GapMetrics,
+  ApiKeyItem,
+  ApiKeyCreatedResponse,
+  MfaStatus,
+  MfaSetupResponse,
+  SecurityAuditItem,
+  AuditVerificationResult,
+  AuditSummary
 } from '../types';
 
 const API_BASE = '/api';
@@ -1083,7 +1090,7 @@ export const api = {
   },
 
   // Authentication
-  login: async (credentials: { username: string; password: string }): Promise<{ token: string; user: any }> => {
+  login: async (credentials: { username: string; password: string; totp_code?: string }): Promise<any> => {
     const res = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1092,6 +1099,74 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Invalid credentials' }));
       throw new Error(err.detail || 'Invalid username or password');
+    }
+    return res.json();
+  },
+
+  loginMfa: async (payload: { mfa_token: string; totp_code: string }): Promise<any> => {
+    const res = await fetch(`${API_BASE}/auth/login/mfa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Verifica MFA fallita' }));
+      throw new Error(err.detail || 'Codice TOTP non valido o scaduto');
+    }
+    return res.json();
+  },
+
+  getMfaStatus: async (): Promise<MfaStatus> => {
+    const res = await fetch(`${API_BASE}/auth/mfa/status`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Impossibile recuperare lo stato 2FA' }));
+      throw new Error(err.detail || 'Errore nel recupero dello stato 2FA');
+    }
+    return res.json();
+  },
+
+  setupMfa: async (): Promise<MfaSetupResponse> => {
+    const res = await fetch(`${API_BASE}/auth/mfa/setup`, {
+      method: 'POST',
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Impossibile avviare il setup 2FA' }));
+      throw new Error(err.detail || 'Errore durante la configurazione 2FA');
+    }
+    return res.json();
+  },
+
+  enableMfa: async (payload: { secret: string; totp_code: string }): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(`${API_BASE}/auth/mfa/enable`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Attivazione 2FA non riuscita' }));
+      throw new Error(err.detail || 'Codice di verifica 2FA errato');
+    }
+    return res.json();
+  },
+
+  disableMfa: async (payload: { password: string }): Promise<{ success: boolean; message: string }> => {
+    const res = await fetch(`${API_BASE}/auth/mfa/disable`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Disattivazione 2FA non riuscita' }));
+      throw new Error(err.detail || 'Impossibile disattivare 2FA');
     }
     return res.json();
   },
@@ -1110,12 +1185,29 @@ export const api = {
 
   logout: async (): Promise<any> => {
     const res = await fetch(`${API_BASE}/auth/logout`, {
-      method: 'POST'
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders()
+      }
     });
     return res.json();
   },
 
-  getOidcConfig: async (): Promise<{ enabled: boolean; provider_name: string; issuer_url: string; login_url: string; rbac_mode: string; allow_local_login?: boolean; allow_idp_login?: boolean }> => {
+  getOidcConfig: async (): Promise<{
+    enabled: boolean;
+    provider_name: string;
+    issuer_url: string;
+    login_url: string;
+    rbac_mode: string;
+    allow_local_login?: boolean;
+    allow_idp_login?: boolean;
+    show_demo_banner?: boolean;
+    demo_banner_message?: string;
+    demo_username?: string;
+    demo_password?: string;
+    demo_mode?: boolean;
+  }> => {
     const res = await fetch(`${API_BASE}/auth/oidc/config`);
     if (!res.ok) throw new Error('Failed to fetch OIDC configuration');
     return res.json();
@@ -1154,6 +1246,43 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Failed to test IdP connection' }));
       throw new Error(err.detail || 'Failed to test IdP connection');
+    }
+    return res.json();
+  },
+
+  // API Keys & MCP Agent Access
+  getApiKeys: async (): Promise<ApiKeyItem[]> => {
+    const res = await fetch(`${API_BASE}/api-keys`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to fetch API keys' }));
+      throw new Error(err.detail || 'Failed to fetch API keys');
+    }
+    return res.json();
+  },
+
+  createApiKey: async (payload: { name: string; expires_in_days?: number | null; user_id?: string | null }): Promise<ApiKeyCreatedResponse> => {
+    const res = await fetch(`${API_BASE}/api-keys`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(payload)
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to create API key' }));
+      throw new Error(err.detail || 'Failed to create API key');
+    }
+    return res.json();
+  },
+
+  revokeApiKey: async (keyId: string): Promise<{ message: string; id: string }> => {
+    const res = await fetch(`${API_BASE}/api-keys/${encodeURIComponent(keyId)}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to revoke API key' }));
+      throw new Error(err.detail || 'Failed to revoke API key');
     }
     return res.json();
   },
@@ -1656,6 +1785,55 @@ export const api = {
     if (compareModelId) url += `?compare_model_id=${encodeURIComponent(compareModelId)}`;
     const res = await fetch(url, { headers: { ...getAuthHeaders() } });
     if (!res.ok) throw new Error('Failed to fetch Gap Analysis summary');
+    return res.json();
+  },
+
+  // ========================================================
+  // Security Audit Trail (Tamper-Evident Logs)
+  // ========================================================
+  getAuditLogs: async (params?: {
+    page?: number;
+    size?: number;
+    action?: string;
+    outcome?: string;
+    search?: string;
+  }): Promise<{ items: SecurityAuditItem[]; total: number; page: number; size: number; pages: number }> => {
+    const searchParams = new URLSearchParams();
+    if (params?.page) searchParams.set('page', params.page.toString());
+    if (params?.size) searchParams.set('size', params.size.toString());
+    if (params?.action) searchParams.set('action', params.action);
+    if (params?.outcome) searchParams.set('outcome', params.outcome);
+    if (params?.search) searchParams.set('search', params.search);
+
+    const qs = searchParams.toString();
+    const url = `${API_BASE}/admin/audit-logs${qs ? `?${qs}` : ''}`;
+    const res = await fetch(url, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Impossibile recuperare i log di audit' }));
+      throw new Error(err.detail || 'Errore nel recupero degli audit log');
+    }
+    return res.json();
+  },
+
+  verifyAuditTrail: async (): Promise<AuditVerificationResult> => {
+    const res = await fetch(`${API_BASE}/admin/audit-logs/verify`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Verifica crittografica non riuscita' }));
+      throw new Error(err.detail || 'Errore durante la verifica della catena audit');
+    }
+    return res.json();
+  },
+
+  getAuditSummary: async (): Promise<AuditSummary> => {
+    const res = await fetch(`${API_BASE}/admin/audit-logs/summary`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Impossibile recuperare il riepilogo audit' }));
+      throw new Error(err.detail || 'Errore durante il recupero delle metriche audit');
+    }
     return res.json();
   },
 };

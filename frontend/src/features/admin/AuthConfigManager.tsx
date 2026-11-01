@@ -26,9 +26,10 @@ import {
 
 interface AuthConfigManagerProps {
   models: ModelWorkspace[];
+  readOnly?: boolean;
 }
 
-export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models }) => {
+export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, readOnly = false }) => {
   const { t, interpolate } = useLanguage();
 
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,9 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models }) 
     prompt_login: false,
     enable_single_logout: true,
     rbac_mode: 'hybrid',
+    mfa_policy: 'disabled',
+    show_demo_banner: true,
+    demo_banner_message: 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!',
     role_mappings: []
   });
 
@@ -313,15 +317,21 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models }) 
           >
             <RefreshCw className="w-4 h-4" />
           </button>
-          <button
-            type="button"
-            onClick={handleSaveAll}
-            disabled={saving}
-            className="flex items-center space-x-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition disabled:opacity-50 cursor-pointer"
-          >
-            {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{saving ? t.authConfig.saving : t.authConfig.saveAll}</span>
-          </button>
+          {!readOnly ? (
+            <button
+              type="button"
+              onClick={handleSaveAll}
+              disabled={saving}
+              className="flex items-center space-x-2 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-sm hover:shadow transition disabled:opacity-50 cursor-pointer"
+            >
+              {saving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              <span>{saving ? t.authConfig.saving : t.authConfig.saveAll}</span>
+            </button>
+          ) : (
+            <span className="px-3 py-1.5 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-bold flex items-center gap-1.5">
+              👁️ Sola Lettura
+            </span>
+          )}
         </div>
       </div>
 
@@ -415,6 +425,81 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models }) 
           <span>
             <strong>{t.authConfig.lockoutWarningTitle}</strong> {t.authConfig.lockoutWarningDesc}
           </span>
+        </div>
+
+        {/* MFA Policy Configuration */}
+        <div className="pt-4 border-t border-slate-100 space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <h5 className="text-xs font-bold text-slate-900 flex items-center gap-2">
+                <Shield className="w-3.5 h-3.5 text-rose-600" />
+                <span>{t.authConfig.mfaPolicySectionTitle}</span>
+              </h5>
+              <p className="text-[11px] text-slate-500 mt-0.5">
+                {t.authConfig.mfaPolicyDesc}
+              </p>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-full">
+              {t.authConfig.mfaPolicyBadge}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {[
+              {
+                id: 'disabled',
+                title: t.authConfig.mfaPolicyDisabledTitle,
+                desc: t.authConfig.mfaPolicyDisabledDesc
+              },
+              {
+                id: 'admin_only',
+                title: t.authConfig.mfaPolicyAdminOnlyTitle,
+                desc: t.authConfig.mfaPolicyAdminOnlyDesc
+              },
+              {
+                id: 'write_roles',
+                title: t.authConfig.mfaPolicyWriteRolesTitle,
+                desc: t.authConfig.mfaPolicyWriteRolesDesc
+              },
+              {
+                id: 'all',
+                title: t.authConfig.mfaPolicyAllTitle,
+                desc: t.authConfig.mfaPolicyAllDesc
+              }
+            ].map(item => {
+              const selected = (settings.mfa_policy || 'disabled') === item.id;
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => !readOnly && setSettings(prev => ({ ...prev, mfa_policy: item.id as any }))}
+                  className={`p-3.5 rounded-xl border transition cursor-pointer flex items-start space-x-3 ${
+                    selected
+                      ? 'border-rose-500 bg-rose-50/40 ring-1 ring-rose-500 shadow-xs'
+                      : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50/50'
+                  } ${readOnly ? 'pointer-events-none opacity-80' : ''}`}
+                >
+                  <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center shrink-0 ${
+                    selected ? 'border-rose-600 bg-rose-600' : 'border-slate-300 bg-white'
+                  }`}>
+                    {selected && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                  <div className="space-y-0.5">
+                    <div className="flex items-center space-x-2">
+                      <span className="text-xs font-bold text-slate-900">{item.title}</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 leading-snug">{item.desc}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl flex items-start space-x-2 text-blue-900 text-[11px]">
+            <Info className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+            <span>
+              <strong>{t.authConfig.mfaKeycloakNoticeTitle}</strong> {t.authConfig.mfaKeycloakNoticeDesc}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -825,6 +910,109 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models }) 
           <p className="text-[11px] text-slate-400">
             Durante ogni operazione di Check-in, le versioni più vecchie oltre questo limite verranno automaticamente eliminate.
           </p>
+        </div>
+      </div>
+
+      {/* SECTION 5: Banner Demo per la Pagina di Login */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="border-b border-slate-100 pb-3">
+          <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-cyan-600" />
+            <span>{t.authConfig.demoBannerSectionTitle}</span>
+          </h4>
+          <p className="text-xs text-slate-500 mt-1">
+            {t.authConfig.demoBannerSectionDesc}
+          </p>
+        </div>
+
+        <div className="space-y-4">
+          {/* Switch Attivazione Banner */}
+          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-200">
+            <div className="space-y-0.5">
+              <span className="text-xs font-bold text-slate-800">{t.authConfig.demoBannerSwitchLabel}</span>
+              <p className="text-[11px] text-slate-500">{t.authConfig.demoBannerSwitchDesc}</p>
+            </div>
+            <button
+              type="button"
+              disabled={readOnly}
+              onClick={() =>
+                setSettings({
+                  ...settings,
+                  show_demo_banner: !(settings.show_demo_banner ?? true)
+                })
+              }
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-hidden disabled:opacity-50 ${
+                settings.show_demo_banner !== false ? 'bg-cyan-600' : 'bg-slate-300'
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                  settings.show_demo_banner !== false ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Testo Personalizzato Banner */}
+          {settings.show_demo_banner !== false && (
+            <div className="space-y-2">
+              <label className="block text-xs font-bold text-slate-700">
+                {t.authConfig.demoBannerMessageLabel}
+              </label>
+              <input
+                type="text"
+                disabled={readOnly}
+                value={settings.demo_banner_message ?? 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'}
+                onChange={(e) =>
+                  setSettings({
+                    ...settings,
+                    demo_banner_message: e.target.value
+                  })
+                }
+                placeholder={t.authConfig.demoBannerMessagePlaceholder}
+                className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-medium disabled:opacity-60"
+              />
+
+              {/* Anteprima Live */}
+              <div className="mt-4 pt-4 border-t border-slate-100">
+                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                  {t.authConfig.demoBannerPreviewTitle}
+                </span>
+                <div className="p-4 bg-gradient-to-r from-cyan-50 via-sky-50 to-indigo-50 border border-cyan-200 rounded-xl shadow-xs space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-2">
+                      <span className="w-6 h-6 rounded-lg bg-cyan-600 text-white flex items-center justify-center text-xs font-bold shadow-2xs">
+                        👁️
+                      </span>
+                      <span className="text-xs font-extrabold text-cyan-950 uppercase tracking-wide">
+                        Accesso Demo Interattivo
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-0.5 bg-cyan-100/80 text-cyan-800 rounded-md border border-cyan-200">
+                      Sola Lettura
+                    </span>
+                  </div>
+                  <p className="text-xs text-cyan-900 leading-relaxed font-medium">
+                    {settings.demo_banner_message || 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'}
+                  </p>
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center space-x-2 text-[11px] font-mono">
+                      <span className="bg-white/90 px-2 py-0.5 rounded border border-cyan-200 text-cyan-900">
+                        user: <strong>demo</strong>
+                      </span>
+                      <span className="bg-white/90 px-2 py-0.5 rounded border border-cyan-200 text-cyan-900">
+                        pwd: <strong>EasyEA2026!</strong>
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-700 bg-white px-2.5 py-1 rounded-lg border border-cyan-200 shadow-2xs">
+                      <Sparkles className="w-3 h-3 text-cyan-600" />
+                      Compila credenziali Demo
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

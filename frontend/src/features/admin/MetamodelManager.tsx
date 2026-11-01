@@ -48,11 +48,13 @@ const LAYERS = ['All', 'Strategy', 'Business', 'Application', 'Technology', 'Mot
 interface MetamodelManagerProps {
   models?: ModelWorkspace[];
   activeModelId?: string;
+  readOnly?: boolean;
 }
 
 export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
   models = [],
-  activeModelId
+  activeModelId,
+  readOnly = false
 }) => {
   const { t, interpolate } = useLanguage();
   const [activeTab, setActiveTab] = useState<'types' | 'matrix'>('types');
@@ -770,32 +772,40 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                     Stereotipi: <strong className="text-indigo-700">{selectedType.stereotypes?.length || 0}</strong>
                   </span>
 
-                  <button
-                    onClick={() => handleOpenAddSection()}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
-                    title={interpolate(t.metamodel.addSectionModalSubtitle, { type: selectedType.type })}
-                  >
-                    <FolderPlus className="w-3.5 h-3.5 text-slate-600" />
-                    <span>{t.metamodel.addSectionBtn}</span>
-                  </button>
+                  {!readOnly ? (
+                    <>
+                      <button
+                        onClick={() => handleOpenAddSection()}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                        title={interpolate(t.metamodel.addSectionModalSubtitle, { type: selectedType.type })}
+                      >
+                        <FolderPlus className="w-3.5 h-3.5 text-slate-600" />
+                        <span>{t.metamodel.addSectionBtn}</span>
+                      </button>
 
-                  <button
-                    onClick={() => handleOpenAddStereotype(selectedType.type)}
-                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
-                    title={t.metamodel.addStereotypeBtn}
-                  >
-                    <Plus className="w-3.5 h-3.5 text-indigo-600" />
-                    <span>{t.metamodel.addStereotypeBtn}</span>
-                  </button>
+                      <button
+                        onClick={() => handleOpenAddStereotype(selectedType.type)}
+                        className="flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold transition shadow-2xs cursor-pointer"
+                        title={t.metamodel.addStereotypeBtn}
+                      >
+                        <Plus className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>{t.metamodel.addStereotypeBtn}</span>
+                      </button>
 
-                  <button
-                    onClick={() => handleOpenAddModal(selectedType.type, selectedType.layer)}
-                    className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition cursor-pointer"
-                    title={t.metamodel.addAttributeBtn}
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{t.metamodel.addAttributeBtn}</span>
-                  </button>
+                      <button
+                        onClick={() => handleOpenAddModal(selectedType.type, selectedType.layer)}
+                        className="flex items-center space-x-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/20 transition cursor-pointer"
+                        title={t.metamodel.addAttributeBtn}
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>{t.metamodel.addAttributeBtn}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 px-3 py-1.5 rounded-xl">
+                      👁️ Sola Lettura
+                    </span>
+                  )}
                 </div>
               </div>
             )}

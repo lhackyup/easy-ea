@@ -20,10 +20,13 @@ import {
   X
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import { MetamodelManager } from './MetamodelManager';
 import { AttributePackagesManager } from './AttributePackagesManager';
 import { RolesManager } from './RolesManager';
 import { AuthConfigManager } from './AuthConfigManager';
+import { ApiKeysManager } from './ApiKeysManager';
+import { AuditLogsManager } from './AuditLogsManager';
 
 interface AdminHubProps {
   models: ModelWorkspace[];
@@ -45,6 +48,9 @@ export const AdminHub: React.FC<AdminHubProps> = ({
   onSelectSubTab
 }) => {
   const { t, interpolate } = useLanguage();
+  const { user } = useAuth();
+  const isAdmin = Boolean(user?.assignments?.some((a) => a.role === 'admin'));
+  const isViewer = Boolean(user?.assignments?.some((a) => a.role === 'viewer') && !isAdmin);
 
   // New model creation form
   const [newModelName, setNewModelName] = useState('');
@@ -201,6 +207,23 @@ export const AdminHub: React.FC<AdminHubProps> = ({
         </div>
       </div>
 
+      {/* Demo Read-Only Banner */}
+      {isViewer && (
+        <div className="p-4 bg-cyan-50 border border-cyan-200 rounded-2xl flex items-start space-x-3 text-cyan-900 shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-cyan-100 text-cyan-700 flex items-center justify-center flex-shrink-0 font-bold text-sm">
+            👁️
+          </div>
+          <div className="text-xs">
+            <span className="font-extrabold uppercase tracking-wider text-cyan-800 block mb-0.5">
+              {t.rbac?.demoNoticeTitle || 'Accesso Demo Attivo'}
+            </span>
+            <p className="text-cyan-700 leading-relaxed">
+              {t.rbac?.demoNoticeDesc || 'Sei autenticato con il ruolo Demo Viewer. Puoi esplorare tutti gli Hubs, visualizzare i metamodelli, gli schemi e i cruscotti, ma le funzioni di creazione, modifica ed eliminazione sono disabilitate.'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* SubTab 1: Libraries & Workspace */}
       {subTab === 'models' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -275,13 +298,15 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                         >
                           <FileCode className="w-4 h-4" />
                         </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(m.id)}
-                          className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
-                          title={t.admin.deleteLibrary}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {!isViewer && (
+                          <button
+                            onClick={() => setDeleteConfirmId(m.id)}
+                            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                            title={t.admin.deleteLibrary}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
@@ -339,33 +364,47 @@ export const AdminHub: React.FC<AdminHubProps> = ({
               <p className="text-xs text-slate-500">{t.admin.createLibrarySubtitle}</p>
             </div>
 
-            {/* Mode Switcher Tabs */}
-            <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100/80 rounded-xl text-xs font-semibold">
-              <button
-                type="button"
-                onClick={() => setCreateMode('empty')}
-                className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition ${
-                  createMode === 'empty'
-                    ? 'bg-white text-rose-600 font-bold shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>{t.admin.createEmptyTab}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setCreateMode('file')}
-                className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition ${
-                  createMode === 'file'
-                    ? 'bg-white text-rose-600 font-bold shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>{t.admin.createFromFileTab}</span>
-              </button>
-            </div>
+            {isViewer ? (
+              <div className="p-5 bg-slate-50 border border-slate-200 rounded-xl text-center space-y-3">
+                <div className="w-10 h-10 rounded-full bg-cyan-100 text-cyan-700 mx-auto flex items-center justify-center font-bold text-base">
+                  👁️
+                </div>
+                <div className="text-xs">
+                  <h4 className="font-bold text-slate-800">Funzione Riservata agli Amministratori</h4>
+                  <p className="text-slate-500 mt-1 leading-relaxed">
+                    La creazione e l'importazione di nuove librerie ArchiMate non sono consentite in modalità Demo.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Mode Switcher Tabs */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100/80 rounded-xl text-xs font-semibold">
+                  <button
+                    type="button"
+                    onClick={() => setCreateMode('empty')}
+                    className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition ${
+                      createMode === 'empty'
+                        ? 'bg-white text-rose-600 font-bold shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>{t.admin.createEmptyTab}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCreateMode('file')}
+                    className={`py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 transition ${
+                      createMode === 'file'
+                        ? 'bg-white text-rose-600 font-bold shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>{t.admin.createFromFileTab}</span>
+                  </button>
+                </div>
 
             {/* TAB 1: Empty Library */}
             {createMode === 'empty' && (
@@ -612,13 +651,15 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                 </form>
               </>
             )}
+              </>
+            )}
           </div>
         </div>
       )}
 
       {/* SubTab: Metamodel Administration */}
       {subTab === 'metamodel' && (
-        <MetamodelManager models={models} activeModelId={selectedModelId} />
+        <MetamodelManager models={models} activeModelId={selectedModelId} readOnly={isViewer} />
       )}
 
       {/* SubTab: Packages & Reference Frameworks */}
@@ -626,6 +667,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
         <AttributePackagesManager
           models={models}
           selectedScope={packagesScope}
+          readOnly={isViewer}
           onSelectScope={(scope) => {
             setPackagesScope(scope);
             if (scope !== 'global') {
@@ -646,6 +688,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
         <RolesManager
           models={models}
           selectedModelId={selectedModelId}
+          readOnly={isViewer}
         />
       )}
 
@@ -653,7 +696,20 @@ export const AdminHub: React.FC<AdminHubProps> = ({
       {subTab === 'auth_config' && (
         <AuthConfigManager
           models={models}
+          readOnly={isViewer}
         />
+      )}
+
+      {/* SubTab: API Keys & AI Agents (MCP) */}
+      {subTab === 'api_keys' && (
+        <ApiKeysManager
+          readOnly={isViewer}
+        />
+      )}
+
+      {/* SubTab: Security Audit Trail (Tamper-Evident Logs) */}
+      {subTab === 'audit_logs' && (
+        <AuditLogsManager />
       )}
 
       {/* SubTab 5: System & Database Health */}
