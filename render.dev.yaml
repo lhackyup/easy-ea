@@ -1,0 +1,35 @@
+# ==============================================================================
+# EasyEA - Development / Preview Blueprint (Branch: develop)
+# Render.com Infrastructure-as-Code
+# ==============================================================================
+
+services:
+  - type: web
+    name: easyea-app-dev
+    runtime: image
+    image:
+      url: ghcr.io/lhackyup/easy-ea:develop
+    plan: free
+    region: frankfurt # opzioni: frankfurt, oregon, ohio, singapore
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: EASYEA_ENV
+        value: development
+      - key: EASYEA_SECRET_KEY
+        generateValue: true
+      - key: EASYEA_SEED_DEMO_USERS
+        value: "true" # Popola automaticamente gli utenti e dati di test/demo
+      - key: EASYEA_RBAC_MODE
+        value: hybrid
+      - key: DATABASE_URL
+        fromDatabase:
+          name: easyea-postgres-dev
+          property: connectionString
+
+databases:
+  - name: easyea-postgres-dev
+    databaseName: easyea_dev
+    user: easyea_dev_user
+    plan: free
+    region: frankfurt
