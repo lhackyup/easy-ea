@@ -683,7 +683,7 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                             <span>{t.rbac.resetPasswordBtn}</span>
                           </button>
                         ) : (
-                          <span className="text-[11px] text-slate-400 italic font-medium">Sola lettura</span>
+                          <span className="text-[11px] text-slate-400 italic font-medium">{t.common.readOnly || 'Sola lettura'}</span>
                         )}
                       </td>
                     </tr>

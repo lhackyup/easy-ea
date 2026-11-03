@@ -66,7 +66,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
 
   const handleAnalyzeDiff = async () => {
     if (!selectedFile) {
-      setError('Seleziona un file .archimate, .drawio o XML prima di procedere.');
+      setError(isIt ? 'Seleziona un file .archimate, .drawio o XML prima di procedere.' : 'Select a .archimate, .drawio or XML file before proceeding.');
       return;
     }
     setLoading(true);
@@ -108,11 +108,13 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
       const totalRem = (res.summary.removed_elements_count || 0) + (res.summary.removed_relationships_count || 0);
 
       setCommitMessage(
-        `Check-in modifiche da ${toolName} (${totalNew} nuovi, ${totalMod} modificati, ${totalRem} rimossi)`
+        isIt
+          ? `Check-in modifiche da ${toolName} (${totalNew} nuovi, ${totalMod} modificati, ${totalRem} rimossi)`
+          : `Check-in changes from ${toolName} (${totalNew} new, ${totalMod} modified, ${totalRem} removed)`
       );
       setStep('diff');
     } catch (err: any) {
-      setError(err.message || 'Errore durante l’analisi del diff.');
+      setError(err.message || (isIt ? 'Errore durante l’analisi del diff.' : 'Error analyzing diff.'));
     } finally {
       setLoading(false);
     }
@@ -183,7 +185,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
 
       const payload = {
         file_content: diffResult.xml_content,
-        commit_message: commitMessage.trim() || 'Check-in schema ArchiMate',
+        commit_message: commitMessage.trim() || (isIt ? 'Check-in schema ArchiMate' : 'ArchiMate schema check-in'),
         attribute_resolutions: flatAttrResolutions,
         catalog_removals: flatCatalogRemovals,
         new_elements: diffResult.new_elements,
@@ -193,7 +195,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
       const res = await api.checkinConfirm(schema.id, payload);
       onSuccess(res.schema);
     } catch (err: any) {
-      setError(err.message || 'Errore durante il salvataggio del check-in.');
+      setError(err.message || (isIt ? 'Errore durante il salvataggio del check-in.' : 'Error saving check-in.'));
     } finally {
       setLoading(false);
     }
@@ -221,9 +223,9 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
               <GitCommit className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800">Check-in Schema ArchiMate</h2>
+              <h2 className="text-lg font-bold text-slate-800">{isIt ? 'Check-in Schema ArchiMate' : 'ArchiMate Schema Check-in'}</h2>
               <p className="text-xs text-slate-500">
-                Schema: <span className="font-semibold text-slate-700">{schema.name}</span> ({schema.current_version}) • Formato: <span className="font-bold text-slate-700">{schema.format === 'drawio' ? 'Draw.io' : 'Archi'}</span>
+                {isIt ? 'Schema:' : 'Schema:'} <span className="font-semibold text-slate-700">{schema.name}</span> ({schema.current_version}) • {isIt ? 'Formato:' : 'Format:'} <span className="font-bold text-slate-700">{schema.format === 'drawio' ? 'Draw.io' : 'Archi'}</span>
               </p>
             </div>
           </div>
@@ -241,21 +243,21 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step === 'upload' ? 'bg-indigo-600 text-white font-bold' : 'bg-emerald-600 text-white'}`}>
               1
             </span>
-            <span className={step === 'upload' ? 'text-indigo-900 font-bold' : 'text-slate-500'}>Carica File</span>
+            <span className={step === 'upload' ? 'text-indigo-900 font-bold' : 'text-slate-500'}>{isIt ? 'Carica File' : 'Upload File'}</span>
           </div>
           <div className="w-8 h-[1px] bg-slate-300" />
           <div className="flex items-center space-x-2">
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step === 'diff' ? 'bg-indigo-600 text-white font-bold' : step === 'confirm' ? 'bg-emerald-600 text-white' : 'bg-slate-300 text-slate-600'}`}>
               2
             </span>
-            <span className={step === 'diff' ? 'text-indigo-900 font-bold' : 'text-slate-500'}>Review Diff (Elementi & Relazioni)</span>
+            <span className={step === 'diff' ? 'text-indigo-900 font-bold' : 'text-slate-500'}>{isIt ? 'Review Diff (Elementi & Relazioni)' : 'Review Diff (Elements & Relationships)'}</span>
           </div>
           <div className="w-8 h-[1px] bg-slate-300" />
           <div className="flex items-center space-x-2">
             <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[11px] ${step === 'confirm' ? 'bg-indigo-600 text-white font-bold' : 'bg-slate-300 text-slate-600'}`}>
               3
             </span>
-            <span className={step === 'confirm' ? 'text-indigo-900 font-bold' : 'text-slate-500'}>Conferma & Rilascio</span>
+            <span className={step === 'confirm' ? 'text-indigo-900 font-bold' : 'text-slate-500'}>{isIt ? 'Conferma & Rilascio' : 'Confirm & Release'}</span>
           </div>
         </div>
 
@@ -265,7 +267,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
             <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start space-x-3 text-rose-800 text-sm">
               <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
               <div>
-                <span className="font-bold">Attenzione: </span>
+                <span className="font-bold">{isIt ? 'Attenzione: ' : 'Warning: '}</span>
                 {error}
               </div>
             </div>
@@ -298,7 +300,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 </p>
                 {schema.format === 'drawio' && (
                   <p className="text-[11px] font-mono text-slate-600 bg-slate-200/70 px-2.5 py-1 rounded-md mt-2">
-                    📁 {isIt ? 'Percorso Draw.io:' : 'Draw.io Path:'} ~/snap/drawio/current/checked_out/ (o ~/.easyea/checked_out/)
+                    📁 {isIt ? 'Percorso Draw.io:' : 'Draw.io Path:'} ~/snap/drawio/current/checked_out/ ({isIt ? 'o' : 'or'} ~/.easyea/checked_out/)
                   </p>
                 )}
                 {selectedFile && (
@@ -312,11 +314,12 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
               <div className="bg-indigo-50/60 p-4 rounded-xl border border-indigo-100 text-xs text-indigo-900 leading-relaxed space-y-1">
                 <div className="font-bold flex items-center gap-1.5">
                   <Sliders className="w-4 h-4 text-indigo-600" />
-                  <span>Matching automatico e Diff Engine completo:</span>
+                  <span>{isIt ? 'Matching automatico e Diff Engine completo:' : 'Automatic matching and complete Diff Engine:'}</span>
                 </div>
                 <p>
-                  EasyEA effettua il matching per <strong className="font-semibold">Nome + Tipo di elemento</strong> e confronta sia gli elementi che le relazioni del diagramma.
-                  Nel passaggio successivo potrai visualizzare tutte le differenze (nuovi elementi/relazioni, attributi modificati, elementi/relazioni rimossi) e confermare le risoluzioni desiderate.
+                  {isIt
+                    ? 'EasyEA effettua il matching per Nome + Tipo di elemento e confronta sia gli elementi che le relazioni del diagramma. Nel passaggio successivo potrai visualizzare tutte le differenze (nuovi elementi/relazioni, attributi modificati, elementi/relazioni rimossi) e confermare le risoluzioni desiderate.'
+                    : 'EasyEA matches elements by Name + Type and compares both elements and relationships in the diagram. In the next step, you can review all differences (new elements/relationships, modified attributes, removed elements/relationships) and confirm your chosen resolutions.'}
                 </p>
               </div>
             </div>
@@ -328,27 +331,27 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
               {/* Comprehensive Summary Cards */}
               <div className="grid grid-cols-2 md:grid-cols-6 gap-2.5">
                 <div className="p-3 bg-blue-50/80 border border-blue-200 rounded-xl text-center">
-                  <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Nuovi Elementi</div>
+                  <div className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">{isIt ? 'Nuovi Elementi' : 'New Elements'}</div>
                   <div className="text-xl font-black text-blue-900 mt-0.5">{diffResult.summary.new_elements_count || 0}</div>
                 </div>
                 <div className="p-3 bg-indigo-50/80 border border-indigo-200 rounded-xl text-center">
-                  <div className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Nuove Relazioni</div>
+                  <div className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">{isIt ? 'Nuove Relazioni' : 'New Relations'}</div>
                   <div className="text-xl font-black text-indigo-900 mt-0.5">{diffResult.summary.new_relationships_count || 0}</div>
                 </div>
                 <div className="p-3 bg-amber-50/80 border border-amber-200 rounded-xl text-center">
-                  <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Elem. Modificati</div>
+                  <div className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">{isIt ? 'Elem. Modificati' : 'Mod. Elements'}</div>
                   <div className="text-xl font-black text-amber-900 mt-0.5">{diffResult.summary.modified_elements_count || 0}</div>
                 </div>
                 <div className="p-3 bg-orange-50/80 border border-orange-200 rounded-xl text-center">
-                  <div className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">Rel. Modificate</div>
+                  <div className="text-[10px] font-bold text-orange-700 uppercase tracking-wider">{isIt ? 'Rel. Modificate' : 'Mod. Relations'}</div>
                   <div className="text-xl font-black text-orange-900 mt-0.5">{diffResult.summary.modified_relationships_count || 0}</div>
                 </div>
                 <div className="p-3 bg-rose-50/80 border border-rose-200 rounded-xl text-center">
-                  <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Elem. Rimossi</div>
+                  <div className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">{isIt ? 'Elem. Rimossi' : 'Rem. Elements'}</div>
                   <div className="text-xl font-black text-rose-900 mt-0.5">{diffResult.summary.removed_elements_count || 0}</div>
                 </div>
                 <div className="p-3 bg-red-50/80 border border-red-200 rounded-xl text-center">
-                  <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">Rel. Rimosse</div>
+                  <div className="text-[10px] font-bold text-red-700 uppercase tracking-wider">{isIt ? 'Rel. Rimosse' : 'Rem. Relations'}</div>
                   <div className="text-xl font-black text-red-900 mt-0.5">{diffResult.summary.removed_relationships_count || 0}</div>
                 </div>
               </div>
@@ -365,7 +368,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                   }`}
                 >
                   <Layers className="w-3.5 h-3.5" />
-                  <span>Tutte le Differenze</span>
+                  <span>{isIt ? 'Tutte le Differenze' : 'All Differences'}</span>
                 </button>
                 <button
                   type="button"
@@ -377,7 +380,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                   }`}
                 >
                   <FileCode className="w-3.5 h-3.5" />
-                  <span>Elementi ({totalElemDiffs})</span>
+                  <span>{isIt ? 'Elementi' : 'Elements'} ({totalElemDiffs})</span>
                 </button>
                 <button
                   type="button"
@@ -389,16 +392,18 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                   }`}
                 >
                   <GitMerge className="w-3.5 h-3.5" />
-                  <span>Relazioni ({totalRelDiffs})</span>
+                  <span>{isIt ? 'Relazioni' : 'Relationships'} ({totalRelDiffs})</span>
                 </button>
               </div>
 
               {!diffResult.has_differences && (
                 <div className="p-8 text-center bg-slate-50 border border-slate-200 rounded-2xl space-y-2">
                   <CheckCircle2 className="w-10 h-10 text-emerald-500 mx-auto" />
-                  <h3 className="text-sm font-bold text-slate-800">Nessuna differenza semantica rilevata</h3>
+                  <h3 className="text-sm font-bold text-slate-800">{isIt ? 'Nessuna differenza semantica rilevata' : 'No semantic differences detected'}</h3>
                   <p className="text-xs text-slate-500">
-                    Gli elementi e le relazioni nel file corrispondono al catalogo. Procedendo aggiornerai il layout visivo e creerai una nuova versione dello schema.
+                    {isIt
+                      ? 'Gli elementi e le relazioni nel file corrispondono al catalogo. Procedendo aggiornerai il layout visivo e creerai una nuova versione dello schema.'
+                      : 'Elements and relationships in the file match the catalog. Proceeding will update visual layout and create a new schema version.'}
                   </p>
                 </div>
               )}
@@ -413,18 +418,18 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2 text-sm font-bold text-slate-800">
                         <Sliders className="w-4 h-4 text-amber-600" />
-                        <span>Attributi Elementi con Valori Differenti (Scegli se sovrascrivere)</span>
+                        <span>{isIt ? 'Attributi Elementi con Valori Differenti (Scegli se sovrascrivere)' : 'Element Attributes with Different Values (Choose whether to overwrite)'}</span>
                       </div>
 
                       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200">
                             <tr>
-                              <th className="px-3.5 py-2.5">Elemento / Tipo</th>
-                              <th className="px-3.5 py-2.5">Attributo</th>
-                              <th className="px-3.5 py-2.5 text-slate-500">Valore Attuale in EasyEA</th>
-                              <th className="px-3.5 py-2.5 text-indigo-700">Nuovo Valore da File</th>
-                              <th className="px-3.5 py-2.5 text-center">Azione</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Elemento / Tipo' : 'Element / Type'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Attributo' : 'Attribute'}</th>
+                              <th className="px-3.5 py-2.5 text-slate-500">{isIt ? 'Valore Attuale in EasyEA' : 'Current Value in EasyEA'}</th>
+                              <th className="px-3.5 py-2.5 text-indigo-700">{isIt ? 'Nuovo Valore da File' : 'New Value from File'}</th>
+                              <th className="px-3.5 py-2.5 text-center">{isIt ? 'Azione' : 'Action'}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -441,10 +446,10 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                     )}
                                     <td className="px-3.5 py-2.5 font-semibold text-slate-700">{change.label}</td>
                                     <td className="px-3.5 py-2.5 text-slate-500 bg-slate-50/50 max-w-[150px] truncate" title={change.current_value}>
-                                      {change.current_value || <span className="italic text-slate-400 font-normal">Vuoto</span>}
+                                      {change.current_value || <span className="italic text-slate-400 font-normal">{isIt ? 'Vuoto' : 'Empty'}</span>}
                                     </td>
                                     <td className="px-3.5 py-2.5 text-indigo-900 font-semibold max-w-[150px] truncate" title={change.new_value}>
-                                      {change.new_value || <span className="italic text-slate-400 font-normal">Vuoto</span>}
+                                      {change.new_value || <span className="italic text-slate-400 font-normal">{isIt ? 'Vuoto' : 'Empty'}</span>}
                                     </td>
                                     <td className="px-3.5 py-2.5 text-center">
                                       <button
@@ -456,7 +461,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                             : 'bg-slate-100 text-slate-600 border border-slate-200'
                                         }`}
                                       >
-                                        {isOverwrite ? 'Sovrascrivi' : 'Mantieni Attuale'}
+                                        {isOverwrite ? (isIt ? 'Sovrascrivi' : 'Overwrite') : (isIt ? 'Mantieni Attuale' : 'Keep Current')}
                                       </button>
                                     </td>
                                   </tr>
@@ -474,7 +479,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2 text-sm font-bold text-slate-800">
                         <PlusCircle className="w-4 h-4 text-emerald-600" />
-                        <span>Nuovi Elementi da Aggiungere al Catalogo ({diffResult.new_elements.length})</span>
+                        <span>{isIt ? `Nuovi Elementi da Aggiungere al Catalogo (${diffResult.new_elements.length})` : `New Elements to Add to Catalog (${diffResult.new_elements.length})`}</span>
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-48 overflow-y-auto p-1">
@@ -485,7 +490,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                               <div className="text-[10px] text-emerald-700 mt-0.5">{ne.type} • {ne.layer}</div>
                             </div>
                             <span className="text-[10px] font-bold px-2 py-0.5 bg-emerald-200/80 text-emerald-900 rounded-full">
-                              Nuovo
+                              {isIt ? 'Nuovo' : 'New'}
                             </span>
                           </div>
                         ))}
@@ -498,17 +503,17 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2 text-sm font-bold text-slate-800">
                         <Trash2 className="w-4 h-4 text-rose-600" />
-                        <span>Elementi non più presenti nel disegno ({diffResult.removed_elements.length})</span>
+                        <span>{isIt ? `Elementi non più presenti nel disegno (${diffResult.removed_elements.length})` : `Elements no longer present in drawing (${diffResult.removed_elements.length})`}</span>
                       </div>
 
                       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200">
                             <tr>
-                              <th className="px-3.5 py-2.5">Elemento</th>
-                              <th className="px-3.5 py-2.5">Tipo</th>
-                              <th className="px-3.5 py-2.5">Layer</th>
-                              <th className="px-3.5 py-2.5 text-center">Rimuovi anche dal Catalogo Globale?</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Elemento' : 'Element'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Tipo' : 'Type'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Layer' : 'Layer'}</th>
+                              <th className="px-3.5 py-2.5 text-center">{isIt ? 'Rimuovi anche dal Catalogo Globale?' : 'Also remove from Global Catalog?'}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -528,7 +533,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                         className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300"
                                       />
                                       <span className={`font-semibold ${removeCatalog ? 'text-rose-700 font-bold' : 'text-slate-500'}`}>
-                                        {removeCatalog ? 'Sì, elimina dal catalogo' : 'No, rimuovi solo dallo schema'}
+                                        {removeCatalog ? (isIt ? 'Sì, elimina dal catalogo' : 'Yes, delete from catalog') : (isIt ? 'No, rimuovi solo dallo schema' : 'No, remove only from schema')}
                                       </span>
                                     </label>
                                   </td>
@@ -553,19 +558,19 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2 text-sm font-bold text-slate-800">
                         <Sliders className="w-4 h-4 text-orange-600" />
-                        <span>Relazioni con Attributi Modificati ({diffResult.modified_relationships.length})</span>
+                        <span>{isIt ? `Relazioni con Attributi Modificati (${diffResult.modified_relationships.length})` : `Relationships with Modified Attributes (${diffResult.modified_relationships.length})`}</span>
                       </div>
 
                       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200">
                             <tr>
-                              <th className="px-3.5 py-2.5">Relazione (Sorgente &rarr; Destinazione)</th>
-                              <th className="px-3.5 py-2.5">Tipo</th>
-                              <th className="px-3.5 py-2.5">Attributo</th>
-                              <th className="px-3.5 py-2.5 text-slate-500">Valore EasyEA</th>
-                              <th className="px-3.5 py-2.5 text-indigo-700">Nuovo Valore</th>
-                              <th className="px-3.5 py-2.5 text-center">Azione</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Relazione (Sorgente → Destinazione)' : 'Relationship (Source → Target)'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Tipo' : 'Type'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Attributo' : 'Attribute'}</th>
+                              <th className="px-3.5 py-2.5 text-slate-500">{isIt ? 'Valore EasyEA' : 'EasyEA Value'}</th>
+                              <th className="px-3.5 py-2.5 text-indigo-700">{isIt ? 'Nuovo Valore' : 'New Value'}</th>
+                              <th className="px-3.5 py-2.5 text-center">{isIt ? 'Azione' : 'Action'}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -577,19 +582,19 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                     {cIdx === 0 && (
                                       <td className="px-3.5 py-2.5 font-bold text-slate-900 align-top" rowSpan={mrel.changes.length}>
                                         <div className="flex items-center space-x-1.5">
-                                          <span>{mrel.source_name || 'Sorgente'}</span>
+                                          <span>{mrel.source_name || (isIt ? 'Sorgente' : 'Source')}</span>
                                           <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-                                          <span>{mrel.target_name || 'Destinazione'}</span>
+                                          <span>{mrel.target_name || (isIt ? 'Destinazione' : 'Target')}</span>
                                         </div>
                                       </td>
                                     )}
                                     <td className="px-3.5 py-2.5 text-slate-600 font-mono text-[11px]">{mrel.type}</td>
                                     <td className="px-3.5 py-2.5 font-semibold text-slate-700">{change.label}</td>
                                     <td className="px-3.5 py-2.5 text-slate-500 bg-slate-50/50 max-w-[130px] truncate" title={change.current_value}>
-                                      {change.current_value || <span className="italic text-slate-400 font-normal">Vuoto</span>}
+                                      {change.current_value || <span className="italic text-slate-400 font-normal">{isIt ? 'Vuoto' : 'Empty'}</span>}
                                     </td>
                                     <td className="px-3.5 py-2.5 text-indigo-900 font-semibold max-w-[130px] truncate" title={change.new_value}>
-                                      {change.new_value || <span className="italic text-slate-400 font-normal">Vuoto</span>}
+                                      {change.new_value || <span className="italic text-slate-400 font-normal">{isIt ? 'Vuoto' : 'Empty'}</span>}
                                     </td>
                                     <td className="px-3.5 py-2.5 text-center">
                                       <button
@@ -601,7 +606,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                             : 'bg-slate-100 text-slate-600 border border-slate-200'
                                         }`}
                                       >
-                                        {isOverwrite ? 'Sovrascrivi' : 'Mantieni'}
+                                        {isOverwrite ? (isIt ? 'Sovrascrivi' : 'Overwrite') : (isIt ? 'Mantieni' : 'Keep')}
                                       </button>
                                     </td>
                                   </tr>
@@ -619,18 +624,18 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2 text-sm font-bold text-slate-800">
                         <GitMerge className="w-4 h-4 text-indigo-600" />
-                        <span>Nuove Relazioni da Aggiungere al Catalogo ({diffResult.new_relationships.length})</span>
+                        <span>{isIt ? `Nuove Relazioni da Aggiungere al Catalogo (${diffResult.new_relationships.length})` : `New Relationships to Add to Catalog (${diffResult.new_relationships.length})`}</span>
                       </div>
 
                       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200">
                             <tr>
-                              <th className="px-3.5 py-2.5">Sorgente</th>
-                              <th className="px-3.5 py-2.5">Tipo Relazione</th>
-                              <th className="px-3.5 py-2.5">Destinazione</th>
-                              <th className="px-3.5 py-2.5">Nome / Note</th>
-                              <th className="px-3.5 py-2.5 text-center">Stato</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Sorgente' : 'Source'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Tipo Relazione' : 'Relationship Type'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Destinazione' : 'Target'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Nome / Note' : 'Name / Notes'}</th>
+                              <th className="px-3.5 py-2.5 text-center">{isIt ? 'Stato' : 'Status'}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -646,7 +651,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                 <td className="px-3.5 py-2.5 text-slate-500">{nrel.name || nrel.documentation || '—'}</td>
                                 <td className="px-3.5 py-2.5 text-center">
                                   <span className="text-[10px] font-bold px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded-full">
-                                    Nuova
+                                    {isIt ? 'Nuova' : 'New'}
                                   </span>
                                 </td>
                               </tr>
@@ -662,17 +667,17 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                     <div className="space-y-3">
                       <div className="flex items-center space-x-2 text-sm font-bold text-slate-800">
                         <Trash2 className="w-4 h-4 text-red-600" />
-                        <span>Relazioni non più presenti nel disegno ({diffResult.removed_relationships.length})</span>
+                        <span>{isIt ? `Relazioni non più presenti nel disegno (${diffResult.removed_relationships.length})` : `Relationships no longer present in drawing (${diffResult.removed_relationships.length})`}</span>
                       </div>
 
                       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm">
                         <table className="w-full text-xs text-left">
                           <thead className="bg-slate-100 text-slate-700 uppercase text-[10px] font-bold border-b border-slate-200">
                             <tr>
-                              <th className="px-3.5 py-2.5">Sorgente &rarr; Destinazione</th>
-                              <th className="px-3.5 py-2.5">Tipo Relazione</th>
-                              <th className="px-3.5 py-2.5">Nome</th>
-                              <th className="px-3.5 py-2.5 text-center">Rimuovi anche dal Catalogo Globale?</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Sorgente → Destinazione' : 'Source → Target'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Tipo Relazione' : 'Relationship Type'}</th>
+                              <th className="px-3.5 py-2.5">{isIt ? 'Nome' : 'Name'}</th>
+                              <th className="px-3.5 py-2.5 text-center">{isIt ? 'Rimuovi anche dal Catalogo Globale?' : 'Also remove from Global Catalog?'}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100">
@@ -682,9 +687,9 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                 <tr key={rrel.id} className="hover:bg-slate-50">
                                   <td className="px-3.5 py-2.5 font-bold text-slate-900">
                                     <div className="flex items-center space-x-1.5">
-                                      <span>{rrel.source_name || 'Sorgente'}</span>
+                                      <span>{rrel.source_name || (isIt ? 'Sorgente' : 'Source')}</span>
                                       <ArrowRight className="w-3 h-3 text-slate-400 shrink-0" />
-                                      <span>{rrel.target_name || 'Destinazione'}</span>
+                                      <span>{rrel.target_name || (isIt ? 'Destinazione' : 'Target')}</span>
                                     </div>
                                   </td>
                                   <td className="px-3.5 py-2.5 text-slate-600 font-mono text-[11px]">{rrel.type}</td>
@@ -698,7 +703,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                                         className="w-4 h-4 rounded text-rose-600 focus:ring-rose-500 border-slate-300"
                                       />
                                       <span className={`font-semibold ${removeCatalog ? 'text-rose-700 font-bold' : 'text-slate-500'}`}>
-                                        {removeCatalog ? 'Sì, elimina dal catalogo' : 'No, rimuovi solo dallo schema'}
+                                        {removeCatalog ? (isIt ? 'Sì, elimina dal catalogo' : 'Yes, delete from catalog') : (isIt ? 'No, rimuovi solo dallo schema' : 'No, remove only from schema')}
                                       </span>
                                     </label>
                                   </td>
@@ -749,7 +754,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
             disabled={loading}
             className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-200/60 transition"
           >
-            Annulla
+            {isIt ? 'Annulla' : 'Cancel'}
           </button>
 
           <div className="flex items-center space-x-2">
@@ -760,7 +765,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 disabled={loading}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition"
               >
-                Indietro
+                {isIt ? 'Indietro' : 'Back'}
               </button>
             )}
 
@@ -771,7 +776,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 disabled={loading}
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 transition"
               >
-                Indietro
+                {isIt ? 'Indietro' : 'Back'}
               </button>
             )}
 
@@ -783,7 +788,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition disabled:opacity-50 flex items-center space-x-1.5 shadow-sm shadow-indigo-200"
               >
                 {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Analizza Differenze &rarr;</span>
+                <span>{isIt ? 'Analizza Differenze →' : 'Analyze Differences →'}</span>
               </button>
             )}
 
@@ -794,7 +799,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 disabled={loading}
                 className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200"
               >
-                <span>Procedi al Commit &rarr;</span>
+                <span>{isIt ? 'Procedi al Commit →' : 'Proceed to Commit →'}</span>
               </button>
             )}
 
@@ -806,7 +811,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition disabled:opacity-50 flex items-center space-x-1.5 shadow-sm shadow-emerald-200"
               >
                 {loading && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
-                <span>Conferma Check-in & Rilascia Blocco</span>
+                <span>{isIt ? 'Conferma Check-in & Rilascia Blocco' : 'Confirm Check-in & Release Lock'}</span>
               </button>
             )}
           </div>

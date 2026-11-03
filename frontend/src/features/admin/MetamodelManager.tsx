@@ -769,7 +769,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                     Attributi Custom: <strong className="text-rose-700">{selectedType.custom_attributes?.length || 0}</strong>
                   </span>
                   <span className="text-[11px] font-semibold text-slate-500 bg-white border border-slate-200 px-2.5 py-1 rounded-lg shadow-2xs">
-                    Stereotipi: <strong className="text-indigo-700">{selectedType.stereotypes?.length || 0}</strong>
+                    {t.metamodel.stereotypesLabel || 'Stereotipi:'} <strong className="text-indigo-700">{selectedType.stereotypes?.length || 0}</strong>
                   </span>
 
                   {!readOnly ? (
@@ -803,7 +803,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                     </>
                   ) : (
                     <span className="text-xs font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 px-3 py-1.5 rounded-xl">
-                      👁️ Sola Lettura
+                      👁️ {t.common.readOnly || 'Sola Lettura'}
                     </span>
                   )}
                 </div>
@@ -2070,7 +2070,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
               </div>
               <div>
                 <h3 className="text-base font-bold text-slate-900">
-                  {stereotypeModal.isEditing ? 'Modifica Stereotipo' : t.metamodel.addStereotypeBtn}
+                  {stereotypeModal.isEditing ? (t.metamodel.editStereotypeTooltip || 'Modifica Stereotipo') : t.metamodel.addStereotypeBtn}
                 </h3>
                 <p className="text-xs text-slate-500 font-mono">
                   Base Type: <strong>{stereotypeModal.base_type}</strong>
@@ -2196,7 +2196,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                   {t.metamodel.stereotypeAddAttributeRule}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Stereotipo: <strong>{linkAttrModal.stereotypeLabel}</strong>
+                  {t.metamodel.stereotypePrefix || 'Stereotipo:'} <strong>{linkAttrModal.stereotypeLabel}</strong>
                 </p>
               </div>
             </div>

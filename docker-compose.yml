@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/lhackyup/easy-ea:1.0.0
+    image: ghcr.io/lhackyup/easy-ea:1.0.1
     container_name: easyea-app
     restart: unless-stopped
     ports:

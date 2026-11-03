@@ -29,6 +29,7 @@ import {
   ArchimateSvgDefs,
   getArchimateEdgeProps
 } from '../../lib/archimateVisuals';
+import { useLanguage } from '../../context/LanguageContext';
 
 const nodeTypes = {
   archimateNode: ArchimateStandardNode,
@@ -49,6 +50,8 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
   onClose,
   onSaveSuccess
 }) => {
+  const { language } = useLanguage();
+  const isIt = language === 'it';
   const [code, setCode] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
   const [saving, setSaving] = useState<boolean>(false);
@@ -171,7 +174,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
     } catch (err: any) {
       setValidationResult({
         valid: false,
-        error: err.message || 'Errore di validazione SaC.'
+        error: err.message || (isIt ? 'Errore di validazione SaC.' : 'SaC validation error.')
       });
       return null;
     }
@@ -208,7 +211,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
       link.click();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(`Errore nella generazione del file ArchiMate: ${err.message}`);
+      alert(isIt ? `Errore nella generazione del file ArchiMate: ${err.message}` : `Error generating ArchiMate file: ${err.message}`);
     }
   };
 
@@ -216,14 +219,14 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
   const handleSave = async () => {
     const valRes = await handleValidate(false);
     if (!valRes) {
-      alert('Impossibile salvare: correggi gli errori di sintassi prima di procedere.');
+      alert(isIt ? 'Impossibile salvare: correggi gli errori di sintassi prima di procedere.' : 'Cannot save: please fix syntax errors before proceeding.');
       return;
     }
 
     setSaving(true);
     try {
       if (schema?.id) {
-        const res = await api.updateSchemaFromSaC(schema.id, code, 'Aggiornamento da Schema-as-Code Web Editor');
+        const res = await api.updateSchemaFromSaC(schema.id, code, isIt ? 'Aggiornamento da Schema-as-Code Web Editor' : 'Updated from Schema-as-Code Web Editor');
         if (onSaveSuccess) onSaveSuccess(res.schema);
         onClose();
       } else {
@@ -232,7 +235,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      alert(`Errore durante il salvataggio: ${err.message}`);
+      alert(isIt ? `Errore durante il salvataggio: ${err.message}` : `Error while saving: ${err.message}`);
     } finally {
       setSaving(false);
     }
@@ -250,14 +253,14 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
             <div>
               <div className="flex items-center space-x-2">
                 <h2 className="text-lg font-bold text-white tracking-wide">
-                  {schema ? schema.name : 'Nuovo Schema da Codice'}
+                  {schema ? schema.name : (isIt ? 'Nuovo Schema da Codice' : 'New Schema from Code')}
                 </h2>
                 <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                   Schema-as-Code (.eac)
                 </span>
               </div>
               <p className="text-xs text-slate-400">
-                Linguaggio dichiarativo per Enterprise Architecture bidirezionale con Archi (ArchiMate 3.x)
+                {isIt ? 'Linguaggio dichiarativo per Enterprise Architecture bidirezionale con Archi (ArchiMate 3.x)' : 'Declarative language for bidirectional Enterprise Architecture with Archi (ArchiMate 3.x)'}
               </p>
             </div>
           </div>
@@ -274,7 +277,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
                 }`}
               >
                 <FileCode2 className="w-3.5 h-3.5" />
-                <span>Editor Codice</span>
+                <span>{isIt ? 'Editor Codice' : 'Code Editor'}</span>
               </button>
               <button
                 onClick={() => handleTabChange('preview')}
@@ -285,26 +288,26 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
                 }`}
               >
                 <Eye className="w-3.5 h-3.5" />
-                <span>Anteprima Diagramma</span>
+                <span>{isIt ? 'Anteprima Diagramma' : 'Diagram Preview'}</span>
               </button>
             </div>
 
             <button
               onClick={handleDownloadEac}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors"
-              title="Scarica sorgente .eac"
+              title={isIt ? 'Scarica sorgente .eac' : 'Download .eac source'}
             >
               <Download className="w-3.5 h-3.5 text-indigo-400" />
-              <span>Scarica .eac</span>
+              <span>{isIt ? 'Scarica .eac' : 'Download .eac'}</span>
             </button>
 
             <button
               onClick={handleDownloadArchimate}
               className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition-colors"
-              title="Compila e scarica file .archimate per Archi"
+              title={isIt ? 'Compila e scarica file .archimate per Archi' : 'Compile and download .archimate file for Archi'}
             >
               <Layers className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Scarica .archimate</span>
+              <span>{isIt ? 'Scarica .archimate' : 'Download .archimate'}</span>
             </button>
 
             <button
@@ -321,7 +324,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
           {loading ? (
             <div className="flex-1 flex flex-col items-center justify-center text-slate-400 space-y-3">
               <RefreshCw className="w-7 h-7 animate-spin text-indigo-500" />
-              <span className="text-sm">Caricamento sorgente Schema-as-Code...</span>
+              <span className="text-sm">{isIt ? 'Caricamento sorgente Schema-as-Code...' : 'Loading Schema-as-Code source...'}</span>
             </div>
           ) : activeTab === 'editor' ? (
             <div className="flex-1 flex flex-col p-4 overflow-hidden">
@@ -333,7 +336,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
                     if (validationResult) setValidationResult(null);
                   }}
                   spellCheck={false}
-                  placeholder="Scrivi qui il tuo codice Schema-as-Code (.eac)..."
+                  placeholder={isIt ? 'Scrivi qui il tuo codice Schema-as-Code (.eac)...' : 'Write your Schema-as-Code (.eac) here...'}
                   className="w-full h-full p-4 font-mono text-sm leading-relaxed text-indigo-100 bg-transparent resize-none focus:outline-none focus:ring-0 selection:bg-indigo-500/30 overflow-auto"
                 />
               </div>
@@ -346,15 +349,16 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
                     className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-md font-medium flex items-center space-x-1.5 transition-colors"
                   >
                     <Play className="w-3 h-3 text-emerald-400 fill-emerald-400" />
-                    <span>Verifica Sintassi</span>
+                    <span>{isIt ? 'Verifica Sintassi' : 'Verify Syntax'}</span>
                   </button>
 
                   {validationResult?.valid && (
                     <div className="flex items-center space-x-1.5 text-emerald-400 font-medium">
                       <CheckCircle2 className="w-4 h-4" />
                       <span>
-                        Sintassi corretta: {validationResult.summary?.elements_count} elementi,{' '}
-                        {validationResult.summary?.relationships_count} relazioni.
+                        {isIt
+                          ? `Sintassi corretta: ${validationResult.summary?.elements_count} elementi, ${validationResult.summary?.relationships_count} relazioni.`
+                          : `Valid syntax: ${validationResult.summary?.elements_count} elements, ${validationResult.summary?.relationships_count} relationships.`}
                       </span>
                     </div>
                   )}
@@ -363,7 +367,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
                     <div className="flex items-center space-x-1.5 text-rose-400 font-medium">
                       <AlertTriangle className="w-4 h-4" />
                       <span>
-                        {validationResult.line ? `Riga ${validationResult.line}: ` : ''}
+                        {validationResult.line ? (isIt ? `Riga ${validationResult.line}: ` : `Line ${validationResult.line}: `) : ''}
                         {validationResult.error}
                       </span>
                     </div>
@@ -372,7 +376,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
 
                 <div className="flex items-center space-x-2 text-slate-500">
                   <Info className="w-3.5 h-3.5" />
-                  <span>Sintassi DSL ArchiMate 3.x supportata nativamente</span>
+                  <span>{isIt ? 'Sintassi DSL ArchiMate 3.x supportata nativamente' : 'Native ArchiMate 3.x DSL syntax support'}</span>
                 </div>
               </div>
             </div>
@@ -400,7 +404,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
               <div className="absolute top-4 left-4 z-10 bg-slate-900/90 backdrop-blur-md border border-slate-800 px-3.5 py-2 rounded-xl shadow-lg flex items-center space-x-2 text-xs text-slate-300">
                 <Sparkles className="w-4 h-4 text-indigo-400" />
                 <span>
-                  Anteprima generata dinamicamente con Auto-Layout gerarchico ArchiMate
+                  {isIt ? 'Anteprima generata dinamicamente con Auto-Layout gerarchico ArchiMate' : 'Dynamically generated preview with hierarchical ArchiMate auto-layout'}
                 </span>
               </div>
             </div>
@@ -411,9 +415,9 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
         <div className="px-6 py-3.5 border-t border-slate-800 bg-slate-950/80 flex items-center justify-between">
           <div className="text-xs text-slate-400">
             {schema ? (
-              <span>Salvando verrà generata una nuova versione nello storico dello schema.</span>
+              <span>{isIt ? 'Salvando verrà generata una nuova versione nello storico dello schema.' : 'Saving will create a new version in the schema history.'}</span>
             ) : (
-              <span>Verrà creato un nuovo schema nel catalogo corrente.</span>
+              <span>{isIt ? 'Verrà creato un nuovo schema nel catalogo corrente.' : 'A new schema will be created in the current catalog.'}</span>
             )}
           </div>
 
@@ -422,7 +426,7 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
               onClick={onClose}
               className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition-colors"
             >
-              Annulla
+              {isIt ? 'Annulla' : 'Cancel'}
             </button>
             <button
               onClick={handleSave}
@@ -432,12 +436,12 @@ export const SchemaAsCodeModal: React.FC<SchemaAsCodeModalProps> = ({
               {saving ? (
                 <>
                   <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  <span>Salvataggio...</span>
+                  <span>{isIt ? 'Salvataggio...' : 'Saving...'}</span>
                 </>
               ) : (
                 <>
                   <Save className="w-3.5 h-3.5" />
-                  <span>{schema ? 'Salva Modifiche' : 'Crea Schema da SaC'}</span>
+                  <span>{schema ? (isIt ? 'Salva Modifiche' : 'Save Changes') : (isIt ? 'Crea Schema da SaC' : 'Create Schema from SaC')}</span>
                 </>
               )}
             </button>

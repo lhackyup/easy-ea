@@ -271,7 +271,7 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
             onClick={() => setFeedback(null)}
             className="text-xs font-bold underline hover:opacity-80"
           >
-            Chiudi
+            {t.common.close || 'Chiudi'}
           </button>
         </div>
       )}
@@ -336,7 +336,7 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              Tutte
+              {t.common.all || 'Tutte'}
             </button>
             <button
               onClick={() => setFilterScope('workspace')}
@@ -346,7 +346,7 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              Libreria
+              {t.common.workspace || 'Libreria'}
             </button>
             <button
               onClick={() => setFilterScope('global')}
@@ -356,7 +356,7 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
                   : 'text-slate-500 hover:text-slate-900'
               }`}
             >
-              🌐 Globali
+              🌐 {t.metamodel?.scopeBadgeGlobal || 'Globali'}
             </button>
           </div>
         </div>
@@ -366,7 +366,7 @@ export const BusinessViewsManager: React.FC<BusinessViewsManagerProps> = ({
       {loading ? (
         <div className="py-20 flex flex-col items-center justify-center space-y-3">
           <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
-          <span className="text-xs text-slate-500 font-semibold">Caricamento viste personalizzate...</span>
+          <span className="text-xs text-slate-500 font-semibold">{t.common.loading || 'Caricamento viste personalizzate...'}</span>
         </div>
       ) : filteredViews.length === 0 ? (
         <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center space-y-3">

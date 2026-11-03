@@ -1,7 +1,7 @@
 {
   "name": "EasyEA Official Package Registry",
   "version": "1.0.0",
-  "description": "Catalogo ufficiale dei pacchetti e framework architetturali per EasyEA",
+  "description": "Official catalog of architectural packages and frameworks for EasyEA",
   "updated_at": "2026-10-31T10:00:00Z",
   "packages": [
     {

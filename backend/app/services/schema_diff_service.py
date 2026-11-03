@@ -110,7 +110,7 @@ def compute_schema_diff(
             if up_name and (existing_db_elem.name or "") != up_name:
                 changes.append({
                     "field": "name",
-                    "label": "Nome Elemento",
+                    "label": "Element Name",
                     "current_value": existing_db_elem.name or "",
                     "new_value": up_name,
                     "overwrite": True
@@ -118,7 +118,7 @@ def compute_schema_diff(
             if up_type and (existing_db_elem.type or "") != up_type:
                 changes.append({
                     "field": "type",
-                    "label": "Tipo ArchiMate",
+                    "label": "ArchiMate Type",
                     "current_value": existing_db_elem.type or "",
                     "new_value": up_type,
                     "overwrite": True
@@ -126,7 +126,7 @@ def compute_schema_diff(
             if (existing_db_elem.documentation or "") != up_doc:
                 changes.append({
                     "field": "documentation",
-                    "label": "Documentazione",
+                    "label": "Documentation",
                     "current_value": existing_db_elem.documentation or "",
                     "new_value": up_doc,
                     "overwrite": True
@@ -248,7 +248,7 @@ def compute_schema_diff(
             if (existing_db_rel.documentation or "") != up_rel_doc:
                 changes.append({
                     "field": "documentation",
-                    "label": "Documentazione",
+                    "label": "Documentation",
                     "current_value": existing_db_rel.documentation or "",
                     "new_value": up_rel_doc,
                     "overwrite": True
@@ -256,7 +256,7 @@ def compute_schema_diff(
             if (existing_db_rel.name or "") != up_rel_name and up_rel_name:
                 changes.append({
                     "field": "name",
-                    "label": "Nome Relazione",
+                    "label": "Relationship Name",
                     "current_value": existing_db_rel.name or "",
                     "new_value": up_rel_name,
                     "overwrite": True

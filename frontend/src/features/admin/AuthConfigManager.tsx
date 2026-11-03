@@ -329,7 +329,7 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
             </button>
           ) : (
             <span className="px-3 py-1.5 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-bold flex items-center gap-1.5">
-              👁️ Sola Lettura
+              👁️ {t.common.readOnly || 'Sola Lettura'}
             </span>
           )}
         </div>
@@ -880,16 +880,16 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
         <div className="border-b border-slate-100 pb-3">
           <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
             <FolderGit2 className="w-4 h-4 text-purple-600" />
-            <span>Schema Repository & Conservazione Storico Versioni</span>
+            <span>{t.authConfig.versionRetentionSectionTitle || 'Schema Repository & Conservazione Storico Versioni'}</span>
           </h4>
           <p className="text-xs text-slate-500 mt-1">
-            Configura le policy globali di retention per le versioni storiche degli schemi ArchiMate importati.
+            {t.authConfig.versionRetentionSectionDesc || 'Configura le policy globali di retention per le versioni storiche degli schemi ArchiMate importati.'}
           </p>
         </div>
 
         <div className="max-w-md space-y-2">
           <label className="block text-xs font-bold text-slate-700">
-            Numero Massimo di Versioni da Conservare per Schema (N)
+            {t.authConfig.versionRetentionMaxLabel || 'Numero Massimo di Versioni da Conservare per Schema (N)'}
           </label>
           <div className="flex items-center space-x-3">
             <input
@@ -905,10 +905,10 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
               }
               className="w-32 px-3 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 font-bold"
             />
-            <span className="text-xs text-slate-500">versioni (default: 10)</span>
+            <span className="text-xs text-slate-500">{t.authConfig.versionRetentionVersions || 'versioni (default: 10)'}</span>
           </div>
           <p className="text-[11px] text-slate-400">
-            Durante ogni operazione di Check-in, le versioni più vecchie oltre questo limite verranno automaticamente eliminate.
+            {t.authConfig.versionRetentionHelp || 'Durante ogni operazione di Check-in, le versioni più vecchie oltre questo limite verranno automaticamente eliminate.'}
           </p>
         </div>
       </div>
@@ -985,15 +985,15 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
                         👁️
                       </span>
                       <span className="text-xs font-extrabold text-cyan-950 uppercase tracking-wide">
-                        Accesso Demo Interattivo
+                        {t.auth.demoBannerTitle || 'Accesso Demo Interattivo'}
                       </span>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 bg-cyan-100/80 text-cyan-800 rounded-md border border-cyan-200">
-                      Sola Lettura
+                      {t.common.readOnly || 'Sola Lettura'}
                     </span>
                   </div>
                   <p className="text-xs text-cyan-900 leading-relaxed font-medium">
-                    {settings.demo_banner_message || 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'}
+                    {settings.demo_banner_message || t.auth.demoBannerDesc || 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'}
                   </p>
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex items-center space-x-2 text-[11px] font-mono">

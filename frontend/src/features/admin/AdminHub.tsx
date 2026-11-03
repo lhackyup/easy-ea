@@ -287,14 +287,14 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                         <button
                           onClick={() => handleExportArchimate(m.id, m.name)}
                           className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
-                          title="Esporta modello Archi nativo (.archimate)"
+                          title={t.admin.exportArchiNative || 'Esporta modello Archi nativo (.archimate)'}
                         >
                           <Layers className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleExportExchangeXml(m.id, m.name)}
                           className="p-1.5 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition"
-                          title="Esporta ArchiMate Open Exchange XML (.xml)"
+                          title={t.admin.exportExchangeXml || 'Esporta ArchiMate Open Exchange XML (.xml)'}
                         >
                           <FileCode className="w-4 h-4" />
                         </button>
@@ -370,9 +370,9 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                   👁️
                 </div>
                 <div className="text-xs">
-                  <h4 className="font-bold text-slate-800">Funzione Riservata agli Amministratori</h4>
+                  <h4 className="font-bold text-slate-800">{t.rbac.adminOnlyNotice || 'Funzione Riservata agli Amministratori'}</h4>
                   <p className="text-slate-500 mt-1 leading-relaxed">
-                    La creazione e l'importazione di nuove librerie ArchiMate non sono consentite in modalità Demo.
+                    {t.rbac.demoCreateLibraryForbidden || "La creazione e l'importazione di nuove librerie ArchiMate non sono consentite in modalità Demo."}
                   </p>
                 </div>
               </div>
@@ -585,7 +585,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                             if (fileInputRef.current) fileInputRef.current.value = '';
                           }}
                           className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 transition"
-                          title="Rimuovi file"
+                          title={t.common.removeFile || 'Rimuovi file'}
                         >
                           <X className="w-4 h-4" />
                         </button>

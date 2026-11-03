@@ -70,7 +70,8 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
   activePackageView,
   onSelectPackageView
 }) => {
-  const { t, interpolate } = useLanguage();
+  const { t, interpolate, language } = useLanguage();
+  const isIt = language === 'it';
 
   const [loadingCatalog, setLoadingCatalog] = useState(false);
   const [packages, setPackages] = useState<PackageWithViews[]>(initialPackages || []);
@@ -2063,11 +2064,13 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                                 <Grid className="w-4 h-4" />
                               </span>
                               <h3 className="text-sm font-extrabold text-slate-900">
-                                Matrice Pivot 2D: {matrixYLabel} × {matrixXLabel}
+                                {isIt ? 'Matrice Pivot 2D:' : '2D Pivot Matrix:'} {matrixYLabel} × {matrixXLabel}
                               </h3>
                             </div>
                             <p className="text-xs text-slate-500 mt-1">
-                              Incrocio bidimensionale e distribuzione degli elementi del modello ArchiMate ({matrixYLabel} sulle righe, {matrixXLabel} sulle colonne).
+                              {isIt
+                                ? `Incrocio bidimensionale e distribuzione degli elementi del modello ArchiMate (${matrixYLabel} sulle righe, ${matrixXLabel} sulle colonne).`
+                                : `Two-dimensional cross-tabulation and distribution of ArchiMate elements (${matrixYLabel} on rows, ${matrixXLabel} on columns).`}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 text-xs font-mono">
@@ -2078,7 +2081,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                               <strong>{colKeys.length}</strong> {matrixXLabel}
                             </span>
                             <span className="bg-indigo-50 border border-indigo-200 px-3 py-1.5 rounded-xl text-indigo-900 font-bold">
-                              <strong>{grandTotal || viewData?.total || 0}</strong> Totale
+                              <strong>{grandTotal || viewData?.total || 0}</strong> {isIt ? 'Totale' : 'Total'}
                             </span>
                           </div>
                         </div>
@@ -2089,9 +2092,13 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                             <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
                               <Grid className="w-6 h-6" />
                             </div>
-                            <h4 className="text-sm font-extrabold text-slate-800">Nessun dato nella matrice</h4>
+                            <h4 className="text-sm font-extrabold text-slate-800">
+                              {isIt ? 'Nessun dato nella matrice' : 'No data in matrix'}
+                            </h4>
                             <p className="text-xs text-slate-500 max-w-md mx-auto">
-                              Non sono stati trovati elementi nel modello che incrocino le dimensioni {matrixYLabel} e {matrixXLabel} con i filtri attuali.
+                              {isIt
+                                ? `Non sono stati trovati elementi nel modello che incrocino le dimensioni ${matrixYLabel} e ${matrixXLabel} con i filtri attuali.`
+                                : `No elements found in the model matching dimensions ${matrixYLabel} and ${matrixXLabel} with current filters.`}
                             </p>
                           </div>
                         ) : (
@@ -2310,12 +2317,12 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                                     <span>{chart.title}</span>
                                   </h4>
                                   <span className="text-[10px] text-slate-400 font-mono">
-                                    {chart.group_by ? `Raggruppato per: ${chart.group_by}` : (isSumMetric ? 'Somma Valori' : 'Distribuzione Conteggi')}
+                                    {chart.group_by ? `${isIt ? 'Raggruppato per' : 'Grouped by'}: ${chart.group_by}` : (isSumMetric ? (isIt ? 'Somma Valori' : 'Sum Values') : (isIt ? 'Distribuzione Conteggi' : 'Count Distribution'))}
                                   </span>
                                 </div>
                                 <div className="space-y-2.5 pt-1">
                                   {data.length === 0 ? (
-                                    <div className="py-6 text-center text-xs text-slate-400">Nessun dato registrato</div>
+                                    <div className="py-6 text-center text-xs text-slate-400">{isIt ? 'Nessun dato registrato' : 'No data recorded'}</div>
                                   ) : (
                                     data.map((item: any, iIdx: number) => {
                                       const valNum = isSumMetric ? (Number(item.value) || 0) : (Number(item.count) || 0);
@@ -2439,14 +2446,14 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                           </span>
                           {hasActiveFilters && (
                             <span className="text-[11px] text-indigo-600 font-bold">
-                              (Filtri runtime applicati)
+                              {isIt ? '(Filtri runtime applicati)' : '(Runtime filters applied)'}
                             </span>
                           )}
                         </div>
 
                         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                           <div className="flex items-center gap-2">
-                            <span className="text-[11px] font-semibold text-slate-600">Per pagina:</span>
+                            <span className="text-[11px] font-semibold text-slate-600">{isIt ? 'Per pagina:' : 'Per page:'}</span>
                             <select
                               value={pageSize}
                               onChange={(e) => {
@@ -2459,7 +2466,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                               <option value={25}>25</option>
                               <option value={50}>50</option>
                               <option value={100}>100</option>
-                              <option value="all">Tutti ({viewData.rows?.length || 0})</option>
+                              <option value="all">{isIt ? 'Tutti' : 'All'} ({viewData.rows?.length || 0})</option>
                             </select>
                           </div>
 
@@ -2683,14 +2690,14 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                       </span>
                       {hasActiveFilters && (
                         <span className="text-[11px] text-indigo-600 font-bold">
-                          (Filtri runtime applicati)
+                          {isIt ? '(Filtri runtime applicati)' : '(Runtime filters applied)'}
                         </span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] font-semibold text-slate-600">Per pagina:</span>
+                        <span className="text-[11px] font-semibold text-slate-600">{isIt ? 'Per pagina:' : 'Per page:'}</span>
                         <select
                           value={pageSize}
                           onChange={(e) => {
@@ -2703,7 +2710,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                           <option value={25}>25</option>
                           <option value={50}>50</option>
                           <option value={100}>100</option>
-                          <option value="all">Tutti ({viewData.rows?.length || 0})</option>
+                          <option value="all">{isIt ? 'Tutti' : 'All'} ({viewData.rows?.length || 0})</option>
                         </select>
                       </div>
 

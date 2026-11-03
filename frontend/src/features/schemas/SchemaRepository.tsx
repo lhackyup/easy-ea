@@ -537,7 +537,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center space-x-2">
             <Folder className="w-5 h-5 text-indigo-600" />
-            <h3 className="text-sm font-bold text-slate-800">Cartelle Schemi</h3>
+            <h3 className="text-sm font-bold text-slate-800">{t.schemas.foldersTitle || 'Cartelle Schemi'}</h3>
           </div>
           {!isViewer && (
             <button
@@ -602,7 +602,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <input
                 type="text"
                 autoFocus
-                placeholder="Nome cartella..."
+                placeholder={t.schemas.folderNamePlaceholder || 'Nome cartella...'}
                 value={newFolderName}
                 onChange={(e) => setNewFolderName(e.target.value)}
                 onKeyDown={(e) => {
@@ -613,9 +613,9 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               />
               <button
                 onClick={() => handleCreateFolder(null)}
-                className="px-2 py-1 bg-indigo-600 text-white text-[11px] font-bold rounded-lg"
+                className="px-2 py-1 bg-indigo-600 text-white text-[11px] font-bold rounded-lg cursor-pointer"
               >
-                Crea
+                {t.schemas.createBtn || 'Crea'}
               </button>
             </div>
           )}
@@ -736,11 +736,11 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                 <button
                   type="button"
                   onClick={() => setIsNewSacOpen(true)}
-                  title="Crea uno schema scrivendo codice con Schema-as-Code (.eac)"
+                  title={t.schemas.schemaAsCodeTooltip || 'Crea uno schema scrivendo codice con Schema-as-Code (.eac)'}
                   className="px-3.5 py-1.5 bg-slate-800 hover:bg-slate-900 text-indigo-300 border border-slate-700 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm cursor-pointer"
                 >
                   <FileCode2 className="w-4 h-4 text-indigo-400" />
-                  <span>Schema as Code</span>
+                  <span>{t.schemas.schemaAsCodeBtn || 'Schema as Code'}</span>
                 </button>
 
                 <button
@@ -755,7 +755,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
             ) : (
               <span className="px-3.5 py-1.5 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-bold flex items-center space-x-1 shadow-2xs">
                 <span>👁️</span>
-                <span>Modalità Demo (Sola Lettura)</span>
+                <span>{t.rbac.demoModeBadge || 'Modalità Demo (Sola Lettura)'}</span>
               </span>
             )}
           </div>
@@ -766,20 +766,20 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
           {loading ? (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400">
               <RefreshCw className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
-              <p className="text-xs font-semibold">Caricamento schemi...</p>
+              <p className="text-xs font-semibold">{t.schemas.loadingSchemas || 'Caricamento schemi...'}</p>
             </div>
           ) : filteredSchemas.length === 0 ? (
             <div className="h-64 border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center text-slate-400 bg-white">
               <FileCode className="w-12 h-12 stroke-[1.5] text-slate-300 mb-3" />
-              <p className="text-sm font-bold text-slate-700">Nessuno schema trovato</p>
+              <p className="text-sm font-bold text-slate-700">{t.schemas.noSchemasFound || 'Nessuno schema trovato'}</p>
               <p className="text-xs text-slate-400 mt-1">
-                Crea un nuovo schema o trascina un file .archimate per iniziare.
+                {t.schemas.noSchemasHint || 'Crea un nuovo schema o trascina un file .archimate per iniziare.'}
               </p>
               <button
                 onClick={() => setIsCreateOpen(true)}
                 className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200 text-xs font-bold rounded-xl transition"
               >
-                + Crea Primo Schema
+                {t.schemas.createFirstSchemaBtn || '+ Crea Primo Schema'}
               </button>
             </div>
           ) : (
@@ -832,12 +832,12 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                           {isLocked ? (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200 shrink-0">
                               <Lock className="w-3 h-3" />
-                              <span>In Check-out</span>
+                              <span>{t.schemas.checkedOutBadge || 'In Check-out'}</span>
                             </span>
                           ) : (
                             <span className="inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 shrink-0">
                               <Unlock className="w-3 h-3" />
-                              <span>Disponibile</span>
+                              <span>{t.common.active || 'Disponibile'}</span>
                             </span>
                           )}
                         </div>
@@ -846,11 +846,11 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                         {isLocked && (
                           <div className="mt-1.5 p-1.5 px-2.5 bg-amber-50/80 rounded-lg border border-amber-200/60 text-[11px] text-amber-900 inline-flex items-center space-x-2">
                             <span>
-                              Bloccato da <span className="font-bold">{schema.locked_by_username || 'Architetto'}</span>
+                              {interpolate(t.schemas.lockedBy || 'Bloccato da {user}', { user: schema.locked_by_username || 'Architetto' })}
                             </span>
                             {schema.locked_at && (
                               <span className="text-[10px] text-amber-700 opacity-80">
-                                • {new Date(schema.locked_at).toLocaleDateString('it-IT', {
+                                • {new Date(schema.locked_at).toLocaleDateString(undefined, {
                                   day: '2-digit',
                                   month: '2-digit',
                                   hour: '2-digit',
@@ -863,21 +863,21 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
 
                         {/* Documentation */}
                         <p className="text-xs text-slate-500 mt-1 line-clamp-1 leading-relaxed">
-                          {schema.documentation || 'Nessuna documentazione inserita per questo schema.'}
+                          {schema.documentation || t.schemas.noDocumentation || 'Nessuna documentazione inserita per questo schema.'}
                         </p>
 
                         {/* Stats and History */}
                         <div className="flex items-center space-x-3 text-[11px] text-slate-400 mt-1.5">
-                          <span>{schema.nodes_count || 0} nodi • {schema.connections_count || 0} connessioni</span>
+                          <span>{interpolate(t.schemas.nodesConnectionsCount || '{nodes} nodi • {connections} connessioni', { nodes: schema.nodes_count || 0, connections: schema.connections_count || 0 })}</span>
                           <span>•</span>
                           <button
                             type="button"
                             onClick={() => setHistorySchema(schema)}
-                            title="Vedi storico versioni"
+                            title={t.schemas.viewHistoryTooltip || 'Vedi storico versioni'}
                             className="flex items-center space-x-1 text-slate-500 hover:text-purple-600 transition cursor-pointer"
                           >
                             <History className="w-3.5 h-3.5" />
-                            <span>Storico ({schema.current_version})</span>
+                            <span>{interpolate(t.schemas.historyBtn || 'Storico ({version})', { version: schema.current_version })}</span>
                           </button>
                         </div>
                       </div>
@@ -908,7 +908,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                       <a
                         href={api.downloadSchemaXmlUrl(schema.id)}
                         download={`${schema.name}.${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
-                        title={`Scarica copia .${schema.format === 'drawio' ? 'drawio' : 'archimate'}`}
+                        title={interpolate(t.schemas.downloadCopyTooltip || 'Scarica copia .{format}', { format: schema.format === 'drawio' ? 'drawio' : 'archimate' })}
                         className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition"
                       >
                         <Download className="w-4 h-4" />
@@ -924,18 +924,18 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                             className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
                           >
                             <Lock className="w-3.5 h-3.5" />
-                            <span>Check-out</span>
+                            <span>{t.schemas.checkoutBtn || 'Check-out'}</span>
                             <ExternalLink className="w-3 h-3 opacity-80" />
                           </button>
                         ) : (
                           <button
                             type="button"
                             disabled
-                            title="Il Check-out per modifica esterna non è disponibile in modalità Demo (Sola Lettura)"
+                            title={t.rbac.demoCheckoutForbidden || 'Il Check-out per modifica esterna non è disponibile in modalità Demo (Sola Lettura)'}
                             className="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-400 bg-slate-100 border border-slate-200 transition flex items-center space-x-1.5 cursor-not-allowed select-none opacity-80"
                           >
                             <Lock className="w-3.5 h-3.5 text-slate-400" />
-                            <span>Check-out</span>
+                            <span>{t.schemas.checkoutBtn || 'Check-out'}</span>
                           </button>
                         )
                       ) : isLockedByMe ? (
@@ -960,7 +960,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                           <button
                             type="button"
                             onClick={() => handleDiscardCheckout(schema)}
-                            title="Annulla check-out"
+                            title={t.schemas.cancelCheckoutTooltip || 'Annulla check-out'}
                             className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
                           >
                             <Unlock className="w-4 h-4" />
@@ -978,7 +978,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                         </button>
                       ) : (
                         <span className="text-[11px] text-slate-400 font-semibold px-2 py-1 bg-slate-100 rounded-lg">
-                          In sola lettura
+                          {t.common.readOnly || 'In sola lettura'}
                         </span>
                       )}
 
@@ -986,7 +986,7 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                       <button
                         type="button"
                         onClick={() => handleDeleteSchema(schema)}
-                        title="Elimina schema"
+                        title={t.schemas.deleteSchemaTooltip || 'Elimina schema'}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />

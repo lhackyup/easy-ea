@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   SecurityAuditItem,
   AuditVerificationResult,
@@ -27,6 +28,7 @@ import {
 } from 'lucide-react';
 
 export const AuditLogsManager: React.FC = () => {
+  const { t } = useLanguage();
   const [logs, setLogs] = useState<SecurityAuditItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -166,10 +168,10 @@ export const AuditLogsManager: React.FC = () => {
             <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
               <Fingerprint className="w-5 h-5" />
             </div>
-            <h2 className="text-xl font-bold text-slate-900">Audit Trail di Sicurezza (Tamper-Evident)</h2>
+            <h2 className="text-xl font-bold text-slate-900">{t.auditLogsManager?.title || 'Audit Trail di Sicurezza (Tamper-Evident)'}</h2>
           </div>
           <p className="text-xs text-slate-500 mt-1 max-w-2xl leading-relaxed">
-            Registro crittografico immutabile basato su hash-chaining SHA-256. Ogni evento è vincolato al precedente: qualsiasi alterazione manuale o cancellazione viene rilevata matematicamente.
+            {t.auditLogsManager?.subtitle || 'Registro crittografico immutabile basato su hash-chaining SHA-256. Ogni evento è vincolato al precedente: qualsiasi alterazione manuale o cancellazione viene rilevata matematicamente.'}
           </p>
         </div>
 
@@ -179,7 +181,7 @@ export const AuditLogsManager: React.FC = () => {
             onClick={loadLogs}
             disabled={loading}
             className="p-2 border border-slate-200 text-slate-600 hover:text-slate-900 rounded-xl hover:bg-slate-50 transition cursor-pointer disabled:opacity-50"
-            title="Ricarica log"
+            title={t.common.retry || 'Ricarica log'}
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
@@ -189,7 +191,7 @@ export const AuditLogsManager: React.FC = () => {
             className="flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition cursor-pointer"
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>Verifica Integrità Catena</span>
+            <span>{verifying ? (t.auditLogsManager?.verifying || 'Verifica in corso...') : (t.auditLogsManager?.verifyChainBtn || 'Verifica Integrità Catena')}</span>
           </button>
         </div>
       </div>
@@ -198,28 +200,28 @@ export const AuditLogsManager: React.FC = () => {
       {summary && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">Totale Eventi Registrati</span>
+            <span className="text-[11px] font-semibold text-slate-400 block mb-1">{t.auditLogsManager?.totalEvents || 'Totale Eventi Registrati'}</span>
             <span className="text-2xl font-black text-slate-900">{summary.total_records.toLocaleString()}</span>
             <div className="mt-1 flex items-center gap-1 text-[10px] text-emerald-600 font-bold">
               <CheckCircle2 className="w-3 h-3" />
-              <span>Hash chain attiva</span>
+              <span>{t.auditLogsManager?.activeHashChain || 'Hash chain attiva'}</span>
             </div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">Attività Ultime 24 Ore</span>
+            <span className="text-[11px] font-semibold text-slate-400 block mb-1">{t.auditLogsManager?.recent24hEvents || 'Attività Ultime 24 Ore'}</span>
             <span className="text-2xl font-black text-indigo-600">{summary.recent_24h_events}</span>
-            <span className="text-[10px] text-slate-400 block mt-1">Eventi di sicurezza totali</span>
+            <span className="text-[10px] text-slate-400 block mt-1">{t.auditLogsManager?.totalEvents || 'Eventi di sicurezza totali'}</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">Login Riusciti (24h)</span>
+            <span className="text-[11px] font-semibold text-slate-400 block mb-1">{t.auditLogsManager?.recent24hLogins || 'Login Riusciti (24h)'}</span>
             <span className="text-2xl font-black text-emerald-600">{summary.recent_24h_logins}</span>
             <span className="text-[10px] text-slate-400 block mt-1">Accessi autenticati</span>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">Fallimenti / Rifiuti (24h)</span>
+            <span className="text-[11px] font-semibold text-slate-400 block mb-1">{t.auditLogsManager?.recent24hFailures || 'Fallimenti / Rifiuti (24h)'}</span>
             <span className={`text-2xl font-black ${summary.recent_24h_failures > 0 ? 'text-rose-600' : 'text-slate-900'}`}>
               {summary.recent_24h_failures}
             </span>
@@ -236,7 +238,7 @@ export const AuditLogsManager: React.FC = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Cerca per utente, azione, target o IP..."
+            placeholder={t.auditLogsManager?.searchPlaceholder || 'Cerca per utente, azione, target o IP...'}
             className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl text-xs focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-slate-900 placeholder:text-slate-400 transition"
           />
         </form>
@@ -251,7 +253,7 @@ export const AuditLogsManager: React.FC = () => {
             }}
             className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:ring-2 focus:ring-indigo-500 transition"
           >
-            <option value="">Tutte le Azioni</option>
+            <option value="">{t.auditLogsManager?.allActions || 'Tutte le Azioni'}</option>
             <option value="AUTH_LOGIN">Login</option>
             <option value="AUTH_MFA_CHALLENGE">MFA Challenge</option>
             <option value="AUTH_MFA_VERIFY">MFA Verifica</option>
@@ -275,7 +277,7 @@ export const AuditLogsManager: React.FC = () => {
             }}
             className="px-3 py-2 border border-slate-200 rounded-xl text-xs bg-white text-slate-700 focus:ring-2 focus:ring-indigo-500 transition"
           >
-            <option value="">Tutti gli Esiti</option>
+            <option value="">{t.auditLogsManager?.allOutcomes || 'Tutti gli Esiti'}</option>
             <option value="SUCCESS">SUCCESS</option>
             <option value="FAILURE">FAILURE</option>
             <option value="DENIED">DENIED</option>
@@ -292,7 +294,7 @@ export const AuditLogsManager: React.FC = () => {
               }}
               className="text-xs text-rose-600 hover:text-rose-800 font-bold px-2 py-1"
             >
-              Azzera
+              {t.auditLogsManager?.resetFilters || 'Azzera'}
             </button>
           )}
         </div>
@@ -304,14 +306,14 @@ export const AuditLogsManager: React.FC = () => {
           <table className="w-full text-left border-collapse text-xs">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                <th className="py-3 px-4"># Blocco</th>
-                <th className="py-3 px-4">Data / Ora (UTC)</th>
-                <th className="py-3 px-4">Azione</th>
-                <th className="py-3 px-4">Esito</th>
-                <th className="py-3 px-4">Attore (User)</th>
-                <th className="py-3 px-4">Target</th>
-                <th className="py-3 px-4">Hash Crittografico (SHA-256)</th>
-                <th className="py-3 px-4 text-right">Dettagli</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thBlock || '# Blocco'}</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thDateTime || 'Data / Ora (UTC)'}</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thAction || 'Azione'}</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thOutcome || 'Esito'}</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thActor || 'Attore (User)'}</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thTarget || 'Target'}</th>
+                <th className="py-3 px-4">{t.auditLogsManager?.thHash || 'Hash Crittografico (SHA-256)'}</th>
+                <th className="py-3 px-4 text-right">{t.auditLogsManager?.thDetails || 'Dettagli'}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
@@ -320,14 +322,14 @@ export const AuditLogsManager: React.FC = () => {
                   <td colSpan={8} className="py-12 text-center text-slate-400">
                     <div className="flex flex-col items-center justify-center space-y-2">
                       <RefreshCw className="w-6 h-6 animate-spin text-indigo-500" />
-                      <span>Caricamento audit trail...</span>
+                      <span>{t.auditLogsManager?.loading || 'Caricamento audit trail...'}</span>
                     </div>
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-slate-400">
-                    Nessun record di audit trovato con i filtri correnti.
+                    {t.auditLogsManager?.noRecords || 'Nessun record di audit trovato con i filtri correnti.'}
                   </td>
                 </tr>
               ) : (

@@ -1,5 +1,6 @@
 import React from 'react';
 import { api } from '../../lib/api';
+import { useLanguage } from '../../context/LanguageContext';
 import {
   X,
   Download,
@@ -21,6 +22,8 @@ interface ArchiPluginModalProps {
 }
 
 export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onClose }) => {
+  const { language } = useLanguage();
+  const isIt = language === 'it';
   if (!isOpen) return null;
 
   const downloadUrl = api.downloadArchiPluginUrl();
@@ -36,13 +39,13 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <span>Plugin EasyEA per Archi</span>
+                <span>{isIt ? 'Plugin EasyEA per Archi' : 'EasyEA Plugin for Archi'}</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
                   v1.0.0
                 </span>
               </h2>
               <p className="text-xs text-indigo-200/80">
-                Integrazione bidirezionale nativa per Architool 5.x tramite jArchi
+                {isIt ? 'Integrazione bidirezionale nativa per Architool 5.x tramite jArchi' : 'Native bidirectional integration for Architool 5.x via jArchi'}
               </p>
             </div>
           </div>
@@ -59,9 +62,9 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
           {/* Hero Download Card */}
           <div className="p-4 bg-gradient-to-br from-indigo-50 via-white to-slate-50 rounded-2xl border border-indigo-100 flex items-center justify-between shadow-sm">
             <div>
-              <h3 className="text-sm font-bold text-slate-900">Pacchetto Script jArchi</h3>
+              <h3 className="text-sm font-bold text-slate-900">{isIt ? 'Pacchetto Script jArchi' : 'jArchi Script Package'}</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Include tutti gli script per il ciclo di Check-out, Diff e Check-in da Archi.
+                {isIt ? 'Include tutti gli script per il ciclo di Check-out, Diff e Check-in da Archi.' : 'Includes all scripts for Check-out, Diff, and Check-in workflow from Archi.'}
               </p>
             </div>
             <a
@@ -70,14 +73,14 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition flex items-center space-x-2 shadow-sm shadow-indigo-200 text-xs shrink-0"
             >
               <Download className="w-4 h-4" />
-              <span>Scarica Plugin (.zip)</span>
+              <span>{isIt ? 'Scarica Plugin (.zip)' : 'Download Plugin (.zip)'}</span>
             </a>
           </div>
 
           {/* Step by Step Guide */}
           <div>
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-              Guida Rapida all'Installazione (2 Passaggi)
+              {isIt ? 'Guida Rapida all\'Installazione (2 Passaggi)' : 'Quick Installation Guide (2 Steps)'}
             </h4>
             <div className="space-y-3">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start space-x-3">
@@ -85,18 +88,35 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
                   1
                 </div>
                 <div>
-                  <h5 className="font-bold text-slate-800">Prerequisito: jArchi</h5>
+                  <h5 className="font-bold text-slate-800">{isIt ? 'Prerequisito: jArchi' : 'Prerequisite: jArchi'}</h5>
                   <p className="text-slate-600 mt-0.5 leading-relaxed">
-                    Assicurati che il plugin <strong>jArchi (Archi Scripting Plugin)</strong> sia installato nel tuo Architool. Se non lo hai, è disponibile per i supporter di Archi su{' '}
-                    <a
-                      href="https://www.archimatetool.com/plugins/"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-indigo-600 underline hover:text-indigo-800 inline-flex items-center space-x-0.5"
-                    >
-                      <span>archimatetool.com/plugins</span>
-                      <ExternalLink className="w-3 h-3 ml-0.5" />
-                    </a>.
+                    {isIt ? (
+                      <>
+                        Assicurati che il plugin <strong>jArchi (Archi Scripting Plugin)</strong> sia installato nel tuo Architool. Se non lo hai, è disponibile per i supporter di Archi su{' '}
+                        <a
+                          href="https://www.archimatetool.com/plugins/"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-600 underline hover:text-indigo-800 inline-flex items-center space-x-0.5"
+                        >
+                          <span>archimatetool.com/plugins</span>
+                          <ExternalLink className="w-3 h-3 ml-0.5" />
+                        </a>.
+                      </>
+                    ) : (
+                      <>
+                        Ensure the <strong>jArchi (Archi Scripting Plugin)</strong> is installed in your Architool. If you do not have it, it is available to Archi supporters at{' '}
+                        <a
+                          href="https://www.archimatetool.com/plugins/"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-indigo-600 underline hover:text-indigo-800 inline-flex items-center space-x-0.5"
+                        >
+                          <span>archimatetool.com/plugins</span>
+                          <ExternalLink className="w-3 h-3 ml-0.5" />
+                        </a>.
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -106,9 +126,17 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
                   2
                 </div>
                 <div>
-                  <h5 className="font-bold text-slate-800">Copia nella Cartella Script di Archi</h5>
+                  <h5 className="font-bold text-slate-800">{isIt ? 'Copia nella Cartella Script di Archi' : 'Copy to Archi Scripts Folder'}</h5>
                   <p className="text-slate-600 mt-0.5 leading-relaxed">
-                    In Archi, apri la vista Script da <strong>Window &rarr; Show View &rarr; Scripts</strong>. Clicca sull'icona della cartella <em>Open Scripts Folder</em> ed estrai la cartella <code>EasyEA/</code> contenuta nello zip scaricato. Infine, clicca sul pulsante <strong>Refresh Scripts</strong> in Archi.
+                    {isIt ? (
+                      <>
+                        In Archi, apri la vista Script da <strong>Window &rarr; Show View &rarr; Scripts</strong>. Clicca sull'icona della cartella <em>Open Scripts Folder</em> ed estrai la cartella <code>EasyEA/</code> contenuta nello zip scaricato. Infine, clicca sul pulsante <strong>Refresh Scripts</strong> in Archi.
+                      </>
+                    ) : (
+                      <>
+                        In Archi, open the Scripts view via <strong>Window &rarr; Show View &rarr; Scripts</strong>. Click the <em>Open Scripts Folder</em> icon and extract the <code>EasyEA/</code> directory from the downloaded zip. Finally, click <strong>Refresh Scripts</strong> in Archi.
+                      </>
+                    )}
                   </p>
                 </div>
               </div>
@@ -118,7 +146,7 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
           {/* Scripts Reference */}
           <div>
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-              Funzionalità e Script Disponibili in Archi
+              {isIt ? 'Funzionalità e Script Disponibili in Archi' : 'Available Features and Scripts in Archi'}
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="p-3 rounded-xl border border-slate-200 hover:border-indigo-200 bg-white transition space-y-1">
@@ -127,7 +155,9 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
                   <span>1. EasyEA_Settings.ajs</span>
                 </div>
                 <p className="text-slate-500 text-[11px] leading-relaxed">
-                  Configura l'URL del server EasyEA (es. <code>http://localhost:8000</code>) e salva il token di autenticazione in modo sicuro.
+                  {isIt
+                    ? 'Configura l\'URL del server EasyEA (es. http://localhost:8000) e salva il token di autenticazione in modo sicuro.'
+                    : 'Configure EasyEA server URL (e.g. http://localhost:8000) and securely save the authentication token.'}
                 </p>
               </div>
 
@@ -137,7 +167,9 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
                   <span>2. EasyEA_Checkout.ajs</span>
                 </div>
                 <p className="text-slate-500 text-[11px] leading-relaxed">
-                  Mostra l'elenco degli schemi EasyEA, blocca lo schema selezionato per la tua modifica e lo apre istantaneamente nell'editor di Archi.
+                  {isIt
+                    ? 'Mostra l\'elenco degli schemi EasyEA, blocca lo schema selezionato per la tua modifica e lo apre istantaneamente nell\'editor di Archi.'
+                    : 'Lists EasyEA schemas, locks the selected schema for your editing session and instantly opens it in Archi.'}
                 </p>
               </div>
 
@@ -147,7 +179,9 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
                   <span>3. EasyEA_Checkin.ajs</span>
                 </div>
                 <p className="text-slate-500 text-[11px] leading-relaxed">
-                  Esegue il diff in tempo reale tra lo schema Archi e il catalogo EasyEA, mostra il riepilogo con gli elementi nuovi/modificati, richiede il messaggio di versione e fa il commit.
+                  {isIt
+                    ? 'Esegue il diff in tempo reale tra lo schema Archi e il catalogo EasyEA, mostra il riepilogo con gli elementi nuovi/modificati, richiede il messaggio di versione e fa il commit.'
+                    : 'Performs real-time diff between Archi schema and EasyEA catalog, displays summary of new/modified elements, asks for release note and commits.'}
                 </p>
               </div>
 
@@ -157,7 +191,9 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
                   <span>4. EasyEA_DiscardCheckout.ajs</span>
                 </div>
                 <p className="text-slate-500 text-[11px] leading-relaxed">
-                  Rilascia il blocco su EasyEA se decidi di annullare le modifiche senza salvare.
+                  {isIt
+                    ? 'Rilascia il blocco su EasyEA se decidi di annullare le modifiche senza salvare.'
+                    : 'Releases lock on EasyEA if you decide to cancel changes without saving.'}
                 </p>
               </div>
             </div>
@@ -171,7 +207,7 @@ export const ArchiPluginModal: React.FC<ArchiPluginModalProps> = ({ isOpen, onCl
             onClick={onClose}
             className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl transition text-xs"
           >
-            Chiudi
+            {isIt ? 'Chiudi' : 'Close'}
           </button>
         </div>
       </div>

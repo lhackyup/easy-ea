@@ -43,7 +43,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   isSeeding,
   onToggleMobileSidebar
 }) => {
-  const { language, setLanguage, t } = useLanguage();
+  const { language, setLanguage, t, interpolate } = useLanguage();
   const { user, logout, refreshUserProfile } = useAuth();
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -459,8 +459,8 @@ export const TopBar: React.FC<TopBarProps> = ({
                   <Shield className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-slate-900">Autenticazione a Due Fattori (2FA)</h3>
-                  <p className="text-[11px] text-slate-500">Protezione dell'account con RFC 6238 TOTP</p>
+                  <h3 className="text-sm font-bold text-slate-900">{t.mfa?.title || 'Autenticazione a Due Fattori (2FA)'}</h3>
+                  <p className="text-[11px] text-slate-500">{t.mfa?.subtitle || "Protezione dell'account con RFC 6238 TOTP"}</p>
                 </div>
               </div>
               <button
@@ -492,11 +492,10 @@ export const TopBar: React.FC<TopBarProps> = ({
                 <div className="p-4 bg-indigo-50/70 border border-indigo-200 rounded-xl space-y-2 text-xs text-indigo-900">
                   <div className="flex items-center space-x-2 font-bold">
                     <Globe className="w-4 h-4 text-indigo-600" />
-                    <span>Account Federato (SSO)</span>
+                    <span>{t.mfa?.federatedTitle || 'Account Federato (SSO)'}</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-indigo-800">
-                    Il tuo account accede tramite Identity Provider aziendale ({user?.auth_provider || 'Keycloak'}).
-                    Le opzioni di sicurezza e il secondo fattore di autenticazione sono gestiti direttamente sul portale dell'IdP.
+                    {interpolate(t.mfa?.federatedDesc || "Il tuo account accede tramite Identity Provider aziendale ({provider}). Le opzioni di sicurezza e il secondo fattore di autenticazione sono gestiti direttamente sul portale dell'IdP.", { provider: user?.auth_provider || 'Keycloak' })}
                   </p>
                 </div>
               ) : user?.is_mfa_enabled ? (
@@ -507,12 +506,12 @@ export const TopBar: React.FC<TopBarProps> = ({
                         <CheckCircle2 className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="text-xs font-bold text-emerald-900">2FA Attiva sul tuo account</div>
-                        <div className="text-[10px] text-emerald-700">One-Time Password richiesta ad ogni accesso</div>
+                        <div className="text-xs font-bold text-emerald-900">{t.mfa?.activeTitle || '2FA Attiva sul tuo account'}</div>
+                        <div className="text-[10px] text-emerald-700">{t.mfa?.activeDesc || 'One-Time Password richiesta ad ogni accesso'}</div>
                       </div>
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/60 text-emerald-800 border border-emerald-300">
-                      Protetto
+                      {t.mfa?.protectedBadge || 'Protetto'}
                     </span>
                   </div>
 
@@ -520,20 +519,20 @@ export const TopBar: React.FC<TopBarProps> = ({
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-start space-x-2">
                       <Shield className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
                       <span>
-                        <strong>Policy Aziendale Obbligatoria:</strong> L'autenticazione a due fattori è richiesta per il tuo ruolo e non può essere disattivata.
+                        <strong>{t.mfa?.mandatoryPolicyTitle || 'Policy Aziendale Obbligatoria:'}</strong> {t.mfa?.mandatoryPolicyDesc || "L'autenticazione a due fattori è richiesta per il tuo ruolo e non può essere disattivata."}
                       </span>
                     </div>
                   ) : (
                     <form onSubmit={handleConfirmDisable} className="pt-2 border-t border-slate-100 space-y-3">
                       <label className="block text-xs font-bold text-slate-700">
-                        Disattiva 2FA (Richiede la tua password attuale)
+                        {t.mfa?.disableLabel || 'Disattiva 2FA (Richiede la tua password attuale)'}
                       </label>
                       <input
                         type="password"
                         required
                         value={disablePassword}
                         onChange={(e) => setDisablePassword(e.target.value)}
-                        placeholder="Inserisci la tua password..."
+                        placeholder={t.mfa?.passwordPlaceholder || 'Inserisci la tua password...'}
                         className="w-full text-xs px-3 py-2 border border-slate-300 rounded-xl focus:ring-2 focus:ring-rose-500 focus:border-rose-500"
                       />
                       <button
@@ -541,7 +540,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                         disabled={mfaLoading || !disablePassword}
                         className="w-full py-2 px-3 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-xl transition cursor-pointer disabled:opacity-50"
                       >
-                        {mfaLoading ? 'Disattivazione...' : 'Conferma Disattivazione 2FA'}
+                        {mfaLoading ? (t.mfa?.disabling || 'Disattivazione...') : (t.mfa?.confirmDisableBtn || 'Conferma Disattivazione 2FA')}
                       </button>
                     </form>
                   )}
@@ -552,7 +551,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                   {!mfaSetupData ? (
                     <div className="space-y-3">
                       <p className="text-xs text-slate-600 leading-relaxed">
-                        Aggiungi un livello di protezione supplementare al tuo account. Quando accedi, oltre alla password ti verrà richiesto un codice a 6 cifre generato da un'app sul tuo smartphone.
+                        {t.mfa?.setupIntro || "Aggiungi un livello di protezione supplementare al tuo account. Quando accedi, oltre alla password ti verrà richiesto un codice a 6 cifre generato da un'app sul tuo smartphone."}
                       </p>
                       <button
                         type="button"
@@ -561,7 +560,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                         className="w-full flex items-center justify-center space-x-2 py-2.5 px-4 rounded-xl text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 shadow-sm transition cursor-pointer disabled:opacity-50"
                       >
                         <KeyRound className="w-4 h-4" />
-                        <span>{mfaLoading ? 'Generazione...' : 'Configura 2FA con App Authenticator'}</span>
+                        <span>{mfaLoading ? (t.mfa?.generating || 'Generazione...') : (t.mfa?.setupWithAppBtn || 'Configura 2FA con App Authenticator')}</span>
                       </button>
                     </div>
                   ) : (
@@ -580,7 +579,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                           />
                         </div>
                         <div className="text-center">
-                          <span className="text-[10px] text-slate-400 block mb-0.5">Chiave segreta manuale:</span>
+                          <span className="text-[10px] text-slate-400 block mb-0.5">{t.mfa?.manualSecretKey || 'Chiave segreta manuale:'}</span>
                           <code className="text-xs font-mono font-bold bg-white px-2 py-1 border border-slate-200 rounded-lg text-slate-800 select-all tracking-wider inline-block">
                             {mfaSetupData.secret}
                           </code>
@@ -589,7 +588,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
                       <div>
                         <label className="block text-xs font-bold text-slate-700 mb-1">
-                          Digita il codice a 6 cifre generato dall'app:
+                          {t.mfa?.typeCodePrompt || "Digita il codice a 6 cifre generato dall'app:"}
                         </label>
                         <input
                           type="text"
@@ -611,14 +610,14 @@ export const TopBar: React.FC<TopBarProps> = ({
                           onClick={() => setMfaSetupData(null)}
                           className="w-1/3 py-2 px-3 text-xs font-medium text-slate-600 hover:bg-slate-100 border border-slate-200 rounded-xl transition cursor-pointer"
                         >
-                          Annulla
+                          {t.mfa?.cancel || 'Annulla'}
                         </button>
                         <button
                           type="submit"
                           disabled={mfaLoading || mfaTotpCode.length < 6}
                           className="w-2/3 py-2 px-3 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 rounded-xl transition cursor-pointer disabled:opacity-50"
                         >
-                          {mfaLoading ? 'Verifica...' : 'Verifica e Attiva 2FA'}
+                          {mfaLoading ? (t.mfa?.enabling || 'Attivazione...') : (t.mfa?.confirmEnableBtn || 'Conferma e Attiva 2FA')}
                         </button>
                       </div>
                     </form>

@@ -79,9 +79,9 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
               <History className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-800">Storico Versioni Schema</h2>
+              <h2 className="text-lg font-bold text-slate-800">{t.schemas.versionHistoryTitle || 'Storico Versioni Schema'}</h2>
               <p className="text-xs text-slate-500">
-                {schema.name} • Versione attuale: <span className="font-semibold text-purple-700">{schema.current_version}</span>
+                {schema.name} • <span className="font-semibold text-purple-700">{interpolate(t.schemas.currentVersionLabel || 'Versione attuale: {version}', { version: schema.current_version })}</span>
               </p>
             </div>
           </div>
@@ -116,7 +116,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
             </div>
           ) : versions.length === 0 ? (
             <div className="py-12 text-center text-slate-400 text-xs">
-              Nessuna versione precedente registrata.
+              {t.schemas.noPreviousVersions || 'Nessuna versione precedente registrata.'}
             </div>
           ) : (
             <div className="space-y-3">
@@ -144,7 +144,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
                         </span>
                         {isCurrent && (
                           <span className="text-[11px] font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded">
-                            Versione Corrente
+                            {t.schemas.currentVersionBadge || 'Versione Corrente'}
                           </span>
                         )}
                       </div>
@@ -179,7 +179,7 @@ export const SchemaVersionHistoryModal: React.FC<SchemaVersionHistoryModalProps>
                       <a
                         href={api.downloadVersionXmlUrl(schema.id, ver.id)}
                         download={`${schema.name}_${ver.version_label}.archimate`}
-                        title="Scarica snapshot .archimate"
+                        title={t.schemas.downloadSnapshotTooltip || 'Scarica snapshot .archimate'}
                         className="p-2 rounded-lg text-slate-600 hover:text-indigo-600 hover:bg-slate-100 border border-slate-200 transition"
                       >
                         <Download className="w-4 h-4" />

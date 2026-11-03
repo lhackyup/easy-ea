@@ -707,7 +707,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
             </>
           ) : (
             <span className="text-xs font-bold text-cyan-700 bg-cyan-50 border border-cyan-200 px-3 py-1.5 rounded-xl">
-              👁️ Sola Lettura
+              👁️ {t.common.readOnly || 'Sola Lettura'}
             </span>
           )}
         </div>
@@ -725,7 +725,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
             }`}
           >
             <Package className="w-4 h-4" />
-            <span>Catalogo Pacchetti Installati</span>
+            <span>{t.metamodel.packageCatalogInstalled || 'Catalogo Pacchetti Installati'}</span>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 font-mono">
               {packages.length}
             </span>
@@ -775,7 +775,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
           {/* Packages List */}
       {loading ? (
         <div className="p-12 text-center text-slate-400 text-xs font-medium">
-          Caricamento pacchetti di attributi...
+          {t.metamodel.loadingPackages || 'Caricamento pacchetti di attributi...'}
         </div>
       ) : error ? (
         <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700 flex items-center gap-2">
@@ -784,7 +784,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
         </div>
       ) : filteredPackages.length === 0 ? (
         <div className="p-12 text-center bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-500">
-          Nessun pacchetto di attributi trovato.
+          {t.metamodel.noPackagesFound || 'Nessun pacchetto di attributi trovato.'}
         </div>
       ) : (
         <div className="space-y-4">
@@ -838,7 +838,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                           </span>
                         )}
                         <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.2 rounded-full">
-                          {items.length} attributi
+                          {items.length} {t.metamodel.attributesCount ? interpolate(t.metamodel.attributesCount, { count: items.length }) : 'attributi'}
                         </span>
                       </div>
 
@@ -948,7 +948,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                               : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-100'
                           }`}
                         >
-                          {items.length} Attributi
+                          {items.length} {t.metamodel.attributesCount ? interpolate(t.metamodel.attributesCount, { count: items.length }) : 'Attributi'}
                         </button>
                         {(pkg.stereotypes_count || 0) > 0 && (
                           <button
@@ -992,7 +992,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                       <div className="space-y-3">
                         <div className="flex items-center justify-between pb-1">
                           <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-                            Attributi inclusi nel pacchetto [{pkg.code.toUpperCase()}]
+                            {interpolate(t.metamodel.packageItemsInPkg || 'Attributi inclusi nel pacchetto [{code}]', { code: pkg.code.toUpperCase() })}
                           </span>
                           <span className="text-[10px] text-slate-400">
                             Tutti gli identificatori iniziano con il prefisso <code className="font-mono font-bold text-slate-600">{pkg.code}_</code>
@@ -1001,7 +1001,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
 
                         {items.length === 0 ? (
                           <div className="p-4 bg-white border border-slate-200/80 rounded-xl text-xs text-slate-400 italic text-center">
-                            Nessun attributo registrato in questo pacchetto.
+                            {t.metamodel.noPackageItems || 'Nessun attributo registrato in questo pacchetto.'}
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1087,10 +1087,10 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                         </div>
 
                         {loadingPkgDetails[pkg.id] ? (
-                          <div className="p-8 text-center text-xs text-slate-400">Caricamento stereotipi...</div>
+                          <div className="p-8 text-center text-xs text-slate-400">{t.metamodel.loadingStereotypes || 'Caricamento stereotipi...'}</div>
                         ) : !pkgDetailsCache[pkg.id]?.stereotypes || pkgDetailsCache[pkg.id]?.stereotypes.length === 0 ? (
                           <div className="p-4 bg-white border border-slate-200/80 rounded-xl text-xs text-slate-400 italic text-center">
-                            Nessuno stereotipo registrato in questo pacchetto.
+                            {t.metamodel.noStereotypesInPkg || 'Nessuno stereotipo registrato in questo pacchetto.'}
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1133,10 +1133,10 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                         </div>
 
                         {loadingPkgDetails[pkg.id] ? (
-                          <div className="p-8 text-center text-xs text-slate-400">Caricamento viste di business...</div>
+                          <div className="p-8 text-center text-xs text-slate-400">{t.metamodel.loadingBusinessViews || 'Caricamento viste di business...'}</div>
                         ) : !pkgDetailsCache[pkg.id]?.views || pkgDetailsCache[pkg.id]?.views.length === 0 ? (
                           <div className="p-4 bg-white border border-slate-200/80 rounded-xl text-xs text-slate-400 italic text-center">
-                            Nessuna vista di business registrata in questo pacchetto.
+                            {t.metamodel.noBusinessViewsInPkg || 'Nessuna vista di business registrata in questo pacchetto.'}
                           </div>
                         ) : (
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -1210,7 +1210,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                   : 'bg-white text-slate-600 hover:bg-slate-100 border border-slate-200'
               }`}
             >
-              {cat === 'all' ? 'Tutti i Pacchetti' : cat}
+              {cat === 'all' ? (t.metamodel.allPackagesCategory || 'Tutti i Pacchetti') : cat}
             </button>
           ))}
         </div>
@@ -1222,7 +1222,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
               type="text"
               value={repoSearch}
               onChange={(e) => setRepoSearch(e.target.value)}
-              placeholder="Cerca nel repository..."
+              placeholder={t.common.search || 'Cerca nel repository...'}
               className="pl-8 pr-3 py-1.5 bg-white border border-slate-200 rounded-xl text-xs font-medium text-slate-800 placeholder-slate-400 focus:outline-none focus:border-indigo-500 w-52 shadow-2xs"
             />
           </div>
@@ -1233,25 +1233,25 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
       {repoLoading ? (
         <div className="p-16 text-center text-slate-400 text-xs font-medium flex flex-col items-center justify-center space-y-2">
           <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
-          <span>Connessione e lettura catalogo dal repository esterno...</span>
+          <span>{t.common.loading || 'Connessione e lettura catalogo dal repository esterno...'}</span>
         </div>
       ) : repoError ? (
         <div className="p-5 bg-rose-50 border border-rose-200 rounded-2xl text-xs text-rose-700 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <div className="font-bold">Errore di comunicazione con il repository</div>
+            <div className="font-bold">{t.metamodel.repoCommunicationError || 'Errore di comunicazione con il repository'}</div>
             <div>{repoError}</div>
             <button
               onClick={fetchRepoPackages}
               className="mt-2 px-3 py-1 bg-rose-600 text-white rounded-lg text-xs font-bold hover:bg-rose-700 transition cursor-pointer"
             >
-              Riprova
+              {t.common.retry || 'Riprova'}
             </button>
           </div>
         </div>
       ) : filteredRepoPackages.length === 0 ? (
         <div className="p-16 text-center bg-slate-50 border border-slate-200 rounded-2xl text-xs text-slate-500">
-          Nessun pacchetto trovato nel repository per i criteri selezionati.
+          {t.metamodel.noPackagesInRepo || 'Nessun pacchetto trovato nel repository per i criteri selezionati.'}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -1338,7 +1338,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                     {pkg.status === 'installed' && (
                       <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-xl">
                         <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Installato (v{pkg.installed_version})</span>
+                        <span>{interpolate(t.metamodel.installedVersionBadge || 'Installato (v{version})', { version: pkg.installed_version })}</span>
                       </span>
                     )}
                     {pkg.status === 'update_available' && (
@@ -1364,12 +1364,12 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                         {isInstalling ? (
                           <>
                             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            <span>Installazione...</span>
+                            <span>{t.metamodel.installingBtn || 'Installazione...'}</span>
                           </>
                         ) : (
                           <>
                             <DownloadCloud className="w-3.5 h-3.5" />
-                            <span>Installa nel Catalogo</span>
+                            <span>{t.metamodel.installToCatalogBtn || 'Installa nel Catalogo'}</span>
                           </>
                         )}
                       </button>
@@ -1400,9 +1400,9 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                         onClick={() => handleInstallFromRepo(pkg.code, true)}
                         disabled={isInstalling}
                         className="text-[11px] font-bold text-slate-400 hover:text-indigo-600 transition cursor-pointer"
-                        title="Forza reinstallazione dal repository"
+                        title={t.metamodel.forceReinstallTooltip || 'Forza reinstallazione dal repository'}
                       >
-                        {isInstalling ? 'In corso...' : 'Reinstalla'}
+                        {isInstalling ? (t.metamodel.reinstalling || 'In corso...') : (t.metamodel.reinstallBtn || 'Reinstalla')}
                       </button>
                     )}
                   </div>
@@ -1428,10 +1428,10 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                 </span>
                 <div>
                   <h4 className="text-sm font-extrabold text-slate-900">
-                    {editingPkg ? 'Modifica Pacchetto di Attributi' : 'Nuovo Pacchetto di Attributi'}
+                    {editingPkg ? (t.metamodel.modalEditPackageTitle || 'Modifica Pacchetto di Attributi') : (t.metamodel.modalCreatePackageTitle || 'Nuovo Pacchetto di Attributi')}
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    Definisci le proprietà del pacchetto del catalogo globale.
+                    {t.metamodel.modalPackageSubtitle || 'Definisci le proprietà del pacchetto del catalogo globale.'}
                   </p>
                 </div>
               </div>
@@ -1540,7 +1540,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                   disabled={savingPkg}
                   className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm"
                 >
-                  {savingPkg ? 'Salvataggio...' : editingPkg ? 'Salva Modifiche' : 'Crea Pacchetto'}
+                  {savingPkg ? (t.metamodel.saving || 'Salvataggio...') : editingPkg ? (t.metamodel.saveChangesBtn || 'Salva Modifiche') : (t.metamodel.createPackageBtn || 'Crea Pacchetto')}
                 </button>
               </div>
             </form>
@@ -1561,10 +1561,10 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                 </span>
                 <div>
                   <h4 className="text-sm font-extrabold text-slate-900">
-                    {editingItem ? 'Modifica Attributo di Pacchetto' : 'Aggiungi Attributo al Pacchetto'}
+                    {editingItem ? (t.metamodel.modalEditItemTitle || 'Modifica Attributo di Pacchetto') : (t.metamodel.modalCreateItemTitle || 'Aggiungi Attributo al Pacchetto')}
                   </h4>
                   <p className="text-[11px] text-slate-500">
-                    L'attributo apparterrà al namespace con prefisso a 3 lettere del pacchetto.
+                    {t.metamodel.modalItemSubtitle || "L'attributo apparterrà al namespace con prefisso a 3 lettere del pacchetto."}
                   </p>
                 </div>
               </div>
@@ -1733,7 +1733,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                   disabled={savingItem}
                   className="px-5 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-sm"
                 >
-                  {savingItem ? 'Salvataggio...' : editingItem ? 'Salva Modifiche' : 'Aggiungi Attributo'}
+                  {savingItem ? (t.metamodel.saving || 'Salvataggio...') : editingItem ? (t.metamodel.saveChangesBtn || 'Salva Modifiche') : (t.metamodel.addItemBtn || 'Aggiungi Attributo')}
                 </button>
               </div>
             </form>
@@ -1944,7 +1944,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
               {/* File Dropzone */}
               <div className="space-y-1.5">
                 <label className="block text-xs font-bold text-slate-700">
-                  File del pacchetto (.eap)
+                  {t.metamodel.packageBundleFileLabel || 'File del pacchetto (.eap)'}
                 </label>
                 <div
                   onDragOver={(e) => {
@@ -2051,10 +2051,10 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                       {inspectResult.manifest.author && (
                         <span>Autore: <strong>{inspectResult.manifest.author}</strong></span>
                       )}
-                      <span>Tipo: <strong>{inspectResult.manifest.package_type === 'framework' ? 'Framework Completo' : 'Solo Attributi'}</strong></span>
+                      <span>Tipo: <strong>{inspectResult.manifest.package_type === 'framework' ? (t.metamodel.frameworkTypeFull || 'Framework Completo') : (t.metamodel.frameworkTypeAttrsOnly || 'Solo Attributi')}</strong></span>
                       {inspectResult.existing_package && (
                         <span className="text-slate-400">
-                          (Installato attualmente: <strong>v{inspectResult.existing_package.version}</strong>)
+                          ({interpolate(t.metamodel.currentlyInstalledVersion || 'Installato attualmente: {version}', { version: `v${inspectResult.existing_package.version}` })})
                         </span>
                       )}
                     </div>
@@ -2085,7 +2085,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                     <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
                       <div className="font-bold flex items-center gap-1.5">
                         <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
-                        <span>Avvisi di installazione:</span>
+                        <span>{t.metamodel.installWarnings || 'Avvisi di installazione:'}</span>
                       </div>
                       <ul className="list-disc pl-5 space-y-0.5 text-[11px]">
                         {inspectResult.warnings.map((w, idx) => (
@@ -2100,7 +2100,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                     <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 space-y-1">
                       <div className="font-bold flex items-center gap-1.5">
                         <AlertCircle className="w-3.5 h-3.5 text-rose-600" />
-                        <span>Errori critici nel pacchetto:</span>
+                        <span>{t.metamodel.installErrors || 'Errori critici nel pacchetto:'}</span>
                       </div>
                       <ul className="list-disc pl-5 space-y-0.5 text-[11px]">
                         {inspectResult.errors.map((e, idx) => (
@@ -2194,7 +2194,7 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                 </span>
                 <div>
                   <h4 className="text-sm font-extrabold text-slate-900">
-                    Configurazione Repository Pacchetti
+                    {t.metamodel.repoConfigTitle || 'Configurazione Repository Pacchetti'}
                   </h4>
                   <p className="text-[11px] text-slate-500">
                     Definisci l'endpoint del registro esterno (HTTP/HTTPS) o usa il repository locale predefinito.

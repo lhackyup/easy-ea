@@ -1637,7 +1637,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
           ) : (
             <span className="flex items-center space-x-1.5 px-3.5 py-2 bg-cyan-50 border border-cyan-200 text-cyan-800 rounded-xl text-xs font-bold shadow-2xs">
               <span>👁️</span>
-              <span>Modalità Demo (Sola Lettura)</span>
+              <span>{t.rbac.demoModeBadge || 'Modalità Demo (Sola Lettura)'}</span>
             </span>
           )}
         </div>
@@ -2521,15 +2521,15 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                     {selectedElement.is_reference ? (
                       <span
                         className="flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 text-slate-500 border border-slate-200 rounded-xl text-xs font-semibold select-none cursor-not-allowed"
-                        title="Elemento canonico di riferimento dello standard industriale (Protetto / Sola Lettura)"
+                        title={t.metamodel.standardProtectedTooltip || 'Elemento canonico di riferimento dello standard industriale (Protetto / Sola Lettura)'}
                       >
                         <Lock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Standard Protetto</span>
+                        <span>{t.metamodel.standardProtectedBadge || 'Standard Protetto'}</span>
                       </span>
                     ) : isViewer ? (
                       <span className="flex items-center space-x-1 px-3 py-1 bg-cyan-50 text-cyan-800 border border-cyan-200 rounded-xl text-xs font-bold">
                         <span>👁️</span>
-                        <span>Sola Lettura</span>
+                        <span>{t.common.readOnly || 'Sola Lettura'}</span>
                       </span>
                     ) : (
                       <>
@@ -2704,7 +2704,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                             {rel.is_reference ? (
                               <span
                                 className="p-1.5 text-slate-400 select-none cursor-not-allowed"
-                                title="Relazione canonica dello standard industriale (Protetta / Sola Lettura)"
+                                title={t.metamodel.standardProtectedTooltip || 'Relazione canonica dello standard industriale (Protetta / Sola Lettura)'}
                               >
                                 <Lock className="w-3.5 h-3.5 text-slate-400" />
                               </span>
@@ -2771,7 +2771,7 @@ export const ArchitectRepository: React.FC<ArchitectRepositoryProps> = ({
                             {rel.is_reference ? (
                               <span
                                 className="p-1.5 text-slate-400 select-none cursor-not-allowed"
-                                title="Relazione canonica dello standard industriale (Protetta / Sola Lettura)"
+                                title={t.metamodel.standardProtectedTooltip || 'Relazione canonica dello standard industriale (Protetta / Sola Lettura)'}
                               >
                                 <Lock className="w-3.5 h-3.5 text-slate-400" />
                               </span>
