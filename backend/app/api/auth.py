@@ -1,4 +1,5 @@
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Tuple
+import re
 import json
 import base64
 import secrets
@@ -92,6 +93,8 @@ class SystemAuthSettingsUpdateRequest(BaseModel):
     mfa_policy: Optional[str] = None
     show_demo_banner: Optional[bool] = None
     demo_banner_message: Optional[str] = None
+    demo_username: Optional[str] = None
+    demo_password: Optional[str] = None
 
 
 class IdpConnectionTestRequest(BaseModel):
@@ -516,10 +519,31 @@ def logout(
 # OIDC / OAuth2 Public & Flow Endpoints
 # ============================================================================
 
+def _resolve_demo_credentials(auth_cfg) -> Tuple[str, str]:
+    """
+    Extracts demo username and password, with intelligent fallback parsing
+    if custom credentials were included in demo_banner_message.
+    """
+    username = getattr(auth_cfg, "demo_username", None) or "demo"
+    password = getattr(auth_cfg, "demo_password", None) or "EasyEA2026!"
+    msg = getattr(auth_cfg, "demo_banner_message", None) or ""
+
+    if (username == "demo" or password == "EasyEA2026!") and msg:
+        u_match = re.search(r'(?:username|utente|user)\s*:\s*([^\s|;,]+)', msg, re.IGNORECASE)
+        if u_match and username == "demo":
+            username = u_match.group(1).strip()
+        p_match = re.search(r'(?:password|pwd)\s*:\s*([^\s|;,]+)', msg, re.IGNORECASE)
+        if p_match and password == "EasyEA2026!":
+            password = p_match.group(1).strip()
+
+    return username, password
+
+
 @router.get("/oidc/config")
 def get_oidc_public_config(db: Session = Depends(get_db)):
     """Returns the IdP and OIDC configuration for the frontend UI."""
     auth_cfg = get_system_auth_settings(db)
+    demo_user, demo_pwd = _resolve_demo_credentials(auth_cfg)
     return {
         "allow_local_login": auth_cfg.allow_local_login,
         "allow_idp_login": auth_cfg.allow_idp_login,
@@ -534,8 +558,8 @@ def get_oidc_public_config(db: Session = Depends(get_db)):
         "demo_mode": False,
         "show_demo_banner": getattr(auth_cfg, "show_demo_banner", True) if getattr(auth_cfg, "show_demo_banner", None) is not None else True,
         "demo_banner_message": getattr(auth_cfg, "demo_banner_message", None) or "Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!",
-        "demo_username": "demo",
-        "demo_password": "EasyEA2026!"
+        "demo_username": demo_user,
+        "demo_password": demo_pwd
     }
 
 
@@ -583,6 +607,7 @@ def get_admin_auth_config(
 ):
     """Returns the full auth and IdP settings including role mappings (Admin endpoint)."""
     cfg = get_system_auth_settings(db)
+    demo_user, demo_pwd = _resolve_demo_credentials(cfg)
     return {
         "allow_local_login": cfg.allow_local_login,
         "allow_idp_login": cfg.allow_idp_login,
@@ -598,6 +623,8 @@ def get_admin_auth_config(
         "mfa_policy": getattr(cfg, "mfa_policy", "disabled") or "disabled",
         "show_demo_banner": getattr(cfg, "show_demo_banner", True) if getattr(cfg, "show_demo_banner", None) is not None else True,
         "demo_banner_message": getattr(cfg, "demo_banner_message", None) or "Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!",
+        "demo_username": demo_user,
+        "demo_password": demo_pwd,
         "role_mappings": cfg.role_mappings or []
     }
 
@@ -611,6 +638,7 @@ def update_admin_auth_config(
     """Updates auth and IdP settings and role mappings (Admin endpoint)."""
     try:
         updated = update_system_auth_settings(db, payload.model_dump(exclude_unset=True))
+        demo_user, demo_pwd = _resolve_demo_credentials(updated)
         return {
             "status": "success",
             "message": "Configurazione di autenticazione e mapping ruoli salvata con successo.",
@@ -629,6 +657,8 @@ def update_admin_auth_config(
                 "mfa_policy": getattr(updated, "mfa_policy", "disabled") or "disabled",
                 "show_demo_banner": getattr(updated, "show_demo_banner", True) if getattr(updated, "show_demo_banner", None) is not None else True,
                 "demo_banner_message": getattr(updated, "demo_banner_message", None) or "Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!",
+                "demo_username": demo_user,
+                "demo_password": demo_pwd,
                 "role_mappings": updated.role_mappings or []
             }
         }

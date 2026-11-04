@@ -790,6 +790,8 @@ export interface SystemAuthSettings {
   max_schema_versions?: number;
   show_demo_banner?: boolean;
   demo_banner_message?: string;
+  demo_username?: string;
+  demo_password?: string;
 }
 export interface IdpConnectionTestResult {
   success: boolean;

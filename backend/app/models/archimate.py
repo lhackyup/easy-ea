@@ -323,6 +323,8 @@ class SystemAuthSettings(Base):
     mfa_policy = Column(String, default="disabled") # "disabled", "admin_only", "write_roles", "all"
     show_demo_banner = Column(Boolean, default=True) # Show demo credentials banner on login page
     demo_banner_message = Column(String(512), nullable=True, default="Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!")
+    demo_username = Column(String(128), nullable=True, default="demo")
+    demo_password = Column(String(128), nullable=True, default="EasyEA2026!")
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
 

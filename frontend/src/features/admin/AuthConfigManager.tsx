@@ -52,6 +52,8 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
     mfa_policy: 'disabled',
     show_demo_banner: true,
     demo_banner_message: 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!',
+    demo_username: 'demo',
+    demo_password: 'EasyEA2026!',
     role_mappings: []
   });
 
@@ -955,23 +957,73 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
 
           {/* Testo Personalizzato Banner */}
           {settings.show_demo_banner !== false && (
-            <div className="space-y-2">
-              <label className="block text-xs font-bold text-slate-700">
-                {t.authConfig.demoBannerMessageLabel}
-              </label>
-              <input
-                type="text"
-                disabled={readOnly}
-                value={settings.demo_banner_message ?? 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'}
-                onChange={(e) =>
-                  setSettings({
-                    ...settings,
-                    demo_banner_message: e.target.value
-                  })
-                }
-                placeholder={t.authConfig.demoBannerMessagePlaceholder}
-                className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-medium disabled:opacity-60"
-              />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-slate-700">
+                  {t.authConfig.demoBannerMessageLabel}
+                </label>
+                <input
+                  type="text"
+                  disabled={readOnly}
+                  value={settings.demo_banner_message ?? 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'}
+                  onChange={(e) => {
+                    const newMsg = e.target.value;
+                    const uMatch = newMsg.match(/(?:username|utente|user)\s*:\s*([^\s|;,]+)/i);
+                    const pMatch = newMsg.match(/(?:password|pwd)\s*:\s*([^\s|;,]+)/i);
+                    setSettings({
+                      ...settings,
+                      demo_banner_message: newMsg,
+                      ...(uMatch ? { demo_username: uMatch[1].trim() } : {}),
+                      ...(pMatch ? { demo_password: pMatch[1].trim() } : {})
+                    });
+                  }}
+                  placeholder={t.authConfig.demoBannerMessagePlaceholder}
+                  className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-medium disabled:opacity-60"
+                />
+              </div>
+
+              {/* Parametri di Autofill Demo */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t.authConfig.demoBannerUsernameLabel}
+                  </label>
+                  <input
+                    type="text"
+                    disabled={readOnly}
+                    value={settings.demo_username ?? 'demo'}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        demo_username: e.target.value
+                      })
+                    }
+                    placeholder="demo"
+                    className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-mono font-medium disabled:opacity-60"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-bold text-slate-700">
+                    {t.authConfig.demoBannerPasswordLabel}
+                  </label>
+                  <input
+                    type="text"
+                    disabled={readOnly}
+                    value={settings.demo_password ?? 'EasyEA2026!'}
+                    onChange={(e) =>
+                      setSettings({
+                        ...settings,
+                        demo_password: e.target.value
+                      })
+                    }
+                    placeholder="EasyEA2026!"
+                    className="w-full px-3.5 py-2 text-xs border border-slate-300 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 text-slate-900 font-mono font-medium disabled:opacity-60"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 italic">
+                {t.authConfig.demoBannerCredsHelp}
+              </p>
 
               {/* Anteprima Live */}
               <div className="mt-4 pt-4 border-t border-slate-100">
@@ -998,15 +1050,15 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
                   <div className="flex items-center justify-between pt-1">
                     <div className="flex items-center space-x-2 text-[11px] font-mono">
                       <span className="bg-white/90 px-2 py-0.5 rounded border border-cyan-200 text-cyan-900">
-                        user: <strong>demo</strong>
+                        user: <strong>{settings.demo_username || 'demo'}</strong>
                       </span>
                       <span className="bg-white/90 px-2 py-0.5 rounded border border-cyan-200 text-cyan-900">
-                        pwd: <strong>EasyEA2026!</strong>
+                        pwd: <strong>{settings.demo_password || 'EasyEA2026!'}</strong>
                       </span>
                     </div>
                     <span className="inline-flex items-center gap-1 text-[11px] font-bold text-cyan-700 bg-white px-2.5 py-1 rounded-lg border border-cyan-200 shadow-2xs">
                       <Sparkles className="w-3 h-3 text-cyan-600" />
-                      Compila credenziali Demo
+                      {t.auth.demoFillBtn || 'Usa Credenziali Demo'}
                     </span>
                   </div>
                 </div>

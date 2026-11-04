@@ -115,7 +115,9 @@ def get_system_auth_settings(db: Session) -> SystemAuthSettings:
             role_mappings=DEFAULT_ROLE_MAPPINGS,
             mfa_policy="disabled",
             show_demo_banner=True,
-            demo_banner_message="Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!"
+            demo_banner_message="Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!",
+            demo_username="demo",
+            demo_password="EasyEA2026!"
         )
         db.add(auth_cfg)
         db.commit()
@@ -127,6 +129,10 @@ def get_system_auth_settings(db: Session) -> SystemAuthSettings:
             auth_cfg.show_demo_banner = True
         if getattr(auth_cfg, "demo_banner_message", None) is None:
             auth_cfg.demo_banner_message = "Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!"
+        if getattr(auth_cfg, "demo_username", None) is None:
+            auth_cfg.demo_username = "demo"
+        if getattr(auth_cfg, "demo_password", None) is None:
+            auth_cfg.demo_password = "EasyEA2026!"
     return auth_cfg
 
 
@@ -274,12 +280,31 @@ def update_system_auth_settings(db: Session, updates: Dict[str, Any]) -> SystemA
         "allow_local_login", "allow_idp_login", "allow_mcp_access", "provider_name",
         "issuer_url", "client_id", "client_secret", "scopes",
         "prompt_login", "enable_single_logout", "rbac_mode", "role_mappings",
-        "max_schema_versions", "mfa_policy", "show_demo_banner", "demo_banner_message"
+        "max_schema_versions", "mfa_policy", "show_demo_banner", "demo_banner_message",
+        "demo_username", "demo_password"
     ]:
         if field in updates:
             if field == "client_secret" and updates[field] == "********":
                 continue
             setattr(auth_cfg, field, updates[field])
+
+    # Synchronize demo user in database if demo credentials are changed
+    if "demo_password" in updates and updates["demo_password"]:
+        demo_u = db.query(User).filter(
+            (User.id == "usr-demo-viewer") | (User.username == auth_cfg.demo_username)
+        ).first()
+        if demo_u:
+            demo_u.password_hash = hash_password(updates["demo_password"])
+
+    if "demo_username" in updates and updates["demo_username"]:
+        new_uname = str(updates["demo_username"]).strip()
+        demo_u = db.query(User).filter(
+            (User.id == "usr-demo-viewer") | (User.username == auth_cfg.demo_username)
+        ).first()
+        if demo_u and new_uname and demo_u.username != new_uname:
+            conflict = db.query(User).filter(User.username == new_uname, User.id != demo_u.id).first()
+            if not conflict:
+                demo_u.username = new_uname
 
     db.commit()
     db.refresh(auth_cfg)

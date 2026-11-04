@@ -95,6 +95,8 @@ _safe_add_column("system_auth_settings", "package_registry_url VARCHAR(512)")
 _safe_add_column("system_auth_settings", "allow_mcp_access BOOLEAN DEFAULT TRUE")
 _safe_add_column("system_auth_settings", "show_demo_banner BOOLEAN DEFAULT TRUE")
 _safe_add_column("system_auth_settings", "demo_banner_message VARCHAR(512) DEFAULT 'Accesso Demo (Sola Lettura) - Username: demo | Password: EasyEA2026!'")
+_safe_add_column("system_auth_settings", "demo_username VARCHAR(128) DEFAULT 'demo'")
+_safe_add_column("system_auth_settings", "demo_password VARCHAR(128) DEFAULT 'EasyEA2026!'")
 
 def _safe_alter_column(table_name: str, sql_action: str):
     with engine.connect() as conn:

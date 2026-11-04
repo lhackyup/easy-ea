@@ -1174,6 +1174,9 @@ export const en = {
     demoBannerSwitchDesc: 'When enabled, visitors will see an eye-catching banner displaying demo username and password with a one-click auto-fill button.',
     demoBannerMessageLabel: 'Demo Banner Message or Instructions',
     demoBannerMessagePlaceholder: 'Demo Access (Read-Only) - Username: demo | Password: EasyEA2026!',
+    demoBannerUsernameLabel: 'Demo Username for autofill',
+    demoBannerPasswordLabel: 'Demo Password for autofill',
+    demoBannerCredsHelp: 'These credentials are displayed in the badges and automatically filled when the user clicks "Use Demo Credentials".',
     demoBannerPreviewTitle: 'Live Preview on Login Page',
   },
 
