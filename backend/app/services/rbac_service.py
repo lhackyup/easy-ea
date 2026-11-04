@@ -173,9 +173,12 @@ def create_user(
     if not clean_email or not clean_name:
         raise HTTPException(status_code=400, detail="Email and Full Name are required.")
     
-    existing = db.query(User).filter((User.email == clean_email) | (User.username == clean_username)).first()
-    if existing:
-        raise HTTPException(status_code=400, detail=f"User with email '{clean_email}' or username '{clean_username}' already exists.")
+    existing_email = db.query(User).filter(User.email == clean_email).first()
+    if existing_email:
+        raise HTTPException(status_code=400, detail=f"Un utente con l'indirizzo email '{clean_email}' esiste già.")
+    existing_username = db.query(User).filter(User.username == clean_username).first()
+    if existing_username:
+        raise HTTPException(status_code=400, detail=f"Un utente con il nome utente (username) '{clean_username}' esiste già.")
     
     if password is not None and password.strip():
         if len(password.strip()) < 8:

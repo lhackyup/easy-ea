@@ -1031,7 +1031,7 @@ export const api = {
     return res.json();
   },
 
-  createUser: async (data: { email: string; full_name: string; password?: string }): Promise<any> => {
+  createUser: async (data: { email: string; full_name: string; username?: string; password?: string }): Promise<any> => {
     const res = await fetch(`${API_BASE}/rbac/users`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },

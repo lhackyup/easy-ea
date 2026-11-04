@@ -22,6 +22,7 @@ router = APIRouter(prefix="/rbac", tags=["rbac"])
 class UserCreateRequest(BaseModel):
     email: str
     full_name: str
+    username: Optional[str] = None
     password: Optional[str] = None
 
 class ResetPasswordRequest(BaseModel):
@@ -58,7 +59,13 @@ def add_user(
     current_user: User = Depends(require_admin)
 ):
     """Creates a new user account."""
-    res = create_user(db, email=payload.email, full_name=payload.full_name, password=payload.password)
+    res = create_user(
+        db,
+        email=payload.email,
+        full_name=payload.full_name,
+        username=payload.username,
+        password=payload.password
+    )
     log_security_event(
         db=db,
         action="RBAC_USER_CREATED",
@@ -66,7 +73,7 @@ def add_user(
         actor=current_user,
         target_type="user",
         target_id=res.get("id"),
-        details={"email": payload.email, "full_name": payload.full_name}
+        details={"email": payload.email, "username": res.get("username"), "full_name": payload.full_name}
     )
     return res
 
