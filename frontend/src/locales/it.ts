@@ -661,6 +661,8 @@ export const it = {
     optAnalyst: '📊 Business Analyst (Ambito Libreria)',
     optExecutive: '💼 CIO / CFO / Board (Ambito Libreria / Sola Lettura)',
     optAdmin: '👑 System Administrator (Ambito Globale)',
+    optViewer: '👁️ Demo Viewer / Sola Lettura (Ambito Globale)',
+    globalViewerNote: 'Il ruolo Demo Viewer ha ambito globale e consente la navigazione in sola lettura su tutti gli Hubs (Business, Architecture, Admin) senza permessi di scrittura.',
 
     // Simulator
     simulatorTitle: 'Simulatore di Valutazione Permessi RBAC',

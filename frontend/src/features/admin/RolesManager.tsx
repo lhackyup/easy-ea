@@ -198,7 +198,7 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
       await api.assignRole({
         user_id: selectedUserId,
         role: selectedRole,
-        model_id: selectedRole === 'admin' ? null : selectedTargetModelId
+        model_id: (selectedRole === 'admin' || selectedRole === 'viewer') ? null : selectedTargetModelId
       });
       await loadRbacData();
       setIsAssignRoleOpen(false);
@@ -997,6 +997,7 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                   onChange={(e) => setSelectedRole(e.target.value as RoleType)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-900 focus:outline-none focus:border-rose-500 focus:bg-white cursor-pointer"
                 >
+                  <option value="viewer">{t.rbac.optViewer || '👁️ Demo Viewer / Sola Lettura (Ambito Globale)'}</option>
                   <option value="architect">{t.rbac.optArchitect}</option>
                   <option value="analyst">{t.rbac.optAnalyst}</option>
                   <option value="executive">{t.rbac.optExecutive}</option>
@@ -1004,8 +1005,16 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                 </select>
               </div>
 
-              {/* Target Library (if not admin) */}
-              {selectedRole !== 'admin' ? (
+              {/* Target Library (if not admin and not viewer) */}
+              {selectedRole === 'admin' ? (
+                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 leading-snug">
+                  🌐 {t.rbac.globalAdminNote}
+                </div>
+              ) : selectedRole === 'viewer' ? (
+                <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-xs text-cyan-900 leading-snug">
+                  👁️ {t.rbac.globalViewerNote || 'Il ruolo Demo Viewer ha ambito globale e consente la navigazione in sola lettura su tutti gli Hubs (Business, Architecture, Admin) senza permessi di scrittura.'}
+                </div>
+              ) : (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     {t.rbac.labelSelectLibrary} *
@@ -1024,10 +1033,6 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
                   <p className="text-[11px] text-indigo-700 mt-1.5 leading-snug">
                     ℹ️ {t.rbac.libraryScopeNote}
                   </p>
-                </div>
-              ) : (
-                <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 leading-snug">
-                  🌐 {t.rbac.globalAdminNote}
                 </div>
               )}
 

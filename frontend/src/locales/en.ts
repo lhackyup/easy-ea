@@ -661,6 +661,8 @@ export const en = {
     optAnalyst: '📊 Business Analyst (Library Scope)',
     optExecutive: '💼 CIO / CFO / Board (Library Scope / Read-Only)',
     optAdmin: '👑 System Administrator (Global Scope)',
+    optViewer: '👁️ Demo Viewer / Read-Only (Global Scope)',
+    globalViewerNote: 'The Demo Viewer role has global scope and allows read-only browsing across all Hubs (Business, Architecture, Admin) with write operations disabled.',
 
     // Simulator
     simulatorTitle: 'Live RBAC Permission Evaluator',
