@@ -287,12 +287,12 @@ app.add_middleware(
 # Content Security Policy (CSP) & HSTS Preload (OWASP Secure Headers & RFC 6797)
 DEFAULT_CSP_DIRECTIVES = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'",
-    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+    "script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' https://cdn.jsdelivr.net",
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net",
     "font-src 'self' https://fonts.gstatic.com data:",
     "img-src 'self' data: blob: https:",
     "connect-src 'self' http: https: ws: wss:",
-    "frame-src 'self' https://embed.diagrams.net",
+    "frame-src 'self' https://embed.diagrams.net http://localhost:8080 http://127.0.0.1:8080",
     "frame-ancestors 'self'",
     "object-src 'none'",
     "base-uri 'self'",

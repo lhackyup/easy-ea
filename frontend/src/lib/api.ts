@@ -1476,9 +1476,15 @@ export const api = {
   },
 
   checkoutSchema: async (schemaId: string): Promise<{ schema: ArchiSchema; filename: string; xml_content: string }> => {
-    const res = await fetch(`${API_BASE}/schemas/${schemaId}/checkout`, {
+    const timestamp = Date.now();
+    const res = await fetch(`${API_BASE}/schemas/${schemaId}/checkout?_t=${timestamp}`, {
       method: 'POST',
-      headers: { ...getAuthHeaders() }
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        ...getAuthHeaders()
+      }
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: 'Failed to checkout schema' }));
@@ -1488,7 +1494,48 @@ export const api = {
   },
 
   downloadSchemaXmlUrl: (schemaId: string): string => {
-    return withAuthToken(`${API_BASE}/schemas/${schemaId}/download`);
+    return withAuthToken(`${API_BASE}/schemas/${schemaId}/download?_t=${Date.now()}`);
+  },
+
+  getDrawioConfig: async (): Promise<{ local_url: string; cloud_url: string; default_mode: string }> => {
+    try {
+      const res = await fetch(`${API_BASE}/schemas/drawio/config`, {
+        cache: 'no-store',
+        headers: { ...getAuthHeaders() }
+      });
+      if (res.ok) return res.json();
+    } catch (e) {}
+    return {
+      local_url: 'http://localhost:8080',
+      cloud_url: 'https://embed.diagrams.net',
+      default_mode: 'local'
+    };
+  },
+
+  getSchemaXml: async (schemaId: string): Promise<string> => {
+    const timestamp = Date.now();
+    const res = await fetch(`${API_BASE}/schemas/${schemaId}/xml?_t=${timestamp}`, {
+      cache: 'no-store',
+      headers: {
+        'Cache-Control': 'no-cache, no-store, must-revalidate',
+        'Pragma': 'no-cache',
+        ...getAuthHeaders()
+      }
+    });
+    if (!res.ok) {
+      // Fallback to /download endpoint
+      const fallbackRes = await fetch(`${API_BASE}/schemas/${schemaId}/download?_t=${timestamp}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          ...getAuthHeaders()
+        }
+      });
+      if (!fallbackRes.ok) throw new Error('Impossibile scaricare il contenuto XML dello schema');
+      return fallbackRes.text();
+    }
+    return res.text();
   },
 
   discardCheckout: async (schemaId: string): Promise<{ success: boolean; message: string; schema: ArchiSchema }> => {

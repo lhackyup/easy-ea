@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.config import settings
 from app.models.archimate import (
     ModelWorkspace,
     SchemaFolder,
@@ -267,6 +268,38 @@ def _serialize_schema(s: ArchiSchema) -> Dict[str, Any]:
     }
 
 
+def _set_cache_invalidation_headers(response: Response, schema: ArchiSchema):
+    """Sets aggressive HTTP anti-cache headers and invalidation cookies."""
+    timestamp = int(schema.updated_at.timestamp() if schema.updated_at else datetime.now(timezone.utc).timestamp())
+    etag = f'"{schema.id}-{schema.current_version}-{timestamp}"'
+    response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, post-check=0, pre-check=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    response.headers["ETag"] = etag
+    response.headers["X-EasyEA-Schema-Version"] = str(schema.current_version or "v1.0")
+    response.headers["X-EasyEA-Timestamp"] = str(timestamp)
+    try:
+        response.set_cookie(
+            key=f"easyea_schema_ver_{schema.id}",
+            value=f"{schema.current_version}_{timestamp}",
+            max_age=86400,
+            httponly=False,
+            samesite="lax",
+            path="/"
+        )
+        response.set_cookie(
+            key="easyea_cache_bust",
+            value=str(timestamp),
+            max_age=86400,
+            httponly=False,
+            samesite="lax",
+            path="/"
+        )
+    except Exception:
+        pass
+
+
+
 @router.get("/tree")
 def get_schemas_tree(
     model_id: Optional[str] = Query(None, description="Filter by workspace model_id"),
@@ -365,14 +398,16 @@ def list_schemas(
 @router.get("/{schema_id}/detail")
 def get_schema_detail(
     schema_id: str,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Retrieve full schema detail including visual view_data."""
+    """Retrieve full schema detail including visual view_data with anti-cache headers."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
 
+    _set_cache_invalidation_headers(response, schema)
     res = _serialize_schema(schema)
     res["view_data"] = schema.view_data if isinstance(schema.view_data, dict) else {"nodes": [], "connections": []}
     return res
@@ -906,14 +941,26 @@ def download_drawio_palette(
     )
 
 
+@router.get("/drawio/config")
+def get_drawio_config():
+    """Returns the configured Draw.io Web URL (local by default or cloud)."""
+    return {
+        "local_url": settings.DRAWIO_WEB_URL,
+        "cloud_url": "https://embed.diagrams.net",
+        "default_mode": "local" if settings.DRAWIO_WEB_URL else "cloud"
+    }
+
+
 @router.post("/{schema_id}/checkout")
 def checkout_schema(
     schema_id: str,
+    response: Response,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
     """
-    Locks the schema for the current user and returns the standalone XML (.archimate or .drawio).
+    Locks the schema for the current user and returns the standalone XML (.archimate or .drawio)
+    with strict anti-cache invalidation headers and cookies.
     """
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
@@ -933,6 +980,8 @@ def checkout_schema(
     schema.locked_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(schema)
+
+    _set_cache_invalidation_headers(response, schema)
 
     ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first()
     is_bpmn = (getattr(schema, "format", "archi") == "bpmn") or (ws and getattr(ws, "modeling_tool", "archi") in ["bpmn", "camunda"])
@@ -966,7 +1015,7 @@ def download_schema_xml(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Download schema XML (.archimate, .drawio, or .bpmn) without locking."""
+    """Download schema XML (.archimate, .drawio, or .bpmn) without locking, with anti-cache headers."""
     schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
     if not schema:
         raise HTTPException(status_code=404, detail="Schema non trovato.")
@@ -989,16 +1038,53 @@ def download_schema_xml(
         filename = f"{safe_name}.archimate"
         media_type = "application/octet-stream"
 
-    return Response(
+    resp = Response(
         content=xml_content,
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+    )
+    _set_cache_invalidation_headers(resp, schema)
+    return resp
+
+
+@router.get("/{schema_id}/xml")
+def get_schema_raw_xml(
+    schema_id: str,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve raw standalone XML content with aggressive cache invalidation headers."""
+    schema = db.query(ArchiSchema).filter(ArchiSchema.id == schema_id).first()
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema non trovato.")
+
+    ws = db.query(ModelWorkspace).filter(ModelWorkspace.id == schema.model_id).first()
+    is_bpmn = (getattr(schema, "format", "archi") == "bpmn") or (ws and getattr(ws, "modeling_tool", "archi") in ["bpmn", "camunda"])
+    is_drawio = (getattr(schema, "format", "archi") == "drawio") or (ws and getattr(ws, "modeling_tool", "archi") == "drawio")
+
+    if is_bpmn:
+        xml_content = export_schema_to_bpmn_xml(schema, db)
+        media_type = "application/xml"
+    elif is_drawio:
+        xml_content = export_schema_to_drawio_xml(schema, db)
+        media_type = "application/xml"
+    else:
+        xml_content = generate_standalone_archi_xml(schema, db)
+        media_type = "application/xml"
+
+    _set_cache_invalidation_headers(response, schema)
+    return Response(
+        content=xml_content,
+        media_type=media_type,
+        headers=dict(response.headers)
     )
 
 
 @router.post("/{schema_id}/discard-checkout")
 def discard_checkout(
     schema_id: str,
+    response: Response,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -1011,6 +1097,7 @@ def discard_checkout(
     require_library_permission(db, user, "edit_diagram", schema.model_id)
 
     if schema.status != "checked_out":
+        _set_cache_invalidation_headers(response, schema)
         return {"success": True, "message": "Lo schema non era in stato di checkout.", "schema": _serialize_schema(schema)}
 
     # Check permission
@@ -1027,6 +1114,7 @@ def discard_checkout(
     db.commit()
     db.refresh(schema)
 
+    _set_cache_invalidation_headers(response, schema)
     return {"success": True, "message": "Check-out annullato con successo.", "schema": _serialize_schema(schema)}
 
 
@@ -1125,6 +1213,7 @@ async def checkin_diff(
 def checkin_confirm(
     schema_id: str,
     payload: CheckinConfirmRequest,
+    response: Response,
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -1420,6 +1509,8 @@ def checkin_confirm(
 
     db.commit()
     db.refresh(schema)
+
+    _set_cache_invalidation_headers(response, schema)
 
     return {
         "success": True,

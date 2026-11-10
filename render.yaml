@@ -22,10 +22,27 @@ services:
         value: "false"
       - key: EASYEA_RBAC_MODE
         value: hybrid
+      - key: EASYEA_DRAWIO_WEB_URL
+        value: https://easyea-drawio-prod.onrender.com
+      - key: EASYEA_CORS_ORIGINS
+        value: https://easyea-app-prod.onrender.com,https://easyea-drawio-prod.onrender.com,https://embed.diagrams.net,null,file://
       - key: DATABASE_URL
         fromDatabase:
           name: easyea-postgres-prod
           property: connectionString
+
+  - type: web
+    name: easyea-drawio-prod
+    runtime: image
+    image:
+      url: docker.io/jgraph/drawio:latest
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DRAWIO_BASE_URL
+        value: https://easyea-drawio-prod.onrender.com
 
 databases:
   - name: easyea-postgres-prod

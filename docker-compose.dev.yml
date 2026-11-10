@@ -30,6 +30,7 @@ services:
       - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-http://localhost:8000/api/auth/oidc/callback}
       - OIDC_FRONTEND_REDIRECT_URL=${OIDC_FRONTEND_REDIRECT_URL:-http://localhost:8000}
       - EASYEA_RBAC_MODE=${EASYEA_RBAC_MODE:-hybrid}
+      - EASYEA_DRAWIO_WEB_URL=${EASYEA_DRAWIO_WEB_URL:-http://localhost:8080}
     networks:
       - default
       - shared-idp-net
@@ -58,6 +59,22 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+
+  drawio:
+    image: jgraph/drawio:latest
+    container_name: easyea-drawio-web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DRAWIO_BASE_URL=http://localhost:8080
+    volumes:
+      - ./plugins/drawio-easyea/easyea-plugin.js:/usr/local/tomcat/webapps/draw/plugins/easyea.js:ro
+      - ./docker/drawio/PreConfig.js:/usr/local/tomcat/webapps/draw/js/PreConfig.js:ro
+      - ./docker/drawio/PostConfig.js:/usr/local/tomcat/webapps/draw/js/PostConfig.js:ro
+    networks:
+      - default
+
 
 networks:
   default:

@@ -485,9 +485,9 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                         }`}
                       >
                         <div className="flex items-center gap-1.5 font-bold text-xs">
-                          <span>🎨 Draw.io Desktop</span>
+                          <span>🎨 Draw.io Web</span>
                         </div>
-                        <span className="text-[10px] text-slate-500 leading-tight">File .drawio con Palette ArchiMate 3.x</span>
+                        <span className="text-[10px] text-slate-500 leading-tight">Editor Web cloud/locale con Palette e Catalogo</span>
                       </button>
                     </div>
                   </div>

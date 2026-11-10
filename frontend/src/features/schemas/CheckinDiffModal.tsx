@@ -32,23 +32,27 @@ import { useLanguage } from '../../context/LanguageContext';
 
 interface CheckinDiffModalProps {
   schema: ArchiSchema;
+  initialFile?: File | null;
+  initialDiffResult?: SchemaDiffResult | null;
   onClose: () => void;
   onSuccess: (updatedSchema: ArchiSchema) => void;
 }
 
 export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
   schema,
+  initialFile,
+  initialDiffResult,
   onClose,
   onSuccess
 }) => {
   const { language } = useLanguage();
   const isIt = language === 'it';
-  const [step, setStep] = useState<'upload' | 'diff' | 'confirm'>('upload');
+  const [step, setStep] = useState<'upload' | 'diff' | 'confirm'>(initialDiffResult ? 'diff' : 'upload');
   const [diffViewTab, setDiffViewTab] = useState<'all' | 'elements' | 'relationships'>('all');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(initialFile || null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [diffResult, setDiffResult] = useState<SchemaDiffResult | null>(null);
+  const [diffResult, setDiffResult] = useState<SchemaDiffResult | null>(initialDiffResult || null);
 
   // Resolution States
   // item_id (element or relationship) -> { field: boolean (overwrite) }
@@ -56,6 +60,56 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
   // id -> boolean (remove_from_catalog)
   const [catalogRemovals, setCatalogRemovals] = useState<Record<string, boolean>>({});
   const [commitMessage, setCommitMessage] = useState<string>('');
+
+  const setupDiffResolutions = (res: SchemaDiffResult, fileName?: string) => {
+    // Initialize default resolutions: overwrite=true for all modified attributes
+    const initialAttrRes: Record<string, Record<string, boolean>> = {};
+    res.modified_elements.forEach((mel) => {
+      initialAttrRes[mel.id] = {};
+      mel.changes.forEach((c) => {
+        initialAttrRes[mel.id][c.field] = true;
+      });
+    });
+    res.modified_relationships.forEach((mrel) => {
+      if (!initialAttrRes[mrel.id]) initialAttrRes[mrel.id] = {};
+      mrel.changes.forEach((c) => {
+        initialAttrRes[mrel.id][c.field] = true;
+      });
+    });
+    setAttributeResolutions(initialAttrRes);
+
+    // Default: remove_from_catalog = false (keep in catalog)
+    const initialCatRem: Record<string, boolean> = {};
+    res.removed_elements.forEach((rel) => {
+      initialCatRem[rel.id] = false;
+    });
+    res.removed_relationships.forEach((rel) => {
+      initialCatRem[rel.id] = false;
+    });
+    setCatalogRemovals(initialCatRem);
+
+    const isDrawio = (fileName && fileName.toLowerCase().endsWith('.drawio')) || res.format === 'drawio' || schema.format === 'drawio';
+    const toolName = isDrawio ? 'Draw.io' : (res.format === 'bpmn' ? 'Camunda' : 'Archi');
+    const totalNew = (res.summary.new_elements_count || 0) + (res.summary.new_relationships_count || 0);
+    const totalMod = (res.summary.modified_elements_count || 0) + (res.summary.modified_relationships_count || 0);
+    const totalRem = (res.summary.removed_elements_count || 0) + (res.summary.removed_relationships_count || 0);
+
+    setCommitMessage(
+      isIt
+        ? `Check-in modifiche da ${toolName} (${totalNew} nuovi, ${totalMod} modificati, ${totalRem} rimossi)`
+        : `Check-in changes from ${toolName} (${totalNew} new, ${totalMod} modified, ${totalRem} removed)`
+    );
+  };
+
+  React.useEffect(() => {
+    if (initialDiffResult) {
+      setDiffResult(initialDiffResult);
+      setupDiffResolutions(initialDiffResult, initialFile?.name);
+      setStep('diff');
+    } else if (initialFile) {
+      setSelectedFile(initialFile);
+    }
+  }, [initialDiffResult, initialFile]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -74,44 +128,7 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
     try {
       const res = await api.checkinDiff(schema.id, selectedFile);
       setDiffResult(res);
-
-      // Initialize default resolutions: overwrite=true for all modified attributes
-      const initialAttrRes: Record<string, Record<string, boolean>> = {};
-      res.modified_elements.forEach((mel) => {
-        initialAttrRes[mel.id] = {};
-        mel.changes.forEach((c) => {
-          initialAttrRes[mel.id][c.field] = true;
-        });
-      });
-      res.modified_relationships.forEach((mrel) => {
-        if (!initialAttrRes[mrel.id]) initialAttrRes[mrel.id] = {};
-        mrel.changes.forEach((c) => {
-          initialAttrRes[mrel.id][c.field] = true;
-        });
-      });
-      setAttributeResolutions(initialAttrRes);
-
-      // Default: remove_from_catalog = false (keep in catalog)
-      const initialCatRem: Record<string, boolean> = {};
-      res.removed_elements.forEach((rel) => {
-        initialCatRem[rel.id] = false;
-      });
-      res.removed_relationships.forEach((rel) => {
-        initialCatRem[rel.id] = false;
-      });
-      setCatalogRemovals(initialCatRem);
-
-      const isDrawio = selectedFile.name.toLowerCase().endsWith('.drawio');
-      const toolName = isDrawio ? 'Draw.io' : 'Archi';
-      const totalNew = (res.summary.new_elements_count || 0) + (res.summary.new_relationships_count || 0);
-      const totalMod = (res.summary.modified_elements_count || 0) + (res.summary.modified_relationships_count || 0);
-      const totalRem = (res.summary.removed_elements_count || 0) + (res.summary.removed_relationships_count || 0);
-
-      setCommitMessage(
-        isIt
-          ? `Check-in modifiche da ${toolName} (${totalNew} nuovi, ${totalMod} modificati, ${totalRem} rimossi)`
-          : `Check-in changes from ${toolName} (${totalNew} new, ${totalMod} modified, ${totalRem} removed)`
-      );
+      setupDiffResolutions(res, selectedFile.name);
       setStep('diff');
     } catch (err: any) {
       setError(err.message || (isIt ? 'Errore durante l’analisi del diff.' : 'Error analyzing diff.'));
@@ -295,8 +312,8 @@ export const CheckinDiffModal: React.FC<CheckinDiffModalProps> = ({
                 </div>
                 <p className="text-xs text-slate-500 mt-1">
                   {isIt
-                    ? 'Supporta file nativi Archi (.archimate), Draw.io Desktop (.drawio) e Open Exchange Format (.xml)'
-                    : 'Supports native Archi (.archimate), Draw.io Desktop (.drawio) and Open Exchange Format (.xml)'}
+                    ? 'Supporta file nativi Archi (.archimate), Draw.io (.drawio) e Open Exchange Format (.xml)'
+                    : 'Supports native Archi (.archimate), Draw.io (.drawio) and Open Exchange Format (.xml)'}
                 </p>
                 {schema.format === 'drawio' && (
                   <p className="text-[11px] font-mono text-slate-600 bg-slate-200/70 px-2.5 py-1 rounded-md mt-2">

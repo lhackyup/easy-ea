@@ -40,7 +40,7 @@ def _resolve_secret_key() -> str:
 def _resolve_cors_origins() -> List[str]:
     raw_origins = os.getenv(
         "EASYEA_CORS_ORIGINS",
-        "http://localhost:5173,http://localhost:8000,http://127.0.0.1:5173,http://127.0.0.1:8000,https://embed.diagrams.net,null,file://",
+        "http://localhost:5173,http://localhost:8000,http://127.0.0.1:5173,http://127.0.0.1:8000,http://localhost:8080,http://127.0.0.1:8080,https://embed.diagrams.net,null,file://",
     )
     origins = [
         o.strip().rstrip("/")
@@ -52,6 +52,8 @@ def _resolve_cors_origins() -> List[str]:
         "http://localhost:8000",
         "http://127.0.0.1:5173",
         "http://127.0.0.1:8000",
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
         "https://embed.diagrams.net",
         "null",
         "file://",
@@ -108,6 +110,9 @@ class Settings(BaseSettings):
 
     # External Package Registry URL (Marketplace for .eap bundles)
     PACKAGE_REGISTRY_URL: str = os.getenv("EASYEA_PACKAGE_REGISTRY_URL", "").strip()
+
+    # Draw.io Web Integration (Local Docker instance by default, with cloud fallback)
+    DRAWIO_WEB_URL: str = os.getenv("EASYEA_DRAWIO_WEB_URL", "http://localhost:8080").strip().rstrip("/")
 
     # HTTP Strict Transport Security (HSTS Preload - RFC 6797)
     HSTS_ENABLED: bool = os.getenv("EASYEA_HSTS_ENABLED", "true").lower() in ("1", "true", "yes")

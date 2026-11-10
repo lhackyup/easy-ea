@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { SchemaFolder, ArchiSchema, ArchimateElementItem, ModelWorkspace } from '../../types';
+import { SchemaFolder, ArchiSchema, ArchimateElementItem, ModelWorkspace, SchemaDiffResult } from '../../types';
 import { api } from '../../lib/api';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
@@ -11,6 +11,18 @@ import { SchemaAsCodeModal } from './SchemaAsCodeModal';
 import { ArchiPluginModal } from './ArchiPluginModal';
 import { DrawioPaletteModal } from './DrawioPaletteModal';
 import { CamundaPluginModal } from './CamundaPluginModal';
+import {
+  openDrawioWeb,
+  DrawioWebSession,
+  setCacheInvalidationCookies,
+  getDrawioMode,
+  setDrawioMode,
+  getDrawioBaseUrl,
+  checkDrawioLocalHealth,
+  DrawioServerMode,
+  DEFAULT_LOCAL_DRAWIO_URL,
+  DEFAULT_CLOUD_DRAWIO_URL
+} from '../../lib/drawio/drawioWebManager';
 import {
   Folder,
   FolderPlus,
@@ -38,7 +50,11 @@ import {
   Cpu,
   Palette,
   Workflow,
-  ExternalLink
+  ExternalLink,
+  Globe,
+  Monitor,
+  Settings,
+  X
 } from 'lucide-react';
 
 interface SchemaRepositoryProps {
@@ -46,7 +62,7 @@ interface SchemaRepositoryProps {
 }
 
 export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) => {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { t, interpolate } = useLanguage();
 
   const [folders, setFolders] = useState<SchemaFolder[]>([]);
@@ -65,9 +81,24 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
   const [isCamundaModalOpen, setIsCamundaModalOpen] = useState(false);
   const [previewSchema, setPreviewSchema] = useState<ArchiSchema | null>(null);
   const [checkinSchema, setCheckinSchema] = useState<ArchiSchema | null>(null);
+  const [checkinDiffData, setCheckinDiffData] = useState<{
+    file?: File | null;
+    diff?: SchemaDiffResult | null;
+  } | null>(null);
+  const [activeDrawioSession, setActiveDrawioSession] = useState<{
+    schemaId: string;
+    schemaName: string;
+    session: DrawioWebSession;
+  } | null>(null);
   const [historySchema, setHistorySchema] = useState<ArchiSchema | null>(null);
   const [sacModalSchema, setSacModalSchema] = useState<ArchiSchema | null>(null);
   const [isNewSacOpen, setIsNewSacOpen] = useState(false);
+  const [drawioServerMode, setDrawioServerMode] = useState<DrawioServerMode>(getDrawioMode());
+  const [isDrawioConfigModalOpen, setIsDrawioConfigModalOpen] = useState(false);
+  const [isLocalDrawioHealthy, setIsLocalDrawioHealthy] = useState<boolean | null>(null);
+  const [customDrawioUrl, setCustomDrawioUrl] = useState<string>(
+    localStorage.getItem('easyea_drawio_custom_url') || ''
+  );
 
   // Folder Operations State
   const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
@@ -144,6 +175,13 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
 
   useEffect(() => {
     loadData();
+    api.getDrawioConfig().then((cfg) => {
+      const mode = getDrawioMode();
+      const targetUrl = mode === 'custom' && customDrawioUrl ? customDrawioUrl : (cfg.local_url || DEFAULT_LOCAL_DRAWIO_URL);
+      checkDrawioLocalHealth(targetUrl).then((healthy) => setIsLocalDrawioHealthy(healthy));
+    }).catch(() => {
+      checkDrawioLocalHealth().then((healthy) => setIsLocalDrawioHealthy(healthy));
+    });
   }, [modelId]);
 
   // Auto-refresh schema states when returning to the browser tab or window (e.g. after Archi / Draw.io check-in)
@@ -298,6 +336,100 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
     window.location.href = easyeaUri;
     const appLabel = toolType === 'drawio' ? 'Draw.io' : (toolType === 'camunda' ? 'Camunda Modeler' : 'Archi');
     showToast(`Riapertura di ${schema.name} in ${appLabel}...`);
+  };
+
+  const handleOpenDrawioWeb = async (schema: ArchiSchema, isEdit: boolean = true) => {
+    try {
+      const activeMode = getDrawioMode();
+      const serverUrl = getDrawioBaseUrl();
+
+      if (activeMode === 'local') {
+        const isHealthy = await checkDrawioLocalHealth(serverUrl);
+        setIsLocalDrawioHealthy(isHealthy);
+        if (!isHealthy) {
+          showToast(`Server Draw.io Web locale (${serverUrl}) non in ascolto. Avvia il container Docker o passa alla modalità Cloud.`, 'error');
+          setIsDrawioConfigModalOpen(true);
+          return;
+        }
+      }
+
+      let xmlContent = '';
+      let targetSchema = schema;
+
+      if (isEdit) {
+        if (isViewer) {
+          showToast(t.rbac.demoCheckoutForbidden || 'Il Check-out per modifica esterna non è disponibile in modalità Demo (Sola Lettura)', 'error');
+          return;
+        }
+
+        if (schema.status !== 'checked_out') {
+          showToast('Esecuzione del check-out sul server EasyEA...');
+          const res = await api.checkoutSchema(schema.id);
+          targetSchema = res.schema;
+          setSchemas((prev) => prev.map((s) => (s.id === targetSchema.id ? targetSchema : s)));
+          xmlContent = res.xml_content;
+        } else if (schema.locked_by_user_id === user?.id || isAdmin) {
+          showToast('Recupero dello schema aggiornato dal repository...');
+          xmlContent = await api.getSchemaXml(schema.id);
+        } else {
+          showToast(`Lo schema è bloccato da ${schema.locked_by_username || 'un altro utente'}. Apertura in sola lettura.`, 'error');
+          xmlContent = await api.getSchemaXml(schema.id);
+          isEdit = false;
+        }
+      } else {
+        xmlContent = await api.getSchemaXml(schema.id);
+      }
+
+      setCacheInvalidationCookies(targetSchema.id, targetSchema.current_version);
+
+      const session = openDrawioWeb({
+        schemaId: targetSchema.id,
+        schemaName: targetSchema.name,
+        modelId: targetSchema.model_id,
+        version: targetSchema.current_version,
+        initialXml: xmlContent,
+        readonly: !isEdit,
+        serverUrl: serverUrl,
+        authToken: token || sessionStorage.getItem('easyea_auth_token') || undefined,
+        username: user?.username,
+        fullName: user?.full_name,
+        catalogElements: elements.map((e) => ({
+          id: e.id,
+          name: e.name,
+          type: e.type,
+          layer: e.layer,
+          documentation: e.documentation
+        })),
+        onSave: async (savedXml: string) => {
+          try {
+            const file = new File([savedXml], `${targetSchema.name}.drawio`, { type: 'application/xml' });
+            const diff = await api.checkinDiff(targetSchema.id, file);
+            setCheckinSchema(targetSchema);
+            setCheckinDiffData({ file, diff });
+            showToast('Modifiche salvate da Draw.io Web! Rivedi il Diff e conferma il Check-in.', 'success');
+          } catch (err: any) {
+            showToast(`Errore salvataggio Draw.io: ${err.message}`, 'error');
+            throw err;
+          }
+        },
+        onStatusChange: (status) => {
+          if (status === 'ready') {
+            const modeLabel = activeMode === 'local' ? 'Locale Docker' : 'Cloud';
+            showToast(`Diagramma '${targetSchema.name}' aperto in Draw.io Web (${modeLabel}) in nuova finestra.`, 'success');
+          } else if (status === 'closed') {
+            setActiveDrawioSession((curr) => (curr?.schemaId === targetSchema.id ? null : curr));
+          }
+        }
+      });
+
+      if (!session) {
+        showToast('Impossibile aprire Draw.io Web: verifica che il browser non blocchi le finestre popup.', 'error');
+      } else {
+        setActiveDrawioSession({ schemaId: targetSchema.id, schemaName: targetSchema.name, session });
+      }
+    } catch (err: any) {
+      showToast(err.message || 'Errore durante l’apertura di Draw.io Web.', 'error');
+    }
   };
 
   const handleDiscardCheckout = async (schema: ArchiSchema) => {
@@ -696,6 +828,32 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               <span className="hidden sm:inline">{t.schemas.refreshSchemasBtn}</span>
             </button>
 
+            {/* Draw.io Web Server Mode Selector */}
+            <button
+              type="button"
+              onClick={() => setIsDrawioConfigModalOpen(true)}
+              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200/80 border border-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition flex items-center space-x-1.5 cursor-pointer shadow-2xs"
+              title="Configura l'istanza di Draw.io Web (Locale Docker http://localhost:8080 vs Cloud)"
+            >
+              <Globe className="w-3.5 h-3.5 text-indigo-600" />
+              <span className="hidden md:inline text-slate-500">Draw.io Web:</span>
+              <span className="font-bold text-slate-800">
+                {drawioServerMode === 'local' ? 'Locale (Docker)' : (drawioServerMode === 'cloud' ? 'Cloud' : 'Custom')}
+              </span>
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  drawioServerMode === 'local'
+                    ? (isLocalDrawioHealthy ? 'bg-emerald-500 shadow-sm shadow-emerald-400' : 'bg-rose-500 animate-pulse')
+                    : 'bg-indigo-500'
+                }`}
+                title={
+                  drawioServerMode === 'local'
+                    ? (isLocalDrawioHealthy ? 'Container locale attivo' : 'Container locale non raggiungibile')
+                    : 'Modalità Cloud'
+                }
+              />
+            </button>
+
             {/* Tool-specific Plugin Button: Archi vs Draw.io */}
             {modelWorkspace?.modeling_tool === 'drawio' ? (
               <button
@@ -763,6 +921,57 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
 
         {/* Main Content Area */}
         <div className="p-6 overflow-y-auto flex-1">
+          {/* Active Draw.io Web Session Notification Banner */}
+          {activeDrawioSession && (
+            <div className="mb-4 px-4 py-3 bg-gradient-to-r from-indigo-500/10 via-purple-500/10 to-indigo-500/10 border border-indigo-500/30 rounded-2xl flex items-center justify-between shadow-sm animate-in fade-in">
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center animate-pulse shadow-sm">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs font-bold text-indigo-900">
+                      {t.schemas.drawioWebActiveSession || 'Sessione Draw.io Web attiva per'}
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-800 border border-indigo-200">
+                      {activeDrawioSession.schemaName}
+                    </span>
+                    <span className="text-[10px] text-emerald-700 font-semibold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
+                      Sincronizzazione Live & Anti-Cache
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {t.schemas.drawioWebActiveSessionHint || 'Le modifiche salvate in Draw.io Web (Ctrl+S / Salva) vengono ricevute e validate automaticamente.'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const sc = schemas.find((s) => s.id === activeDrawioSession.schemaId);
+                    if (sc) setCheckinSchema(sc);
+                  }}
+                  className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center space-x-1 shadow-sm cursor-pointer"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Rivedi e Check-in</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    activeDrawioSession.session.close();
+                    setActiveDrawioSession(null);
+                  }}
+                  className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition cursor-pointer"
+                  title="Chiudi sessione Draw.io Web"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          )}
           {loading ? (
             <div className="h-64 flex flex-col items-center justify-center text-slate-400">
               <RefreshCw className="w-8 h-8 animate-spin text-indigo-500 mb-2" />
@@ -896,6 +1105,17 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                         <span>Anteprima</span>
                       </button>
 
+                      {schema.format === 'drawio' && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDrawioWeb(schema, false)}
+                          title={t.schemas.viewInDrawioWeb || 'Visualizza in Draw.io Web (sola lettura)'}
+                          className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
+                        >
+                          <Globe className="w-4 h-4" />
+                        </button>
+                      )}
+
                       <button
                         type="button"
                         onClick={() => setSacModalSchema(schema)}
@@ -917,16 +1137,39 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                       {/* Primary Actions: Checkout / Open / Check-in / Unlock */}
                       {!isLocked ? (
                         !isViewer ? (
-                          <button
-                            type="button"
-                            onClick={() => handleCheckout(schema, true)}
-                            title={`Effettua il check-out e apri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
-                          >
-                            <Lock className="w-3.5 h-3.5" />
-                            <span>{t.schemas.checkoutBtn || 'Check-out'}</span>
-                            <ExternalLink className="w-3 h-3 opacity-80" />
-                          </button>
+                          schema.format === 'drawio' ? (
+                            <div className="flex items-center space-x-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenDrawioWeb(schema, true)}
+                                title={t.schemas.editWithDrawioWebTooltip || 'Effettua il check-out e apri in Draw.io Web in una nuova scheda (con invalidazione cache)'}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
+                              >
+                                <Lock className="w-3.5 h-3.5" />
+                                <span>{t.schemas.editWithDrawioWeb || 'Draw.io Web'}</span>
+                                <ExternalLink className="w-3 h-3 opacity-80" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleCheckout(schema, true)}
+                                title="Check-out e scarica per Draw.io Desktop"
+                                className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
+                              >
+                                <Monitor className="w-4 h-4" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleCheckout(schema, true)}
+                              title={`Effettua il check-out e apri direttamente in ${schema.format === 'bpmn' ? 'Camunda' : 'Archi'}`}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>{t.schemas.checkoutBtn || 'Check-out'}</span>
+                              <ExternalLink className="w-3 h-3 opacity-80" />
+                            </button>
+                          )
                         ) : (
                           <button
                             type="button"
@@ -939,33 +1182,71 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                           </button>
                         )
                       ) : isLockedByMe ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => handleLaunchAppOnly(schema)}
-                            title={`Riapri direttamente in ${schema.format === 'drawio' ? 'Draw.io' : (schema.format === 'bpmn' ? 'Camunda' : 'Archi')}`}
-                            className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center space-x-1 cursor-pointer"
-                          >
-                            <ExternalLink className="w-3.5 h-3.5" />
-                            <span>Apri</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setCheckinSchema(schema)}
-                            className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center space-x-1 shadow-sm shadow-emerald-200 cursor-pointer"
-                          >
-                            <Upload className="w-3.5 h-3.5" />
-                            <span>Check-in</span>
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDiscardCheckout(schema)}
-                            title={t.schemas.cancelCheckoutTooltip || 'Annulla check-out'}
-                            className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
-                          >
-                            <Unlock className="w-4 h-4" />
-                          </button>
-                        </>
+                        schema.format === 'drawio' ? (
+                          <div className="flex items-center space-x-1">
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDrawioWeb(schema, true)}
+                              title={t.schemas.reopenDrawioWebTooltip || 'Riapri in Draw.io Web (invalida cache e carica l’ultima versione)'}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center space-x-1 cursor-pointer"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>{t.schemas.reopenDrawioWeb || 'Draw.io Web'}</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleLaunchAppOnly(schema)}
+                              title="Riapri file con Draw.io Desktop"
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
+                            >
+                              <Monitor className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCheckinSchema(schema)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center space-x-1 shadow-sm shadow-emerald-200 cursor-pointer"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Check-in</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDiscardCheckout(schema)}
+                              title={t.schemas.cancelCheckoutTooltip || 'Annulla check-out'}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
+                            >
+                              <Unlock className="w-4 h-4" />
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleLaunchAppOnly(schema)}
+                              title={`Riapri direttamente in ${schema.format === 'bpmn' ? 'Camunda' : 'Archi'}`}
+                              className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 transition flex items-center space-x-1 cursor-pointer"
+                            >
+                              <ExternalLink className="w-3.5 h-3.5" />
+                              <span>Apri</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCheckinSchema(schema)}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition flex items-center space-x-1 shadow-sm shadow-emerald-200 cursor-pointer"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              <span>Check-in</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDiscardCheckout(schema)}
+                              title={t.schemas.cancelCheckoutTooltip || 'Annulla check-out'}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 transition cursor-pointer"
+                            >
+                              <Unlock className="w-4 h-4" />
+                            </button>
+                          </>
+                        )
                       ) : isAdmin ? (
                         <button
                           type="button"
@@ -1026,10 +1307,21 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
       {checkinSchema && (
         <CheckinDiffModal
           schema={checkinSchema}
-          onClose={() => setCheckinSchema(null)}
+          initialFile={checkinDiffData?.file}
+          initialDiffResult={checkinDiffData?.diff}
+          onClose={() => {
+            setCheckinSchema(null);
+            setCheckinDiffData(null);
+          }}
           onSuccess={(updatedSchema) => {
             setSchemas((prev) => prev.map((s) => (s.id === updatedSchema.id ? updatedSchema : s)));
             setCheckinSchema(null);
+            setCheckinDiffData(null);
+            // Chiudi automaticamente la finestra di Draw.io Web se attiva per questo schema
+            if (activeDrawioSession && activeDrawioSession.schemaId === updatedSchema.id) {
+              activeDrawioSession.session.close();
+              setActiveDrawioSession(null);
+            }
             showToast(`Check-in completato con successo (${updatedSchema.current_version}).`);
           }}
         />
@@ -1087,6 +1379,196 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
           isOpen={isCamundaModalOpen}
           onClose={() => setIsCamundaModalOpen(false)}
         />
+      )}
+
+      {/* Draw.io Web Instance Configuration Modal */}
+      {isDrawioConfigModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center space-x-2.5">
+                <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                  <Globe className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900">Configurazione Draw.io Web</h3>
+                  <p className="text-xs text-slate-500">
+                    Scegli dove eseguire l'istanza Web di Draw.io (Locale vs Cloud)
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsDrawioConfigModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {/* Option 1: Local Docker Container */}
+              <label
+                className={`flex items-start space-x-3 p-3.5 rounded-xl border transition cursor-pointer ${
+                  drawioServerMode === 'local'
+                    ? 'border-indigo-600 bg-indigo-50/40 ring-1 ring-indigo-600'
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="drawioMode"
+                  value="local"
+                  checked={drawioServerMode === 'local'}
+                  onChange={() => {
+                    setDrawioServerMode('local');
+                    setDrawioMode('local');
+                    checkDrawioLocalHealth().then(setIsLocalDrawioHealthy);
+                  }}
+                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">
+                      🟢 Istanza Web Locale (Docker)
+                    </span>
+                    <span
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                        isLocalDrawioHealthy
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-rose-100 text-rose-800'
+                      }`}
+                    >
+                      {isLocalDrawioHealthy ? 'Online (Porta 8080)' : 'Non in ascolto'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    URL: <code className="bg-slate-100 px-1 py-0.5 rounded text-indigo-700 font-mono font-semibold">http://localhost:8080</code>
+                  </p>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    Massima privacy, zero chiamate a server esterni, nessun cookie di terze parti e totale isolamento cache.
+                  </p>
+                  {!isLocalDrawioHealthy && (
+                    <div className="mt-2.5 p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-800 space-y-1">
+                      <div className="font-bold flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                        <span>Come avviare Draw.io Web locale:</span>
+                      </div>
+                      <div className="font-mono text-[10px] bg-white p-1 rounded border border-amber-200 select-all">
+                        docker compose up -d drawio
+                      </div>
+                      <span className="text-[10px] text-slate-500">oppure: <code>docker run -d -p 8080:8080 jgraph/drawio</code></span>
+                    </div>
+                  )}
+                </div>
+              </label>
+
+              {/* Option 2: Cloud diagrams.net */}
+              <label
+                className={`flex items-start space-x-3 p-3.5 rounded-xl border transition cursor-pointer ${
+                  drawioServerMode === 'cloud'
+                    ? 'border-indigo-600 bg-indigo-50/40 ring-1 ring-indigo-600'
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="drawioMode"
+                  value="cloud"
+                  checked={drawioServerMode === 'cloud'}
+                  onChange={() => {
+                    setDrawioServerMode('cloud');
+                    setDrawioMode('cloud');
+                  }}
+                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-sm text-slate-900">
+                      ☁️ Cloud Ufficiale (embed.diagrams.net)
+                    </span>
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700">
+                      Fallback Internet
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1">
+                    URL: <code className="bg-slate-100 px-1 py-0.5 rounded font-mono">https://embed.diagrams.net</code>
+                  </p>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    Richiede connessione internet. Usa parametri anti-cache stealth mode.
+                  </p>
+                </div>
+              </label>
+
+              {/* Option 3: Custom URL */}
+              <label
+                className={`flex items-start space-x-3 p-3.5 rounded-xl border transition cursor-pointer ${
+                  drawioServerMode === 'custom'
+                    ? 'border-indigo-600 bg-indigo-50/40 ring-1 ring-indigo-600'
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="drawioMode"
+                  value="custom"
+                  checked={drawioServerMode === 'custom'}
+                  onChange={() => {
+                    setDrawioServerMode('custom');
+                    setDrawioMode('custom', customDrawioUrl);
+                  }}
+                  className="mt-1 text-indigo-600 focus:ring-indigo-500"
+                />
+                <div className="flex-1">
+                  <span className="font-bold text-sm text-slate-900">
+                    ⚙️ URL Personalizzato (Intranet / On-Premise)
+                  </span>
+                  <div className="mt-2">
+                    <input
+                      type="text"
+                      value={customDrawioUrl}
+                      onChange={(e) => {
+                        setCustomDrawioUrl(e.target.value);
+                        if (drawioServerMode === 'custom') {
+                          setDrawioMode('custom', e.target.value);
+                        }
+                      }}
+                      placeholder="es. http://drawio.mia-azienda.local:8080"
+                      className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono"
+                    />
+                  </div>
+                </div>
+              </label>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => {
+                  checkDrawioLocalHealth().then((h) => {
+                    setIsLocalDrawioHealthy(h);
+                    showToast(h ? 'Container locale raggiungibile!' : 'Container locale non raggiungibile.', h ? 'success' : 'error');
+                  });
+                }}
+                className="text-xs text-indigo-600 hover:text-indigo-800 font-bold flex items-center gap-1 cursor-pointer"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Verifica Connessione</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setDrawioMode(drawioServerMode, customDrawioUrl);
+                  setIsDrawioConfigModalOpen(false);
+                  showToast(`Modalità Draw.io impostata: ${drawioServerMode === 'local' ? 'Locale (Docker)' : (drawioServerMode === 'cloud' ? 'Cloud' : 'Personalizzata')}`);
+                }}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-sm cursor-pointer"
+              >
+                Salva e Chiudi
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

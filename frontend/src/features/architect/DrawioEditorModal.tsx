@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { DiagramViewDetail } from '../../types';
 import { easyEAToDrawioXml, createEmptyDrawioXml, drawioXmlToEasyEA, DrawioParseResult } from '../../lib/drawio/drawioConverter';
 import { buildDrawioArchimateLibrary } from '../../lib/drawio/archimatePalette';
-import { X, Save, Download, RefreshCw, CheckCircle2, AlertCircle, Layers, PlusCircle, Eye, GitCommit } from 'lucide-react';
+import { openDrawioWeb, setCacheInvalidationCookies, getDrawioBaseUrl } from '../../lib/drawio/drawioWebManager';
+import { X, Save, Download, RefreshCw, CheckCircle2, AlertCircle, Layers, PlusCircle, Eye, GitCommit, Globe, ExternalLink } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { api } from '../../lib/api';
 
@@ -24,6 +25,14 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
   onSaved,
 }) => {
   const { t } = useLanguage();
+  const currentDrawioBaseUrl = getDrawioBaseUrl();
+  const activeOrigin = React.useMemo(() => {
+    try {
+      return new URL(currentDrawioBaseUrl).origin;
+    } catch (e) {
+      return DRAWIO_ORIGIN;
+    }
+  }, [currentDrawioBaseUrl]);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -108,12 +117,14 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
     }, 4000);
 
     const handleMessage = async (event: MessageEvent) => {
-      if (event.origin !== DRAWIO_ORIGIN) return;
+      const allowedOrigins = [activeOrigin, DRAWIO_ORIGIN, 'http://localhost:8080', 'http://127.0.0.1:8080'];
+      if (!allowedOrigins.includes(event.origin)) return;
       if (iframeRef.current?.contentWindow && event.source !== iframeRef.current.contentWindow) return;
       if (typeof event.data !== 'string') return;
 
       try {
         const msg = JSON.parse(event.data);
+        const postOrigin = activeOrigin || '*';
 
         // 1. Draw.io requests configuration (when configure=1 is set)
         if (msg.event === 'configure') {
@@ -132,7 +143,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
                 ]
               }
             }),
-            DRAWIO_ORIGIN
+            postOrigin
           );
         }
 
@@ -148,7 +159,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
               xml: xmlToLoad,
               title: nameRef.current || 'EasyEA Diagram'
             }),
-            DRAWIO_ORIGIN
+            postOrigin
           );
         }
 
@@ -210,7 +221,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
         action: 'export',
         format: 'xml'
       }),
-      DRAWIO_ORIGIN
+      activeOrigin || '*'
     );
   };
 
@@ -222,7 +233,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
         action: 'export',
         format: 'xml'
       }),
-      DRAWIO_ORIGIN
+      activeOrigin || '*'
     );
   };
 
@@ -520,6 +531,29 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
         {/* Right: Actions */}
         <div className="flex items-center space-x-3">
           <button
+            onClick={() => {
+              setCacheInvalidationCookies(modelId, viewDetail?.id);
+              openDrawioWeb({
+                schemaId: viewDetail?.id || modelId,
+                schemaName: diagramName,
+                modelId: modelId,
+                initialXml: currentXml || (viewDetail ? easyEAToDrawioXml(viewDetail) : createEmptyDrawioXml(diagramName)),
+                readonly: false,
+                onSave: async (savedXml) => {
+                  setCurrentXml(savedXml);
+                  await handleProcessSave(savedXml);
+                }
+              });
+            }}
+            className="flex items-center space-x-1.5 px-3 py-2 bg-indigo-950/70 hover:bg-indigo-900 text-indigo-200 hover:text-white rounded-xl text-xs font-bold transition border border-indigo-700/50 cursor-pointer shadow-sm"
+            title={t.schemas.openInNewTabDrawioWeb || 'Apri in nuova scheda (Draw.io Web)'}
+          >
+            <Globe className="w-4 h-4 text-indigo-400" />
+            <span>Nuova Scheda</span>
+            <ExternalLink className="w-3 h-3 opacity-70" />
+          </button>
+
+          <button
             onClick={triggerExportDownload}
             className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded-xl text-xs font-bold transition border border-slate-700 cursor-pointer"
             title={t.schemas.downloadDrawioDesktopTooltip}
@@ -563,7 +597,7 @@ export const DrawioEditorModal: React.FC<DrawioEditorModalProps> = ({
 
         <iframe
           ref={iframeRef}
-          src={`${DRAWIO_ORIGIN}/?embed=1&ui=atlas&spin=1&proto=json&configure=1&libraries=1&libs=archimate3&noExitBtn=0&saveAndExit=0`}
+          src={`${currentDrawioBaseUrl}/?embed=1&ui=atlas&spin=1&proto=json&configure=1&libraries=1&libs=archimate3&noExitBtn=0&saveAndExit=0&stealth=1&local=1&sync=none&pwa=0&offline=0&_cb=${Date.now()}`}
           className="w-full h-full border-0"
           title="EasyEA Draw.io Editor"
           sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"

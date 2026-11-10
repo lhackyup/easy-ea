@@ -921,6 +921,13 @@
                     setActiveSchema(null);
                     ui.hideDialog();
                     alert('Check-in completato con successo!\n\nSchema: ' + activeSchema.schema_name + '\nNuova Versione: ' + (result.schema ? result.schema.current_version : 'v1.x') + '\n\nIl blocco (lock) è stato rilasciato.');
+                    // In Draw.io Web, se aperta come popup o nuova finestra/tab da EasyEA, chiudi automaticamente la finestra
+                    if (!window.electron && window.opener && !window.opener.closed) {
+                        try {
+                            window.opener.postMessage(JSON.stringify({ event: 'easyeaCheckinCompleted', schema_id: schemaId }), '*');
+                        } catch(e) {}
+                        setTimeout(function() { window.close(); }, 300);
+                    }
                 })
                 .catch(function(err) {
                     btnConfirm.disabled = false;
@@ -1080,6 +1087,29 @@
     setTimeout(function() { checkIncomingExternalSession(); }, 1500);
     window.addEventListener('focus', function() { checkIncomingExternalSession(); });
 
+    // HTML5 postMessage bridge for Draw.io Web: receive auth & active schema session from parent window or opener
+    window.addEventListener('message', function(evt) {
+        if (!evt.data) return;
+        try {
+            var d = (typeof evt.data === 'string') ? JSON.parse(evt.data) : evt.data;
+            if (d && (d.action === 'easyeaAuthSession' || d.event === 'easyeaAuthSession')) {
+                if (d.config && d.config.token) {
+                    saveConfig(d.config);
+                } else if (d.token) {
+                    saveConfig({
+                        server_url: d.server_url || window.location.origin,
+                        token: d.token,
+                        username: d.username || 'admin',
+                        full_name: d.full_name || 'Amministratore'
+                    });
+                }
+                if (d.active_schema) {
+                    setActiveSchema(d.active_schema);
+                }
+            }
+        } catch(e) {}
+    });
+
     // -------------------------------------------------------------
     // Hook into Extras menu (available in ALL themes & hamburger menu)
     // -------------------------------------------------------------
@@ -1110,6 +1140,25 @@
             menu.addSeparator(parent);
             ui.menus.addMenuItem(menu, 'easyeaAbout', parent);
         });
+    }
+
+    // -------------------------------------------------------------
+    // Context Menu (Right-Click on Canvas or Element)
+    // -------------------------------------------------------------
+    if (ui.menus && typeof ui.menus.createPopupMenu === 'function') {
+        var oldCreatePopupMenu = ui.menus.createPopupMenu;
+        ui.menus.createPopupMenu = function(menu, cell, evt) {
+            oldCreatePopupMenu.apply(this, arguments);
+            menu.addSeparator();
+            var subMenu = menu.addItem('🏛️ EasyEA', null, null);
+            ui.menus.addMenuItem(menu, 'easyeaCheckout', subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaAddElement', subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaCheckin', subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaDiscard', subMenu);
+            menu.addSeparator(subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaSettings', subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaAbout', subMenu);
+        };
     }
 
     // -------------------------------------------------------------

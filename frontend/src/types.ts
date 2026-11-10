@@ -995,6 +995,7 @@ export interface SchemaDiffResult {
   removed_relationships: SchemaDiffRemovedRelationship[];
   xml_content?: string;
   parsed_view_data?: any;
+  format?: string;
 }
 
 export interface PackageViewSummary {

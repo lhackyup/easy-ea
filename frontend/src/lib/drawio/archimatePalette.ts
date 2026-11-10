@@ -436,3 +436,54 @@ export function buildDrawioArchimateLibrary(): any[] {
     };
   });
 }
+
+export interface CatalogElementItem {
+  id: string;
+  name: string;
+  type: string;
+  layer?: string;
+  documentation?: string;
+}
+
+/**
+ * Builds Draw.io library entries from existing catalog elements in the workspace.
+ * Allows architects to drag & drop existing elements into diagrams with their persistent easyea_id.
+ */
+export function buildDrawioCatalogLibrary(elements: CatalogElementItem[]): any[] {
+  if (!elements || elements.length === 0) return [];
+
+  // Group or map shapes
+  const shapeMap = new Map<string, ArchimateShapeDef>();
+  ARCHIMATE_SHAPES.forEach((s) => shapeMap.set(s.type, s));
+
+  return elements.slice(0, 150).map((elem) => {
+    const shape = shapeMap.get(elem.type);
+    const layer = (elem.layer || shape?.layer || 'Application') as keyof typeof ARCHIMATE_LAYER_COLORS;
+    const colors = ARCHIMATE_LAYER_COLORS[layer] || ARCHIMATE_LAYER_COLORS.Application;
+    const shapeStyle = shape?.shapeStyle || 'rounded=1;whiteSpace=wrap;html=1;arcSize=10;';
+    const w = shape?.width || 160;
+    const h = shape?.height || 65;
+
+    // XML representation with persistent easyea_id attribute for catalog linking & diffing
+    const escapedName = (elem.name || 'Senza Nome')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+    const escapedDoc = (elem.documentation || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+
+    const xml = `<mxGraphModel><root><mxCell id="0"/><mxCell id="1" parent="0"/><object label="${escapedName}" easyea_id="${elem.id}" archimate_type="${elem.type}" layer="${layer}" documentation="${escapedDoc}" id="elem_${elem.id}"><mxCell style="${shapeStyle}fillColor=${colors.fill};strokeColor=${colors.stroke};fontColor=${colors.text};fontStyle=1;" vertex="1" parent="1"><mxGeometry width="${w}" height="${h}" as="geometry"/></mxCell></object></root></mxGraphModel>`;
+
+    return {
+      xml,
+      w,
+      h,
+      title: `${elem.name} [${elem.type}]`
+    };
+  });
+}
+

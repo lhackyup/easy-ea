@@ -39,6 +39,7 @@ def setup_db():
         client.headers.update({"Authorization": f"Bearer {token}"})
     db.close()
     yield
+    app.dependency_overrides.pop(get_db, None)
     Base.metadata.drop_all(bind=engine)
 
 @pytest.fixture
@@ -200,3 +201,58 @@ def test_schema_lifecycle_and_checkout(test_workspace, auth_headers):
 
     # Clean up
     client.delete(f"/api/schemas/{schema_id}", headers=auth_headers)
+
+
+def test_schema_drawio_cache_invalidation_and_xml_endpoint(test_workspace, auth_headers):
+    """
+    Validates Draw.io Web cache invalidation headers, version cookies,
+    and the dedicated fresh XML endpoint.
+    """
+    # 1. Create a draw.io format schema
+    res = client.post(
+        f"/api/schemas/{test_workspace.id}/create",
+        json={
+            "name": "Integration Architecture View",
+            "format": "drawio",
+            "viewpoint": "Application Cooperation",
+            "documentation": "Draw.io Web schema with anti-cache controls"
+        },
+        headers=auth_headers
+    )
+    assert res.status_code == 200
+    schema = res.json()
+    schema_id = schema["id"]
+    assert schema["format"] == "drawio"
+
+    # 2. Test Checkout endpoint anti-cache headers & cookies
+    res_co = client.post(f"/api/schemas/{schema_id}/checkout", headers=auth_headers)
+    assert res_co.status_code == 200
+    assert "no-cache" in res_co.headers.get("Cache-Control", "")
+    assert "no-store" in res_co.headers.get("Cache-Control", "")
+    assert res_co.headers.get("Pragma") == "no-cache"
+    assert "ETag" in res_co.headers
+    assert f"easyea_schema_ver_{schema_id}" in res_co.cookies
+    assert "easyea_cache_bust" in res_co.cookies
+
+    # 3. Test raw XML endpoint GET /{schema_id}/xml
+    res_xml = client.get(f"/api/schemas/{schema_id}/xml", headers=auth_headers)
+    assert res_xml.status_code == 200
+    assert "no-cache" in res_xml.headers.get("Cache-Control", "")
+    assert "no-store" in res_xml.headers.get("Cache-Control", "")
+    assert len(res_xml.text) > 0
+    assert ("<mxfile" in res_xml.text or "<mxGraphModel" in res_xml.text)
+
+    # 4. Test download endpoint anti-cache headers
+    res_dl = client.get(f"/api/schemas/{schema_id}/download", headers=auth_headers)
+    assert res_dl.status_code == 200
+    assert "no-cache" in res_dl.headers.get("Cache-Control", "")
+    assert "no-store" in res_dl.headers.get("Cache-Control", "")
+
+    # 5. Discard checkout and verify headers
+    res_discard = client.post(f"/api/schemas/{schema_id}/discard-checkout", headers=auth_headers)
+    assert res_discard.status_code == 200
+    assert "no-cache" in res_discard.headers.get("Cache-Control", "")
+
+    # Clean up
+    client.delete(f"/api/schemas/{schema_id}", headers=auth_headers)
+

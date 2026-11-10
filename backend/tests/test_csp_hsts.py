@@ -3,8 +3,23 @@ from fastapi.testclient import TestClient
 
 from app.main import app
 from app.core.config import settings
+from app.core.database import Base, engine, SessionLocal
+from app.models.archimate import SystemAuthSettings
+from app.services.auth_service import get_system_auth_settings
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def ensure_db():
+    Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        get_system_auth_settings(db)
+    finally:
+        db.close()
+    yield
+    Base.metadata.drop_all(bind=engine)
 
 
 def test_hsts_preload_header():

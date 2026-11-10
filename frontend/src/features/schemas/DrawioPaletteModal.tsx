@@ -37,13 +37,13 @@ export const DrawioPaletteModal: React.FC<DrawioPaletteModalProps> = ({ isOpen, 
             </div>
             <div>
               <h2 className="text-base font-bold text-white flex items-center space-x-2">
-                <span>{isIt ? 'Palette ArchiMate 3.x & Draw.io Desktop' : 'ArchiMate 3.x & Draw.io Desktop Palette'}</span>
+                <span>{isIt ? 'Palette ArchiMate 3.x & Draw.io' : 'ArchiMate 3.x & Draw.io Palette'}</span>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/30 text-amber-200 border border-amber-400/30">
                   ArchiMate 3.2
                 </span>
               </h2>
               <p className="text-xs text-amber-200/80">
-                {isIt ? 'Libreria di forme e stencil nativi per il client desktop Draw.io' : 'Native shapes and stencil library for Draw.io desktop client'}
+                {isIt ? 'Libreria di forme e stencil nativi per Draw.io Web e Desktop' : 'Native shapes and stencil library for Draw.io Web and Desktop'}
               </p>
             </div>
           </div>
@@ -78,7 +78,7 @@ export const DrawioPaletteModal: React.FC<DrawioPaletteModalProps> = ({ isOpen, 
           {/* Step by Step Guide */}
           <div>
             <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-3">
-              {isIt ? 'Guida Rapida all\'Uso con Draw.io Desktop' : 'Quick Guide for Draw.io Desktop'}
+              {isIt ? 'Guida Rapida all\'Uso con Draw.io' : 'Quick Guide for Draw.io'}
             </h4>
             <div className="space-y-3">
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-start space-x-3">
@@ -86,11 +86,11 @@ export const DrawioPaletteModal: React.FC<DrawioPaletteModalProps> = ({ isOpen, 
                   1
                 </div>
                 <div>
-                  <h5 className="font-bold text-slate-800">{isIt ? 'Installa Draw.io Desktop' : 'Install Draw.io Desktop'}</h5>
+                  <h5 className="font-bold text-slate-800">{isIt ? 'Uso con Draw.io Web o Desktop' : 'Use with Draw.io Web or Desktop'}</h5>
                   <p className="text-slate-600 mt-0.5 leading-relaxed">
                     {isIt ? (
                       <>
-                        Installa il client desktop ufficiale gratuito per Windows, macOS o Linux disponibile su{' '}
+                        Puoi utilizzare Draw.io Web direttamente da EasyEA con il pulsante <strong>"Draw.io Web"</strong> (senza installare nulla e con palette già inclusa) oppure installare il client desktop ufficiale disponibile su{' '}
                         <a
                           href="https://www.drawio.com/"
                           target="_blank"
@@ -103,7 +103,7 @@ export const DrawioPaletteModal: React.FC<DrawioPaletteModalProps> = ({ isOpen, 
                       </>
                     ) : (
                       <>
-                        Install the official free desktop client for Windows, macOS, or Linux available at{' '}
+                        You can use Draw.io Web directly from EasyEA via the <strong>"Draw.io Web"</strong> button (no installation needed, palette already included), or install the official desktop client at{' '}
                         <a
                           href="https://www.drawio.com/"
                           target="_blank"
@@ -128,11 +128,11 @@ export const DrawioPaletteModal: React.FC<DrawioPaletteModalProps> = ({ isOpen, 
                   <p className="text-slate-600 mt-0.5 leading-relaxed">
                     {isIt ? (
                       <>
-                        In Draw.io Desktop, vai nel menu <strong>File &rarr; Open Library from &rarr; Device</strong> (o <em>Apri libreria da &rarr; Dispositivo</em>) e seleziona il file <code>EasyEA_ArchiMate3_Palette.xml</code> appena scaricato. La palette comparirà nella barra laterale sinistra tra le librerie personalizzate.
+                        In Draw.io (Web o Desktop), vai nel menu <strong>File &rarr; Open Library from &rarr; Device</strong> (o <em>Apri libreria da &rarr; Dispositivo</em>) e seleziona il file <code>EasyEA_ArchiMate3_Palette.xml</code> appena scaricato. La palette comparirà nella barra laterale sinistra tra le librerie personalizzate.
                       </>
                     ) : (
                       <>
-                        In Draw.io Desktop, go to <strong>File &rarr; Open Library from &rarr; Device</strong> and select the downloaded <code>EasyEA_ArchiMate3_Palette.xml</code> file. The palette will appear in the left sidebar among custom libraries.
+                        In Draw.io (Web or Desktop), go to <strong>File &rarr; Open Library from &rarr; Device</strong> and select the downloaded <code>EasyEA_ArchiMate3_Palette.xml</code> file. The palette will appear in the left sidebar among custom libraries.
                       </>
                     )}
                   </p>
@@ -151,15 +151,15 @@ export const DrawioPaletteModal: React.FC<DrawioPaletteModalProps> = ({ isOpen, 
                   <ul className="mt-2 space-y-1.5 list-disc list-inside text-slate-600 pl-1">
                     {isIt ? (
                       <>
-                        <li><strong className="text-slate-700">Check-out:</strong> blocca lo schema e scarica il file <code>.drawio</code>.</li>
-                        <li><strong className="text-slate-700">Modifica locale:</strong> apri il file con Draw.io Desktop, trascina i componenti ArchiMate dalla palette e salva.</li>
-                        <li><strong className="text-slate-700">Check-in:</strong> carica il file modificato in EasyEA, rivedi le differenze (Diff Engine) e conferma il salvataggio con versioning automatico!</li>
+                        <li><strong className="text-slate-700">Check-out:</strong> blocca lo schema ed effettua modifiche in Draw.io Web o scarica il file <code>.drawio</code>.</li>
+                        <li><strong className="text-slate-700">Modifica:</strong> apri lo schema in Draw.io Web o Desktop, trascina i componenti ArchiMate dalla palette/catalogo e salva.</li>
+                        <li><strong className="text-slate-700">Check-in:</strong> invia le modifiche o carica il file in EasyEA, rivedi le differenze (Diff Engine) e conferma il salvataggio con versioning automatico!</li>
                       </>
                     ) : (
                       <>
-                        <li><strong className="text-slate-700">Check-out:</strong> lock schema and download the <code>.drawio</code> file.</li>
-                        <li><strong className="text-slate-700">Local editing:</strong> open file in Draw.io Desktop, drag ArchiMate components from the palette, and save.</li>
-                        <li><strong className="text-slate-700">Check-in:</strong> upload the modified file to EasyEA, review differences with Diff Engine, and confirm save with automatic versioning!</li>
+                        <li><strong className="text-slate-700">Check-out:</strong> lock schema and edit in Draw.io Web or download the <code>.drawio</code> file.</li>
+                        <li><strong className="text-slate-700">Editing:</strong> open in Draw.io Web or Desktop, drag ArchiMate components from the palette/catalog, and save.</li>
+                        <li><strong className="text-slate-700">Check-in:</strong> submit changes or upload file to EasyEA, review differences with Diff Engine, and confirm save with automatic versioning!</li>
                       </>
                     )}
                   </ul>
