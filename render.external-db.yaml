@@ -1,0 +1,43 @@
+# ==============================================================================
+# EasyEA - Production Blueprint with External Database (Neon, Supabase, AWS RDS)
+# Render.com Infrastructure-as-Code
+# ==============================================================================
+
+services:
+  - type: web
+    name: easyea-app
+    runtime: image
+    image:
+      url: ghcr.io/lhackyup/easy-ea:latest
+    plan: free
+    region: frankfurt # opzioni: frankfurt, oregon, ohio, singapore
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: EASYEA_ENV
+        value: production
+      - key: EASYEA_SECRET_KEY
+        generateValue: true
+      - key: EASYEA_SEED_DEMO_USERS
+        value: "false"
+      - key: EASYEA_RBAC_MODE
+        value: hybrid
+      - key: EASYEA_DRAWIO_WEB_URL
+        value: https://easyea-drawio.onrender.com
+      - key: EASYEA_CORS_ORIGINS
+        value: https://easyea-app.onrender.com,https://easyea-drawio.onrender.com,https://embed.diagrams.net,null,file://
+      - key: DATABASE_URL
+        sync: false # Render richiederà la stringa di connessione durante il deploy
+
+  - type: web
+    name: easyea-drawio
+    runtime: image
+    image:
+      url: docker.io/jgraph/drawio:latest
+    plan: free
+    region: frankfurt
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DRAWIO_BASE_URL
+        value: https://easyea-drawio.onrender.com

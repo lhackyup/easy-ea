@@ -76,11 +76,21 @@ EasyEA si integra direttamente con i client desktop degli architetti e degli ana
 
 ## ☁️ Deployment sul Cloud a Basso Costo
 
-- **Render.com / Railway**:
+- **Render.com (Infrastructure-as-Code via Blueprint)**:
+  EasyEA include blueprint pronti all'uso per il deployment automatico su Render:
+  - **`render.yaml` (Turnkey All-in-One)**: Deploy automatico di App + Draw.io + Database PostgreSQL gestito su Render (ottimale per provare subito la piattaforma).
+  - **`render.external-db.yaml` (Database Esterno)**: Deploy di App + Draw.io collegando un database esterno permanente (es. [Neon.tech](https://neon.tech), Supabase, AWS RDS).
+  - **`render.demo.yaml`**: Configurazione ottimizzata per istanze dimostrative pubbliche (con utenti demo pre-popolati).
+  - **`render.dev.yaml`**: Configurazione per l'ambiente di preview/sviluppo continuo collegato al branch `develop`.
+
+  *Procedura:* Crea un nuovo **Blueprint** nella console di Render, collega questo repository e specifica il file desiderato (default: `render.yaml`).
+
+- **Railway**:
   1. Connetti il repository Git.
   2. Aggiungi un Database PostgreSQL gestito (Free / Starter Tier).
   3. Deploya il servizio Web selezionando il `Dockerfile` nella root del repository.
-  4. Imposta la variabile d'ambiente `DATABASE_URL` fornita da Render/Railway.
+  4. Imposta la variabile d'ambiente `DATABASE_URL` fornita da Railway.
+
 - **Google Cloud Run**:
   1. Esegui la build dell'immagine Docker su Artifact Registry: `gcloud builds submit --tag gcr.io/YOUR_PROJECT/easyea .`
   2. Deploya con scaling a zero: `gcloud run deploy easyea --image gcr.io/YOUR_PROJECT/easyea --platform managed --allow-unauthenticated`

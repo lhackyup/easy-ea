@@ -1,11 +1,11 @@
 # ==============================================================================
-# EasyEA - Production Blueprint (Branch: main)
-# Render.com Infrastructure-as-Code
+# EasyEA - Turnkey All-in-One Blueprint (Includes Render Managed Postgres)
+# Render.com Infrastructure-as-Code (Default for "Deploy to Render" button)
 # ==============================================================================
 
 services:
   - type: web
-    name: easyea-app-prod
+    name: easyea-app
     runtime: image
     image:
       url: ghcr.io/lhackyup/easy-ea:latest
@@ -23,16 +23,16 @@ services:
       - key: EASYEA_RBAC_MODE
         value: hybrid
       - key: EASYEA_DRAWIO_WEB_URL
-        value: https://easyea-drawio-prod.onrender.com
+        value: https://easyea-drawio.onrender.com
       - key: EASYEA_CORS_ORIGINS
-        value: https://easyea-app-prod.onrender.com,https://easyea-drawio-prod.onrender.com,https://embed.diagrams.net,null,file://
+        value: https://easyea-app.onrender.com,https://easyea-drawio.onrender.com,https://embed.diagrams.net,null,file://
       - key: DATABASE_URL
         fromDatabase:
-          name: easyea-postgres-prod
+          name: easyea-postgres
           property: connectionString
 
   - type: web
-    name: easyea-drawio-prod
+    name: easyea-drawio
     runtime: image
     image:
       url: docker.io/jgraph/drawio:latest
@@ -42,11 +42,11 @@ services:
       - key: PORT
         value: 8080
       - key: DRAWIO_BASE_URL
-        value: https://easyea-drawio-prod.onrender.com
+        value: https://easyea-drawio.onrender.com
 
 databases:
-  - name: easyea-postgres-prod
-    databaseName: easyea_prod
+  - name: easyea-postgres
+    databaseName: easyea
     user: easyea_user
     plan: free
     region: frankfurt

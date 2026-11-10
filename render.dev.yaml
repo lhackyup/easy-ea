@@ -1,11 +1,11 @@
 # ==============================================================================
-# EasyEA - Development / Preview Blueprint (Branch: develop)
+# EasyEA - Development / Preview Blueprint (Branch: develop + Neon Dev DB)
 # Render.com Infrastructure-as-Code
 # ==============================================================================
 
 services:
   - type: web
-    name: easyea-app-dev
+    name: easyea-dev
     runtime: image
     image:
       url: ghcr.io/lhackyup/easy-ea:develop
@@ -25,11 +25,9 @@ services:
       - key: EASYEA_DRAWIO_WEB_URL
         value: https://easyea-drawio-dev.onrender.com
       - key: EASYEA_CORS_ORIGINS
-        value: https://easyea-app-dev.onrender.com,https://easyea-drawio-dev.onrender.com,https://embed.diagrams.net,null,file://
+        value: https://easyea-dev.onrender.com,https://easyea-drawio-dev.onrender.com,https://embed.diagrams.net,null,file://
       - key: DATABASE_URL
-        fromDatabase:
-          name: easyea-postgres-dev
-          property: connectionString
+        sync: false # Impostato con la stringa di connessione di Neon.tech (Dev DB)
 
   - type: web
     name: easyea-drawio-dev
@@ -43,10 +41,3 @@ services:
         value: 8080
       - key: DRAWIO_BASE_URL
         value: https://easyea-drawio-dev.onrender.com
-
-databases:
-  - name: easyea-postgres-dev
-    databaseName: easyea_dev
-    user: easyea_dev_user
-    plan: free
-    region: frankfurt
