@@ -41,8 +41,8 @@ Under the hood, we invested heavily in rock-solid security and data governance:
 ### 📖 Explore the Updated Documentation
 
 The official guides for Draw.io Web integration and modular cloud deployments on Render are live on our documentation portal:
-👉 **Draw.io & Desktop Guide**: https://easyea.lhackyup.dev/docs/en/user-guide/architecture/desktop-protocol-and-plugins/  
-👉 **Cloud Deployment Guide on Render**: https://easyea.lhackyup.dev/docs/en/getting-started/deploy-render/
+👉 **Draw.io & Desktop Guide**: https://easyea.lhackyup.dev/en/docs/user-guide/architecture/desktop-protocol-and-plugins/  
+👉 **Cloud Deployment Guide on Render**: https://easyea.lhackyup.dev/en/docs/getting-started/deploy-render/
 
 ---
 
