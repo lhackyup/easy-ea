@@ -147,7 +147,7 @@ _FORBIDDEN_SSRF_HOSTNAMES = {
     "metadata",
     "instance-data",
     "169.254.169.254",
-    "0.0.0.0",
+    "0.0.0.0",  # nosec B104
 }
 
 

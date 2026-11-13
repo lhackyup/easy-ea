@@ -30,6 +30,32 @@
         }
         window.__EASYEA_PLUGIN_INITIALIZED__ = true;
 
+        // Fix Draw.io getResource and setTitleText to prevent any 'undefined' titles
+        try {
+            if (ui && ui.getResource) {
+                var prevGetResource = ui.getResource;
+                ui.getResource = function(obj) {
+                    if (typeof obj === 'string') return obj;
+                    if (obj && typeof obj === 'object') {
+                        var lang = (typeof mxLanguage !== 'undefined' && mxLanguage) ? mxLanguage : 'main';
+                        return obj[lang] || obj.main || obj.default || obj.it || obj.en || Object.values(obj)[0] || '';
+                    }
+                    if (prevGetResource) {
+                        var res = prevGetResource.apply(this, arguments);
+                        if (res !== null && res !== undefined) return res;
+                    }
+                    return (obj != null) ? String(obj) : '';
+                };
+            }
+            if (ui && ui.sidebar && ui.sidebar.setTitleText) {
+                var prevSetTitle = ui.sidebar.setTitleText;
+                ui.sidebar.setTitleText = function(title, text) {
+                    if (!text || text === 'undefined') return;
+                    prevSetTitle.apply(this, arguments);
+                };
+            }
+        } catch(e) {}
+
     // -------------------------------------------------------------
     // Configuration & State Management
     // -------------------------------------------------------------
@@ -143,9 +169,42 @@
         } catch(e) {}
     }
 
-    function getShapeStyle(elemType, layer) {
-        var baseStyle = SHAPE_STYLES[elemType] || 'rounded=1;whiteSpace=wrap;html=1;arcSize=10;';
+    var MODERN_STENCILS = {
+        'modern_card': { style: 'rounded=1;arcSize=14;shadow=1;strokeWidth=1.5;html=1;whiteSpace=wrap;', w: 170, h: 70 },
+        'modern_microservice': { style: 'shape=ext;double=1;rounded=1;arcSize=14;shadow=1;strokeWidth=1.5;html=1;whiteSpace=wrap;', w: 175, h: 75 },
+        'modern_database': { style: 'shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=14;shadow=1;strokeWidth=1.5;rounded=1;arcSize=8;', w: 150, h: 75 },
+        'modern_cloud_node': { style: 'shape=cube;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.04;darkOpacity2=0.08;shadow=1;rounded=1;arcSize=10;strokeWidth=1.5;', w: 170, h: 80 },
+        'modern_api_interface': { style: 'shape=ext;rounded=1;arcSize=30;shadow=1;strokeWidth=1.5;html=1;whiteSpace=wrap;', w: 160, h: 55 },
+        'modern_hex': { style: 'shape=hexagon;perimeter=hexagonPerimeter2;fixedSize=1;size=16;rounded=1;arcSize=10;shadow=1;strokeWidth=1.5;whiteSpace=wrap;html=1;', w: 160, h: 80 },
+        'modern_process': { style: 'shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;rounded=1;arcSize=12;shadow=1;strokeWidth=1.5;', w: 170, h: 65 },
+        'modern_event_stream': { style: 'shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;rounded=1;arcSize=20;shadow=1;strokeWidth=1.5;', w: 160, h: 60 },
+        'modern_actor': { style: 'shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;shadow=1;strokeWidth=1.5;', w: 45, h: 75 }
+    };
+
+    function getShapeStyle(elemType, layer, stereoInfo) {
+        var stencilMode = 'standard';
+        try {
+            var saved = localStorage.getItem('easyea_drawio_stencil_mode');
+            if (saved === 'modern') stencilMode = 'modern';
+        } catch(e) {}
+
         var colors = LAYER_COLORS[layer] || LAYER_COLORS['Application'];
+        var baseStyle = SHAPE_STYLES[elemType] || 'rounded=1;whiteSpace=wrap;html=1;arcSize=10;';
+
+        if (stencilMode === 'modern') {
+            if (stereoInfo && stereoInfo.custom_drawio_style) {
+                baseStyle = stereoInfo.custom_drawio_style;
+            } else if (stereoInfo && stereoInfo.stencil_shape && MODERN_STENCILS[stereoInfo.stencil_shape]) {
+                baseStyle = MODERN_STENCILS[stereoInfo.stencil_shape].style;
+            } else {
+                if (baseStyle.indexOf('rounded=1') >= 0) {
+                    baseStyle = MODERN_STENCILS.modern_card.style;
+                } else {
+                    baseStyle = baseStyle + 'shadow=1;strokeWidth=1.5;';
+                }
+            }
+        }
+
         return baseStyle + 'fillColor=' + colors.fill + ';strokeColor=' + colors.stroke + ';fontColor=' + colors.text + ';fontStyle=1;';
     }
 
@@ -714,7 +773,8 @@
             obj.setAttribute('layer', elem.layer || 'Application');
             obj.setAttribute('documentation', elem.documentation || '');
 
-            var style = getShapeStyle(elem.type || 'ApplicationComponent', elem.layer || 'Application');
+            var stereoInfo = elem.stereotype || elem.properties?.stereotype;
+            var style = getShapeStyle(elem.type || 'ApplicationComponent', elem.layer || 'Application', stereoInfo);
 
             // Find neat center position
             var view = graph.getView();
@@ -723,6 +783,10 @@
             var y = 120 + Math.floor(Math.random() * 80);
             var width = 160;
             var height = 65;
+            if (stereoInfo && stereoInfo.stencil_shape && MODERN_STENCILS[stereoInfo.stencil_shape]) {
+                width = MODERN_STENCILS[stereoInfo.stencil_shape].w;
+                height = MODERN_STENCILS[stereoInfo.stencil_shape].h;
+            }
 
             graph.getModel().beginUpdate();
             try {
@@ -1010,6 +1074,9 @@
         mxResources.parse('easyeaCheckin=EasyEA: 📤 Check-in Schema (Commit & Diff)...');
         mxResources.parse('easyeaDiscard=EasyEA: ❌ Annulla Check-out (Discard)...');
         mxResources.parse('easyeaAbout=EasyEA: ℹ️ Informazioni su EasyEA...');
+        mxResources.parse('easyeaModernizeCanvas=EasyEA: ✨ Applica Stile Moderno a tutte le forme');
+        mxResources.parse('easyeaStandardizeCanvas=EasyEA: 📐 Ripristina Stile Standard ArchiMate');
+        mxResources.parse('easyeaToggleStencil=EasyEA: 🎨 Commuta Stile Stencil (Moderno / Standard)');
     } catch(e) {}
 
     ui.actions.addAction('easyeaSettings', function() { checkIncomingExternalSession(function() { showSettingsDialog(); }); });
@@ -1018,6 +1085,336 @@
     ui.actions.addAction('easyeaCheckin', function() { checkIncomingExternalSession(function() { showCheckinDialog(); }); });
     ui.actions.addAction('easyeaDiscard', function() { checkIncomingExternalSession(function() { showDiscardCheckoutDialog(); }); });
     ui.actions.addAction('easyeaAbout', function() { checkIncomingExternalSession(function() { showAboutDialog(); }); });
+    ui.actions.addAction('easyeaModernizeCanvas', function() { applyModernStyleToCanvas(true); });
+    ui.actions.addAction('easyeaStandardizeCanvas', function() { applyModernStyleToCanvas(false); });
+    ui.actions.addAction('easyeaToggleStencil', function() { toggleStencilMode(); });
+
+    // -------------------------------------------------------------
+    // Dynamic Diagram Canvas Modernization
+    // -------------------------------------------------------------
+    function applyModernStyleToCanvas(isModern) {
+        var graph = ui.editor.graph;
+        if (!graph) return;
+        var parent = graph.getDefaultParent();
+        var vertices = graph.getChildVertices(parent);
+        if (!vertices || vertices.length === 0) {
+            alert('Nessun elemento presente nel diagramma da stilizzare.');
+            return;
+        }
+
+        graph.getModel().beginUpdate();
+        var count = 0;
+        try {
+            for (var i = 0; i < vertices.length; i++) {
+                var cell = vertices[i];
+                var style = graph.getModel().getStyle(cell) || '';
+                if (!style) continue;
+
+                if (isModern) {
+                    if (style.indexOf('shadow=1') < 0) {
+                        style = style.replace(/shadow=0;?/g, '') + ';shadow=1;';
+                    }
+                    if (style.indexOf('strokeWidth=') < 0) {
+                        style = style + ';strokeWidth=1.5;';
+                    } else {
+                        style = style.replace(/strokeWidth=[0-9.]+;?/g, 'strokeWidth=1.5;');
+                    }
+                    if (style.indexOf('rounded=') < 0) {
+                        style = style + ';rounded=1;';
+                    }
+                    if (style.indexOf('arcSize=') >= 0) {
+                        style = style.replace(/arcSize=[0-9]+;?/g, 'arcSize=14;');
+                    } else {
+                        style = style + ';arcSize=14;';
+                    }
+                    if (style.indexOf('archiType=square') >= 0) {
+                        style = style.replace('archiType=square', 'archiType=rounded;arcSize=14');
+                    }
+                } else {
+                    style = style.replace(/shadow=1;?/g, '');
+                    style = style.replace(/strokeWidth=1.5;?/g, 'strokeWidth=1;');
+                    style = style.replace(/arcSize=14;?/g, 'arcSize=10;');
+                }
+                style = style.replace(/;+/g, ';');
+                graph.getModel().setStyle(cell, style);
+                count++;
+            }
+        } finally {
+            graph.getModel().endUpdate();
+        }
+
+        if (isModern) {
+            alert('✨ ' + count + ' forme del diagramma aggiornate con successo allo Stile Moderno EasyEA (angoli smussati e ombre morbide)!');
+        } else {
+            alert('📐 ' + count + ' forme ripristinate allo Stile Standard ArchiMate.');
+        }
+    }
+
+    function toggleStencilMode() {
+        var current = 'standard';
+        try {
+            var saved = localStorage.getItem('easyea_drawio_stencil_mode');
+            if (saved === 'modern') current = 'modern';
+        } catch(e) {}
+
+        var next = current === 'modern' ? 'standard' : 'modern';
+        try {
+            localStorage.setItem('easyea_drawio_stencil_mode', next);
+        } catch(e) {}
+
+        initEasyEASidebarPalette();
+        alert('Stile Stencil EasyEA impostato su: ' + (next === 'modern' ? '✨ Moderno (Attivo)' : '📐 Standard ArchiMate (Default)') + '.\nLa palette nella barra laterale sinistra è stata aggiornata!');
+    }
+
+    // -------------------------------------------------------------
+    // Native Draw.io Sidebar Palette Injection & Expansion
+    // -------------------------------------------------------------
+    function applyModernPaletteExpansion() {
+        if (!ui || !ui.sidebar || !ui.sidebar.palettes) return;
+        try {
+            var isModern = (typeof urlParams !== 'undefined' && urlParams['stencil'] === 'modern') ||
+                           (window.__EASYEA_STENCIL_MODE__ === 'modern') ||
+                           (localStorage.getItem('easyea_drawio_stencil_mode') === 'modern');
+            if (!isModern) return;
+
+            Object.keys(ui.sidebar.palettes).forEach(function(id) {
+                var p = ui.sidebar.palettes[id];
+                if (!p || !p[0] || !p[1]) return;
+                var title = p[0];
+                var outer = p[1];
+                var content = outer.firstChild || outer;
+                if (!content || !content.style) return;
+
+                var isEasyeaModern = (id === 'easyea_stencils' || id.indexOf('easyea_modern') >= 0);
+                if (isEasyeaModern) {
+                    if (content.style.display === 'none') {
+                        title.click();
+                    }
+                } else if (id.indexOf('archimate3') >= 0 || id === 'general' || id === 'misc' || id === 'advanced' || id === 'basic' || id.indexOf('arrows') >= 0) {
+                    // Close all official Draw.io built-in palettes
+                    if (content.style.display !== 'none') {
+                        title.click();
+                    }
+                }
+            });
+        } catch(e) {}
+    }
+
+    function initEasyEASidebarPalette() {
+        if (!ui.sidebar || typeof ui.sidebar.addPalette !== 'function') {
+            setTimeout(initEasyEASidebarPalette, 300);
+            return;
+        }
+
+        // If customEntries already defined by host configure message, apply expansion and return to avoid duplicate palettes
+        if (ui.sidebar.customEntries && ui.sidebar.customEntries.length > 0) {
+            applyModernPaletteExpansion();
+            return;
+        }
+
+        var stencilMode = 'standard';
+        try {
+            if (typeof urlParams !== 'undefined' && urlParams['stencil']) {
+                stencilMode = urlParams['stencil'];
+            } else if (window.__EASYEA_STENCIL_MODE__) {
+                stencilMode = window.__EASYEA_STENCIL_MODE__;
+            } else {
+                var saved = localStorage.getItem('easyea_drawio_stencil_mode');
+                if (saved === 'modern') stencilMode = 'modern';
+            }
+        } catch(e) {}
+
+        // Remove previous palette if existing to avoid duplicates
+        try {
+            if (ui.sidebar.palettes && ui.sidebar.palettes['easyea_stencils']) {
+                ui.sidebar.removePalette('easyea_stencils');
+            }
+        } catch(e) {}
+
+        var isModern = (stencilMode === 'modern');
+        var paletteTitle = isModern ? '✨ EasyEA Stencil Moderni' : '📐 EasyEA ArchiMate Standard';
+
+        ui.sidebar.addPalette('easyea_stencils', paletteTitle, true, function(content) {
+            function addEntry(style, w, h, title, label, archimateType, layer, stereotype) {
+                var doc = mxUtils.createXmlDocument();
+                var obj = doc.createElement('object');
+                obj.setAttribute('label', label || title);
+                obj.setAttribute('archimate_type', archimateType || 'ApplicationComponent');
+                if (layer) obj.setAttribute('layer', layer);
+                if (stereotype) obj.setAttribute('stereotype', stereotype);
+
+                var entry = ui.sidebar.createVertexTemplateEntry(
+                    style,
+                    w,
+                    h,
+                    obj,
+                    title,
+                    true,
+                    null,
+                    null
+                );
+                if (entry) {
+                    content.appendChild(entry);
+                }
+            }
+
+            if (isModern) {
+                // 1. Modern Microservice
+                addEntry(
+                    MODERN_STENCILS.modern_microservice.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    175, 75,
+                    'Microservice (Modern)',
+                    '«Microservice»\n⚡ Service Name',
+                    'ApplicationComponent',
+                    'Application',
+                    'Microservice'
+                );
+                // 2. Modern Database / Storage
+                addEntry(
+                    MODERN_STENCILS.modern_database.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    150, 75,
+                    'Database / Storage (Modern)',
+                    '🗄️ Database Storage',
+                    'DataObject',
+                    'Application',
+                    'Database'
+                );
+                // 3. Modern Cloud Node / Kubernetes
+                addEntry(
+                    MODERN_STENCILS.modern_cloud_node.style + 'fillColor=#C9E7B7;strokeColor=#6EA84B;fontColor=#1E430B;fontStyle=1;',
+                    170, 80,
+                    'Kubernetes Cluster (Modern)',
+                    '«K8s Cluster»\n☁️ Cluster Node',
+                    'Node',
+                    'Technology',
+                    'Kubernetes Cluster'
+                );
+                // 4. Modern Event Stream / Queue
+                addEntry(
+                    MODERN_STENCILS.modern_event_stream.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    160, 60,
+                    'Event Driven Service (Modern)',
+                    '«Event Stream»\n📦 Message Queue',
+                    'ApplicationComponent',
+                    'Application',
+                    'Event Driven Service'
+                );
+                // 5. Modern API Gateway / Interface
+                addEntry(
+                    MODERN_STENCILS.modern_api_interface.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    160, 55,
+                    'API Gateway (Modern)',
+                    '⚡ REST / API Gateway',
+                    'ApplicationInterface',
+                    'Application'
+                );
+                // 6. Modern Hexagon (Domain/DDD)
+                addEntry(
+                    MODERN_STENCILS.modern_hex.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    160, 80,
+                    'Domain Hexagon (DDD)',
+                    'Domain / Core',
+                    'ApplicationComponent',
+                    'Application'
+                );
+                // 7. Modern SaaS Application
+                addEntry(
+                    MODERN_STENCILS.modern_card.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    170, 70,
+                    'SaaS Application (Modern)',
+                    '«SaaS»\n☁️ SaaS Provider',
+                    'ApplicationComponent',
+                    'Application',
+                    'SaaS Application'
+                );
+                // 8. Modern Automated Process
+                addEntry(
+                    MODERN_STENCILS.modern_process.style + 'fillColor=#FFFFB5;strokeColor=#C4B827;fontColor=#4B4204;fontStyle=1;',
+                    170, 65,
+                    'Automated Process (Modern)',
+                    '«Automated»\n⚙️ Business Process',
+                    'BusinessProcess',
+                    'Business',
+                    'Automated Process'
+                );
+                // 9. Modern Legacy Mainframe
+                addEntry(
+                    MODERN_STENCILS.modern_card.style + 'fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    170, 70,
+                    'Legacy Mainframe (Modern)',
+                    '«Legacy Mainframe»\n🖥️ Core Monolith',
+                    'ApplicationComponent',
+                    'Application',
+                    'Legacy Mainframe'
+                );
+                // 10. Modern Architecture Decision (ADR)
+                addEntry(
+                    MODERN_STENCILS.modern_hex.style + 'fillColor=#ECC8EC;strokeColor=#A04FA0;fontColor=#470547;fontStyle=1;',
+                    160, 80,
+                    'Architecture Decision (Modern ADR)',
+                    '«Architecture Decision»\n🛡️ ADR Assessment',
+                    'Assessment',
+                    'Motivation',
+                    'Architecture Decision'
+                );
+            } else {
+                // Standard ArchiMate Shapes
+                addEntry(
+                    'rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    160, 65,
+                    'Application Component (Standard)',
+                    'Application Component'
+                );
+                addEntry(
+                    'rounded=1;whiteSpace=wrap;html=1;arcSize=25;fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    160, 65,
+                    'Application Service (Standard)',
+                    'Application Service'
+                );
+                addEntry(
+                    'rounded=0;whiteSpace=wrap;html=1;fillColor=#B5FFFF;strokeColor=#40A9C4;fontColor=#053B47;fontStyle=1;',
+                    160, 65,
+                    'Data Object (Standard)',
+                    'Data Object'
+                );
+                addEntry(
+                    'shape=process;whiteSpace=wrap;html=1;backgroundOutline=1;fillColor=#FFFFB5;strokeColor=#C4B827;fontColor=#4B4204;fontStyle=1;',
+                    170, 65,
+                    'Business Process (Standard)',
+                    'Business Process'
+                );
+                addEntry(
+                    'rounded=1;whiteSpace=wrap;html=1;arcSize=10;fillColor=#FFFFB5;strokeColor=#C4B827;fontColor=#4B4204;fontStyle=1;',
+                    160, 65,
+                    'Business Role (Standard)',
+                    'Business Role'
+                );
+                addEntry(
+                    'shape=umlActor;verticalLabelPosition=bottom;verticalAlign=top;html=1;outlineConnect=0;fillColor=#FFFFB5;strokeColor=#C4B827;fontColor=#4B4204;fontStyle=1;',
+                    40, 70,
+                    'Business Actor (Standard)',
+                    'Business Actor'
+                );
+                addEntry(
+                    'shape=cube;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;darkOpacity=0.05;darkOpacity2=0.1;fillColor=#C9E7B7;strokeColor=#6EA84B;fontColor=#1E430B;fontStyle=1;',
+                    160, 70,
+                    'Node / Device (Standard)',
+                    'Node'
+                );
+                addEntry(
+                    'shape=cylinder3;whiteSpace=wrap;html=1;boundedLbl=1;backgroundOutline=1;size=15;fillColor=#C9E7B7;strokeColor=#6EA84B;fontColor=#1E430B;fontStyle=1;',
+                    150, 70,
+                    'System Software (Standard)',
+                    'System Software'
+                );
+            }
+        });
+    }
+
+    setTimeout(initEasyEASidebarPalette, 500);
+    setTimeout(applyModernPaletteExpansion, 800);
+    setTimeout(initEasyEASidebarPalette, 1500);
+    setTimeout(applyModernPaletteExpansion, 2200);
 
     // -------------------------------------------------------------
     // Automatic Session Pickup from EasyEA Protocol Handler (easyea://)
@@ -1103,6 +1500,12 @@
                         full_name: d.full_name || 'Amministratore'
                     });
                 }
+                if (d.config && d.config.stencil_mode) {
+                    try {
+                        localStorage.setItem('easyea_drawio_stencil_mode', d.config.stencil_mode);
+                    } catch(e) {}
+                    setTimeout(initEasyEASidebarPalette, 100);
+                }
                 if (d.active_schema) {
                     setActiveSchema(d.active_schema);
                 }
@@ -1119,6 +1522,9 @@
             'easyeaSettings',
             'easyeaCheckout',
             'easyeaAddElement',
+            'easyeaModernizeCanvas',
+            'easyeaStandardizeCanvas',
+            'easyeaToggleStencil',
             'easyeaCheckin',
             'easyeaDiscard',
             'easyeaAbout'
@@ -1135,6 +1541,11 @@
             menu.addSeparator(parent);
             ui.menus.addMenuItem(menu, 'easyeaCheckout', parent);
             ui.menus.addMenuItem(menu, 'easyeaAddElement', parent);
+            menu.addSeparator(parent);
+            ui.menus.addMenuItem(menu, 'easyeaModernizeCanvas', parent);
+            ui.menus.addMenuItem(menu, 'easyeaStandardizeCanvas', parent);
+            ui.menus.addMenuItem(menu, 'easyeaToggleStencil', parent);
+            menu.addSeparator(parent);
             ui.menus.addMenuItem(menu, 'easyeaCheckin', parent);
             ui.menus.addMenuItem(menu, 'easyeaDiscard', parent);
             menu.addSeparator(parent);
@@ -1153,6 +1564,11 @@
             var subMenu = menu.addItem('🏛️ EasyEA', null, null);
             ui.menus.addMenuItem(menu, 'easyeaCheckout', subMenu);
             ui.menus.addMenuItem(menu, 'easyeaAddElement', subMenu);
+            menu.addSeparator(subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaModernizeCanvas', subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaStandardizeCanvas', subMenu);
+            ui.menus.addMenuItem(menu, 'easyeaToggleStencil', subMenu);
+            menu.addSeparator(subMenu);
             ui.menus.addMenuItem(menu, 'easyeaCheckin', subMenu);
             ui.menus.addMenuItem(menu, 'easyeaDiscard', subMenu);
             menu.addSeparator(subMenu);
@@ -1185,6 +1601,11 @@
                         menu.addSeparator(parent);
                         ui.menus.addMenuItem(menu, 'easyeaCheckout', parent);
                         ui.menus.addMenuItem(menu, 'easyeaAddElement', parent);
+                        menu.addSeparator(parent);
+                        ui.menus.addMenuItem(menu, 'easyeaModernizeCanvas', parent);
+                        ui.menus.addMenuItem(menu, 'easyeaStandardizeCanvas', parent);
+                        ui.menus.addMenuItem(menu, 'easyeaToggleStencil', parent);
+                        menu.addSeparator(parent);
                         ui.menus.addMenuItem(menu, 'easyeaCheckin', parent);
                         ui.menus.addMenuItem(menu, 'easyeaDiscard', parent);
                         menu.addSeparator(parent);

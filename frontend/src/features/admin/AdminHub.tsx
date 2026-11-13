@@ -59,6 +59,7 @@ export const AdminHub: React.FC<AdminHubProps> = ({
   const [newModelDesc, setNewModelDesc] = useState('');
   const [newModelVersion, setNewModelVersion] = useState('1.0.0');
   const [newModelingTool, setNewModelingTool] = useState<'archi' | 'drawio'>('archi');
+  const [newStencilStyle, setNewStencilStyle] = useState<'standard' | 'modern'>('standard');
   const [creating, setCreating] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -100,7 +101,8 @@ export const AdminHub: React.FC<AdminHubProps> = ({
         code: trimmedCode || undefined,
         description: newModelDesc.trim(),
         version: newModelVersion.trim(),
-        modeling_tool: newModelingTool
+        modeling_tool: newModelingTool,
+        stencil_style: newStencilStyle
       });
       onRefreshModels();
       onSelectModel(created.id);
@@ -110,11 +112,22 @@ export const AdminHub: React.FC<AdminHubProps> = ({
       setNewModelDesc('');
       setNewModelVersion('1.0.0');
       setNewModelingTool('archi');
+      setNewStencilStyle('standard');
     } catch (err: any) {
       console.error(err);
       setFormError(err.message || t.admin.errorCreatingLibrary);
     } finally {
       setCreating(false);
+    }
+  };
+
+  const handleToggleStencilStyle = async (m: ModelWorkspace) => {
+    try {
+      const nextStyle = m.stencil_style === 'modern' ? 'standard' : 'modern';
+      await api.updateModel(m.id, { stencil_style: nextStyle });
+      onRefreshModels();
+    } catch (err: any) {
+      console.error('Error toggling stencil style:', err);
     }
   };
 
@@ -273,6 +286,23 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                           }`}>
                             {m.modeling_tool === 'drawio' ? '🎨 Draw.io' : '🏛️ Archi'}
                           </span>
+                          {m.modeling_tool === 'drawio' && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleStencilStyle(m);
+                              }}
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded border transition cursor-pointer flex items-center space-x-1 ${
+                                m.stencil_style === 'modern'
+                                  ? 'bg-amber-100 text-amber-900 border-amber-300 hover:bg-amber-200'
+                                  : 'bg-slate-100 text-slate-700 border-slate-300 hover:bg-slate-200'
+                              }`}
+                              title="Configurazione Stencil Libreria: clicca per commutare tra Standard ArchiMate e Stile Moderno"
+                            >
+                              <span>{m.stencil_style === 'modern' ? '✨ Stencil: Moderno' : '📐 Stencil: Standard'}</span>
+                            </button>
+                          )}
                           {isSelected && (
                             <span className="text-[10px] font-bold px-2 py-0.5 bg-rose-100 text-rose-800 rounded-full">
                               {t.admin.activeTag}
@@ -490,6 +520,47 @@ export const AdminHub: React.FC<AdminHubProps> = ({
                         <span className="text-[10px] text-slate-500 leading-tight">Editor Web cloud/locale con Palette e Catalogo</span>
                       </button>
                     </div>
+
+                    {/* Stencil Style for Draw.io */}
+                    {newModelingTool === 'drawio' && (
+                      <div className="mt-2 p-2.5 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-1.5">
+                        <label className="block text-[11px] font-bold text-amber-950">
+                          Stile Stencil ArchiMate per Draw.io Web
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setNewStencilStyle('standard')}
+                            className={`p-2 rounded-lg border text-left transition ${
+                              newStencilStyle === 'standard'
+                                ? 'bg-white border-amber-500 ring-1 ring-amber-500 text-slate-900 shadow-2xs font-bold'
+                                : 'bg-white/60 border-amber-200 text-slate-600 hover:bg-white text-xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-xs">
+                              <span>📐 Standard</span>
+                              <span className="text-[9px] px-1 py-0.2 bg-slate-200 rounded font-semibold text-slate-700">Default</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 block mt-0.5">Sagome ArchiMate 3.x ufficiali</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setNewStencilStyle('modern')}
+                            className={`p-2 rounded-lg border text-left transition ${
+                              newStencilStyle === 'modern'
+                                ? 'bg-white border-amber-500 ring-1 ring-amber-500 text-slate-900 shadow-2xs font-bold'
+                                : 'bg-white/60 border-amber-200 text-slate-600 hover:bg-white text-xs'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between text-xs">
+                              <span>✨ Moderno</span>
+                              <span className="text-[9px] px-1 py-0.2 bg-amber-100 text-amber-800 rounded font-semibold">Attivabile</span>
+                            </div>
+                            <span className="text-[10px] text-slate-500 block mt-0.5">Card ombreggiate & stencil stereotipi</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <div>

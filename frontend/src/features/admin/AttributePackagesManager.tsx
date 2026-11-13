@@ -1113,6 +1113,13 @@ export const AttributePackagesManager: React.FC<AttributePackagesManagerProps> =
                                 {st.description && (
                                   <p className="text-[11px] text-slate-600 leading-relaxed">{st.description}</p>
                                 )}
+                                {st.stencil_shape && (
+                                  <div className="flex items-center gap-1.5 pt-1.5 border-t border-indigo-50 text-[10px] text-amber-900 font-bold">
+                                    <Sparkles className="w-3 h-3 text-amber-600" />
+                                    <span>Stencil: <strong className="font-mono text-amber-950">{st.stencil_shape}</strong></span>
+                                    {st.stencil_icon && <span className="bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded">({st.stencil_icon})</span>}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

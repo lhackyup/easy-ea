@@ -2842,6 +2842,8 @@ def seed_default_stereotypes(db: Session):
             "label": "«Microservice»",
             "description": "Single functional bounded-context application component, containerized and exposed via REST/gRPC APIs.",
             "icon_color": "indigo",
+            "stencil_shape": "modern_microservice",
+            "stencil_icon": "api",
             "is_system": True,
             "package_id": None,
             "links": [
@@ -2868,6 +2870,8 @@ def seed_default_stereotypes(db: Session):
             "label": "«SaaS»",
             "description": "Software-as-a-service delivered and operated entirely in the cloud by a third-party vendor.",
             "icon_color": "emerald",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "cloud",
             "is_system": True,
             "package_id": None,
             "links": [
@@ -2894,6 +2898,8 @@ def seed_default_stereotypes(db: Session):
             "label": "«Legacy Mainframe»",
             "description": "Monolithic application or core legacy system hosted on on-premises mainframe infrastructure.",
             "icon_color": "amber",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "server",
             "is_system": True,
             "package_id": None,
             "links": [
@@ -2920,6 +2926,8 @@ def seed_default_stereotypes(db: Session):
             "label": "«Automated»",
             "description": "Business process fully automated by IT systems or workflow engines (BPMN / Camunda).",
             "icon_color": "purple",
+            "stencil_shape": "modern_process",
+            "stencil_icon": "cog",
             "is_system": True,
             "package_id": None,
             "links": []
@@ -2942,6 +2950,8 @@ def seed_default_stereotypes(db: Session):
             "label": "«K8s Cluster»",
             "description": "Kubernetes container orchestration platform with distributed worker nodes.",
             "icon_color": "blue",
+            "stencil_shape": "modern_cloud_node",
+            "stencil_icon": "cloud",
             "is_system": True,
             "package_id": None,
             "links": []
@@ -2953,6 +2963,8 @@ def seed_default_stereotypes(db: Session):
             "label": "«Architecture Decision»",
             "description": "Formal Architecture Decision Record (ADR) modeled in the ArchiMate Motivation Layer.",
             "icon_color": "indigo",
+            "stencil_shape": "modern_hex",
+            "stencil_icon": "shield",
             "is_system": True,
             "package_id": "pkg-adr",
             "links": [
@@ -3072,6 +3084,8 @@ def seed_default_stereotypes(db: Session):
                 label=st_data["label"],
                 description=st_data["description"],
                 icon_color=st_data["icon_color"],
+                stencil_shape=st_data.get("stencil_shape"),
+                stencil_icon=st_data.get("stencil_icon"),
                 is_system=True
             )
             db.add(st)
@@ -3094,6 +3108,10 @@ def seed_default_stereotypes(db: Session):
             existing.label = st_data["label"]
             existing.description = st_data["description"]
             existing.icon_color = st_data["icon_color"]
+            if "stencil_shape" in st_data:
+                existing.stencil_shape = st_data["stencil_shape"]
+            if "stencil_icon" in st_data:
+                existing.stencil_icon = st_data["stencil_icon"]
             existing.is_system = True
 
             # Ensure default links exist
@@ -3174,6 +3192,9 @@ def list_stereotypes(
             "label": st.label,
             "description": st.description,
             "icon_color": st.icon_color,
+            "stencil_shape": st.stencil_shape,
+            "stencil_icon": st.stencil_icon,
+            "custom_drawio_style": st.custom_drawio_style,
             "is_system": bool(st.is_system),
             "attribute_links": links_data,
             "created_at": st.created_at.isoformat() if st.created_at else None
@@ -3210,6 +3231,9 @@ def get_stereotype(db: Session, stereotype_id: str) -> Dict[str, Any]:
         "label": st.label,
         "description": st.description,
         "icon_color": st.icon_color,
+        "stencil_shape": st.stencil_shape,
+        "stencil_icon": st.stencil_icon,
+        "custom_drawio_style": st.custom_drawio_style,
         "is_system": bool(st.is_system),
         "attribute_links": links_data,
         "created_at": st.created_at.isoformat() if st.created_at else None
@@ -3241,6 +3265,9 @@ def create_stereotype(db: Session, data: Dict[str, Any]) -> Dict[str, Any]:
         label=label,
         description=data.get("description"),
         icon_color=data.get("icon_color", "indigo"),
+        stencil_shape=data.get("stencil_shape"),
+        stencil_icon=data.get("stencil_icon"),
+        custom_drawio_style=data.get("custom_drawio_style"),
         is_system=False
     )
     db.add(st)
@@ -3278,6 +3305,12 @@ def update_stereotype(db: Session, stereotype_id: str, data: Dict[str, Any]) -> 
         st.description = data["description"]
     if data.get("icon_color"):
         st.icon_color = data["icon_color"]
+    if "stencil_shape" in data:
+        st.stencil_shape = data["stencil_shape"]
+    if "stencil_icon" in data:
+        st.stencil_icon = data["stencil_icon"]
+    if "custom_drawio_style" in data:
+        st.custom_drawio_style = data["custom_drawio_style"]
 
     db.commit()
     db.refresh(st)

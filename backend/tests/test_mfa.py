@@ -2,9 +2,16 @@ import pytest
 import pyotp
 from fastapi.testclient import TestClient
 from app.main import app
-from app.core.database import SessionLocal
+from app.models import archimate as _archimate_models
+from app.core.database import SessionLocal, Base, engine
 from app.models.archimate import User, UserRoleAssignment, SystemAuthSettings
 from app.services.auth_service import hash_password
+from app.services.rbac_service import seed_default_rbac
+
+Base.metadata.create_all(bind=engine)
+_init_db = SessionLocal()
+seed_default_rbac(_init_db)
+_init_db.close()
 
 client = TestClient(app)
 

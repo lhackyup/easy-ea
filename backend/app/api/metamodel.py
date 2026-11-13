@@ -132,6 +132,9 @@ class StereotypeCreate(BaseModel):
     base_type: str
     description: Optional[str] = None
     icon_color: Optional[str] = "indigo"
+    stencil_shape: Optional[str] = None
+    stencil_icon: Optional[str] = None
+    custom_drawio_style: Optional[str] = None
     model_id: Optional[str] = None
     package_id: Optional[str] = None
     attribute_links: Optional[List[Dict[str, Any]]] = []
@@ -141,6 +144,9 @@ class StereotypeUpdate(BaseModel):
     label: Optional[str] = None
     description: Optional[str] = None
     icon_color: Optional[str] = None
+    stencil_shape: Optional[str] = None
+    stencil_icon: Optional[str] = None
+    custom_drawio_style: Optional[str] = None
 
 class StereotypeAttributeLinkCreate(BaseModel):
     attribute_name: str

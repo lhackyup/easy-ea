@@ -5,8 +5,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.main import app
+from app.models import archimate as _archimate_models
 from app.core.database import SessionLocal, Base, engine
 from app.models.archimate import User, UserRoleAssignment, SecurityAuditLog
+from app.services.rbac_service import seed_default_rbac
 from app.services.auth_service import hash_password, create_access_token
 from app.services.audit_service import (
     log_security_event,
@@ -18,6 +20,10 @@ from app.services.audit_service import (
 
 # Ensure tables exist
 Base.metadata.create_all(bind=engine)
+_init_db = SessionLocal()
+seed_default_rbac(_init_db)
+_init_db.close()
+
 client = TestClient(app)
 
 

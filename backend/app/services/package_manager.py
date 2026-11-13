@@ -76,6 +76,9 @@ class StereotypeSpec(BaseModel):
     label: Optional[str] = None
     description: Optional[str] = None
     icon_color: Optional[str] = "blue"
+    stencil_shape: Optional[str] = None
+    stencil_icon: Optional[str] = None
+    custom_drawio_style: Optional[str] = None
     links: List[StereotypeLinkSpec] = []
 
 
@@ -500,6 +503,9 @@ def install_package_bundle(file_bytes: bytes, db: Session, force: bool = False) 
                     label=stereo_label,
                     description=st_spec.description,
                     icon_color=st_spec.icon_color or pkg.icon_color or "blue",
+                    stencil_shape=st_spec.stencil_shape,
+                    stencil_icon=st_spec.stencil_icon,
+                    custom_drawio_style=st_spec.custom_drawio_style,
                     is_system=False,
                     package_id=pkg.id,
                     model_id=None
@@ -511,6 +517,12 @@ def install_package_bundle(file_bytes: bytes, db: Session, force: bool = False) 
                 st.label = stereo_label
                 st.description = st_spec.description
                 st.icon_color = st_spec.icon_color or pkg.icon_color or "blue"
+                if st_spec.stencil_shape is not None:
+                    st.stencil_shape = st_spec.stencil_shape
+                if st_spec.stencil_icon is not None:
+                    st.stencil_icon = st_spec.stencil_icon
+                if st_spec.custom_drawio_style is not None:
+                    st.custom_drawio_style = st_spec.custom_drawio_style
 
             # Sync links
             for l_spec in st_spec.links:
@@ -770,6 +782,9 @@ def export_package_bundle(package_id: str, db: Session) -> Tuple[bytes, str]:
                 "label": st.label,
                 "description": st.description,
                 "icon_color": st.icon_color or pkg.icon_color,
+                "stencil_shape": getattr(st, "stencil_shape", None),
+                "stencil_icon": getattr(st, "stencil_icon", None),
+                "custom_drawio_style": getattr(st, "custom_drawio_style", None),
                 "links": links
             })
         zf.writestr("stereotypes.json", json.dumps(stereotypes_list, indent=2, ensure_ascii=False))

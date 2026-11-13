@@ -20,6 +20,7 @@ import {
   getDrawioBaseUrl,
   checkDrawioLocalHealth,
   DrawioServerMode,
+  DrawioStencilMode,
   DEFAULT_LOCAL_DRAWIO_URL,
   DEFAULT_CLOUD_DRAWIO_URL
 } from '../../lib/drawio/drawioWebManager';
@@ -382,6 +383,15 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
 
       setCacheInvalidationCookies(targetSchema.id, targetSchema.current_version);
 
+      let loadedStereotypes: any[] = [];
+      try {
+        loadedStereotypes = await api.getStereotypes(undefined, targetSchema.model_id);
+      } catch (e) {
+        // Fallback to empty if not fetched
+      }
+
+      const libraryStencilMode = (modelWorkspace?.stencil_style === 'modern' ? 'modern' : 'standard') as DrawioStencilMode;
+
       const session = openDrawioWeb({
         schemaId: targetSchema.id,
         schemaName: targetSchema.name,
@@ -390,6 +400,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
         initialXml: xmlContent,
         readonly: !isEdit,
         serverUrl: serverUrl,
+        stencilMode: libraryStencilMode,
+        stereotypes: loadedStereotypes,
         authToken: token || sessionStorage.getItem('easyea_auth_token') || undefined,
         username: user?.username,
         fullName: user?.full_name,
@@ -398,6 +410,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
           name: e.name,
           type: e.type,
           layer: e.layer,
+          stereotype: (e as any).stereotype || (e as any).stereotype_name || (e.properties && e.properties.stereotype),
+          stereotype_id: (e as any).stereotype_id,
           documentation: e.documentation
         })),
         onSave: async (savedXml: string) => {
@@ -854,18 +868,8 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
               />
             </button>
 
-            {/* Tool-specific Plugin Button: Archi vs Draw.io */}
-            {modelWorkspace?.modeling_tool === 'drawio' ? (
-              <button
-                type="button"
-                onClick={() => setIsDrawioPaletteOpen(true)}
-                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl transition flex items-center space-x-1.5 shadow-sm shadow-amber-200 cursor-pointer"
-                title={t.schemas.downloadDrawioPaletteTooltip}
-              >
-                <Palette className="w-4 h-4 text-amber-200" />
-                <span>Palette Draw.io</span>
-              </button>
-            ) : (
+            {/* Tool-specific Plugin Button: Archi Desktop Plugin (only if Archi workspace) */}
+            {modelWorkspace?.modeling_tool !== 'drawio' && (
               <button
                 type="button"
                 onClick={() => setIsPluginModalOpen(true)}
@@ -1138,26 +1142,16 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                       {!isLocked ? (
                         !isViewer ? (
                           schema.format === 'drawio' ? (
-                            <div className="flex items-center space-x-1">
-                              <button
-                                type="button"
-                                onClick={() => handleOpenDrawioWeb(schema, true)}
-                                title={t.schemas.editWithDrawioWebTooltip || 'Effettua il check-out e apri in Draw.io Web in una nuova scheda (con invalidazione cache)'}
-                                className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
-                              >
-                                <Lock className="w-3.5 h-3.5" />
-                                <span>{t.schemas.editWithDrawioWeb || 'Draw.io Web'}</span>
-                                <ExternalLink className="w-3 h-3 opacity-80" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleCheckout(schema, true)}
-                                title="Check-out e scarica per Draw.io Desktop"
-                                className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
-                              >
-                                <Monitor className="w-4 h-4" />
-                              </button>
-                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDrawioWeb(schema, true)}
+                              title={t.schemas.editWithDrawioWebTooltip || 'Effettua il check-out e apri in Draw.io Web in una nuova scheda (con invalidazione cache)'}
+                              className="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 transition flex items-center space-x-1.5 shadow-sm shadow-indigo-200 cursor-pointer"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>{t.schemas.editWithDrawioWeb || 'Draw.io Web'}</span>
+                              <ExternalLink className="w-3 h-3 opacity-80" />
+                            </button>
                           ) : (
                             <button
                               type="button"
@@ -1192,14 +1186,6 @@ export const SchemaRepository: React.FC<SchemaRepositoryProps> = ({ modelId }) =
                             >
                               <ExternalLink className="w-3.5 h-3.5" />
                               <span>{t.schemas.reopenDrawioWeb || 'Draw.io Web'}</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleLaunchAppOnly(schema)}
-                              title="Riapri file con Draw.io Desktop"
-                              className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 transition cursor-pointer"
-                            >
-                              <Monitor className="w-4 h-4" />
                             </button>
                             <button
                               type="button"

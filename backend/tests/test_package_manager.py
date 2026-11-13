@@ -11,11 +11,12 @@ from app.core.database import Base, get_db
 from app.services.metamodel_service import seed_default_custom_attributes
 from app.services.sample_data import seed_sample_model
 from app.services.rbac_service import seed_default_rbac
+from app.services.it4it_seed import seed_it4it_framework
 from app.models.archimate import User, AttributePackage
 from app.services.auth_service import create_access_token
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False, "timeout": 30})
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def override_get_db():
@@ -42,11 +43,14 @@ def setup_test_db():
     seed_sample_model(db)
     seed_default_custom_attributes(db)
     seed_default_rbac(db)
+    seed_it4it_framework(db)
     admin_user = db.query(User).filter(User.username == "admin").first() or db.query(User).first()
     if admin_user:
         token = create_access_token(admin_user)
         client.headers.update({"Authorization": f"Bearer {token}"})
     db.close()
+    yield
+    app.dependency_overrides.clear()
 
 
 def create_sample_eap_bundle(code: str = "dora", version: str = "1.0.0", extra_elem: bool = False) -> bytes:
@@ -108,6 +112,9 @@ def create_sample_eap_bundle(code: str = "dora", version: str = "1.0.0", extra_e
                 "label": "«Critical ICT Service»",
                 "description": "Essential ICT function for financial operational resilience.",
                 "icon_color": "rose",
+                "stencil_shape": "modern_microservice",
+                "stencil_icon": "shield",
+                "custom_drawio_style": "shape=ext;double=1;rounded=1;arcSize=14;shadow=1;",
                 "links": [
                     {
                         "attribute_name": "criticality_tier",
@@ -262,3 +269,42 @@ def test_inspect_invalid_bundle():
     assert res_m.status_code == 200
     assert res_m.json()["valid"] is False
     assert "manifest.json" in res_m.json()["errors"][0]
+
+
+def test_package_stereotype_stencil_association_and_export():
+    """
+    Verifies that package bundle import persists stereotype stencil_shape, stencil_icon,
+    and custom_drawio_style, and that package export serializes them back to stereotypes.json.
+    """
+    bundle = create_sample_eap_bundle("dora", "1.0.0")
+    files = {"bundle": ("dora-1.0.0.eap", bundle, "application/x-easyea-package")}
+
+    # Install package
+    res_install = client.post("/api/metamodel/packages/install", files=files)
+    assert res_install.status_code == 200
+
+    # Verify stereotype in metamodel API
+    res_st = client.get("/api/metamodel/stereotypes?base_type=ApplicationComponent")
+    assert res_st.status_code == 200
+    st_list = res_st.json()
+    dora_st = next((s for s in st_list if s["name"] == "Critical ICT Service"), None)
+    assert dora_st is not None
+    assert dora_st["stencil_shape"] == "modern_microservice"
+    assert dora_st["stencil_icon"] == "shield"
+    assert "shadow=1" in (dora_st["custom_drawio_style"] or "")
+
+    # Export package bundle
+    res_export = client.get("/api/metamodel/packages/pkg-dora/export")
+    assert res_export.status_code == 200
+    exported_bytes = res_export.content
+
+    # Inspect exported bundle ZIP
+    archive = zipfile.ZipFile(io.BytesIO(exported_bytes))
+    assert "stereotypes.json" in archive.namelist()
+    exported_stereos = json.loads(archive.read("stereotypes.json").decode("utf-8"))
+    assert len(exported_stereos) > 0
+    exported_dora = next((s for s in exported_stereos if s["name"] == "Critical ICT Service"), None)
+    assert exported_dora is not None
+    assert exported_dora["stencil_shape"] == "modern_microservice"
+    assert exported_dora["stencil_icon"] == "shield"
+    assert exported_dora["custom_drawio_style"] == "shape=ext;double=1;rounded=1;arcSize=14;shadow=1;"

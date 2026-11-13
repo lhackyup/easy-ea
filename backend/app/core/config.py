@@ -62,7 +62,7 @@ def _resolve_cors_origins() -> List[str]:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EasyEA - Business-Oriented Enterprise Architecture"
-    VERSION: str = "1.0.1"
+    VERSION: str = "1.1.0"
     API_V1_STR: str = "/api"
     ENVIRONMENT: str = os.getenv("EASYEA_ENV", "development").strip().lower()
 

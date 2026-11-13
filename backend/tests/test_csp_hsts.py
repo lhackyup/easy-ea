@@ -10,18 +10,6 @@ from app.services.auth_service import get_system_auth_settings
 client = TestClient(app)
 
 
-@pytest.fixture(autouse=True)
-def ensure_db():
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        get_system_auth_settings(db)
-    finally:
-        db.close()
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-
 def test_hsts_preload_header():
     """
     Verify Strict-Transport-Security header adheres to RFC 6797 and HSTS Preload requirements:

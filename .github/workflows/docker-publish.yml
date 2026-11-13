@@ -11,7 +11,56 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  security-gate:
+    name: Security Gate (SAST, SCA & Tests)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+          pip install pip-audit bandit pytest
+
+      - name: SCA - pip-audit
+        run: pip-audit -r backend/requirements.txt
+
+      - name: SAST - Bandit
+        run: bandit -r backend/app -ll -ii
+
+      - name: Run Security Tests
+        env:
+          EASYEA_SECRET_KEY: "ci-cd-docker-publish-security-gate-secret-key-384-bits"
+        run: |
+          PYTHONPATH=backend pytest backend/tests/test_pinned_dependencies.py \
+                                    backend/tests/test_csp_hsts.py \
+                                    backend/tests/test_token_revocation.py \
+                                    backend/tests/test_mfa.py \
+                                    backend/tests/test_audit_trail.py
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Frontend Audit
+        run: |
+          cd frontend
+          npm ci
+          npm audit --omit=dev --audit-level=high
+
   build-and-push:
+    needs: [security-gate]
     runs-on: ubuntu-latest
     permissions:
       contents: read

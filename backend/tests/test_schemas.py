@@ -203,6 +203,48 @@ def test_schema_lifecycle_and_checkout(test_workspace, auth_headers):
     client.delete(f"/api/schemas/{schema_id}", headers=auth_headers)
 
 
+def test_library_stencil_style_configuration(auth_headers):
+    """
+    Verifies that an administrator can configure stencil_style at library (workspace) level,
+    switching between 'standard' (default) and 'modern'.
+    """
+    # 1. Create a library with default stencil style
+    res_create = client.post(
+        "/api/models",
+        json={
+            "name": "Cloud Architecture Library",
+            "modeling_tool": "drawio",
+            "stencil_style": "standard"
+        },
+        headers=auth_headers
+    )
+    assert res_create.status_code == 200
+    model = res_create.json()
+    model_id = model["id"]
+    assert model["stencil_style"] == "standard"
+
+    # 2. Verify in detail endpoint
+    res_get = client.get(f"/api/models/{model_id}", headers=auth_headers)
+    assert res_get.status_code == 200
+    assert res_get.json()["stencil_style"] == "standard"
+
+    # 3. Update library stencil style to 'modern'
+    res_update = client.put(
+        f"/api/models/{model_id}",
+        json={"stencil_style": "modern"},
+        headers=auth_headers
+    )
+    assert res_update.status_code == 200
+
+    # 4. Verify updated value in detail endpoint
+    res_get2 = client.get(f"/api/models/{model_id}", headers=auth_headers)
+    assert res_get2.status_code == 200
+    assert res_get2.json()["stencil_style"] == "modern"
+
+    # Clean up
+    client.delete(f"/api/models/{model_id}", headers=auth_headers)
+
+
 def test_schema_drawio_cache_invalidation_and_xml_endpoint(test_workspace, auth_headers):
     """
     Validates Draw.io Web cache invalidation headers, version cookies,
@@ -255,4 +297,46 @@ def test_schema_drawio_cache_invalidation_and_xml_endpoint(test_workspace, auth_
 
     # Clean up
     client.delete(f"/api/schemas/{schema_id}", headers=auth_headers)
+
+
+def test_library_stencil_style_configuration(auth_headers):
+    """
+    Verifies that an administrator can configure stencil_style at library (workspace) level,
+    switching between 'standard' (default) and 'modern'.
+    """
+    # 1. Create a library with default stencil style
+    res_create = client.post(
+        "/api/models",
+        json={
+            "name": "Cloud Architecture Library",
+            "modeling_tool": "drawio",
+            "stencil_style": "standard"
+        },
+        headers=auth_headers
+    )
+    assert res_create.status_code == 200
+    model = res_create.json()
+    model_id = model["id"]
+    assert model["stencil_style"] == "standard"
+
+    # 2. Verify in detail endpoint
+    res_get = client.get(f"/api/models/{model_id}", headers=auth_headers)
+    assert res_get.status_code == 200
+    assert res_get.json()["stencil_style"] == "standard"
+
+    # 3. Update library stencil style to 'modern'
+    res_update = client.put(
+        f"/api/models/{model_id}",
+        json={"stencil_style": "modern"},
+        headers=auth_headers
+    )
+    assert res_update.status_code == 200
+
+    # 4. Verify updated value in detail endpoint
+    res_get2 = client.get(f"/api/models/{model_id}", headers=auth_headers)
+    assert res_get2.status_code == 200
+    assert res_get2.json()["stencil_style"] == "modern"
+
+    # Clean up
+    client.delete(f"/api/models/{model_id}", headers=auth_headers)
 

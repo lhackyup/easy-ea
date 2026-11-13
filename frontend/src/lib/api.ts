@@ -62,7 +62,7 @@ export const api = {
     return res.json();
   },
 
-  createEmptyModel: async (data: { name: string; code?: string; description?: string; version?: string; modeling_tool?: 'archi' | 'drawio' }): Promise<ModelWorkspace> => {
+  createEmptyModel: async (data: { name: string; code?: string; description?: string; version?: string; modeling_tool?: 'archi' | 'drawio'; stencil_style?: 'standard' | 'modern' }): Promise<ModelWorkspace> => {
     const res = await fetch(`${API_BASE}/models`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -75,7 +75,7 @@ export const api = {
     return res.json();
   },
 
-  updateModel: async (modelId: string, data: { name?: string; description?: string; version?: string; modeling_tool?: 'archi' | 'drawio' }): Promise<any> => {
+  updateModel: async (modelId: string, data: { name?: string; description?: string; version?: string; modeling_tool?: 'archi' | 'drawio'; stencil_style?: 'standard' | 'modern' }): Promise<any> => {
     const res = await fetch(`${API_BASE}/models/${modelId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },

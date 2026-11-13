@@ -6,8 +6,10 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.main import app
+from app.models import archimate as _archimate_models
 from app.core.database import get_db, SessionLocal, engine, Base
 from app.models.archimate import User, UserRoleAssignment, RevokedToken
+from app.services.rbac_service import seed_default_rbac
 from app.services.auth_service import (
     create_access_token,
     decode_access_token,
@@ -17,8 +19,12 @@ from app.services.auth_service import (
     hash_password
 )
 
-# Ensure all tables (including revoked_tokens) exist
+# Ensure all tables exist and default rbac is seeded
 Base.metadata.create_all(bind=engine)
+_init_db = SessionLocal()
+seed_default_rbac(_init_db)
+_init_db.close()
+
 client = TestClient(app)
 
 

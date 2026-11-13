@@ -84,6 +84,7 @@ def list_models(
             "version": m.version,
             "source_format": m.source_format,
             "modeling_tool": getattr(m, "modeling_tool", "archi") or "archi",
+            "stencil_style": getattr(m, "stencil_style", "standard") or "standard",
             "element_count": elem_count,
             "relationship_count": rel_count,
             "view_count": view_count,
@@ -119,6 +120,7 @@ def get_model_detail(
         "version": m.version,
         "source_format": m.source_format,
         "modeling_tool": getattr(m, "modeling_tool", "archi") or "archi",
+        "stencil_style": getattr(m, "stencil_style", "standard") or "standard",
         "element_count": elem_count,
         "relationship_count": rel_count,
         "view_count": view_count,
@@ -250,12 +252,14 @@ class ModelCreate(BaseModel):
     description: Optional[str] = ""
     version: Optional[str] = "1.0.0"
     modeling_tool: Optional[str] = "archi"
+    stencil_style: Optional[str] = "standard"
 
 class ModelUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     version: Optional[str] = None
     modeling_tool: Optional[str] = None
+    stencil_style: Optional[str] = None
 
 @router.post("", response_model=Dict[str, Any])
 def create_empty_model(
@@ -273,7 +277,8 @@ def create_empty_model(
         description=payload.description or "Nuovo modello architetturale",
         version=payload.version or "1.0.0",
         source_format="manual",
-        modeling_tool=payload.modeling_tool or "archi"
+        modeling_tool=payload.modeling_tool or "archi",
+        stencil_style=payload.stencil_style or "standard"
     )
     db.add(workspace)
     db.commit()
@@ -286,7 +291,8 @@ def create_empty_model(
         "description": workspace.description,
         "version": workspace.version,
         "source_format": workspace.source_format,
-        "modeling_tool": workspace.modeling_tool or "archi"
+        "modeling_tool": workspace.modeling_tool or "archi",
+        "stencil_style": getattr(workspace, "stencil_style", "standard") or "standard"
     }
 
 @router.put("/{model_id}")
@@ -309,6 +315,8 @@ def update_model(
         m.version = payload.version
     if payload.modeling_tool is not None:
         m.modeling_tool = payload.modeling_tool
+    if payload.stencil_style is not None:
+        m.stencil_style = payload.stencil_style
     db.commit()
     return {"message": "Model updated successfully"}
 

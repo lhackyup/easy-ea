@@ -231,6 +231,9 @@ export interface ElementStereotype {
   label: string;
   description?: string | null;
   icon_color: string;
+  stencil_shape?: string | null;
+  stencil_icon?: string | null;
+  custom_drawio_style?: string | null;
   is_system: boolean;
   attribute_links: StereotypeAttributeLink[];
   created_at?: string | null;
@@ -242,6 +245,9 @@ export interface StereotypeCreatePayload {
   base_type: string;
   description?: string;
   icon_color?: string;
+  stencil_shape?: string | null;
+  stencil_icon?: string | null;
+  custom_drawio_style?: string | null;
   model_id?: string | null;
   package_id?: string | null;
   attribute_links?: Array<{
@@ -258,6 +264,9 @@ export interface StereotypeUpdatePayload {
   label?: string;
   description?: string;
   icon_color?: string;
+  stencil_shape?: string | null;
+  stencil_icon?: string | null;
+  custom_drawio_style?: string | null;
 }
 
 export interface MetamodelElementType {
@@ -322,6 +331,7 @@ export interface ModelWorkspace {
   version: string;
   source_format: string;
   modeling_tool?: 'archi' | 'drawio';
+  stencil_style?: 'standard' | 'modern';
   element_count: number;
   relationship_count: number;
   view_count: number;

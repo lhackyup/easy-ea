@@ -17,15 +17,45 @@
  * - Explicit fresh XML injection via HTML5 postMessage ('load' action)
  */
 
-import { buildDrawioArchimateLibrary, buildDrawioCatalogLibrary, CatalogElementItem } from './archimatePalette';
+import {
+  buildDrawioArchimateLibrary,
+  buildDrawioArchimateLayerLibraries,
+  buildDrawioModernLibrary,
+  transformDiagramXmlStencilMode,
+  CatalogElementItem
+} from './archimatePalette';
 
 export const DEFAULT_LOCAL_DRAWIO_URL = 'http://localhost:8080';
 export const DEFAULT_CLOUD_DRAWIO_URL = 'https://embed.diagrams.net';
 
 const STORAGE_MODE_KEY = 'easyea_drawio_mode'; // 'local' | 'cloud' | 'custom'
 const STORAGE_CUSTOM_URL_KEY = 'easyea_drawio_custom_url';
+export const STORAGE_STENCIL_MODE_KEY = 'easyea_drawio_stencil_mode'; // 'standard' | 'modern'
 
 export type DrawioServerMode = 'local' | 'cloud' | 'custom';
+export type DrawioStencilMode = 'standard' | 'modern';
+
+/**
+ * Returns the currently active Stencil Look & Feel mode.
+ * Default is 'standard' (standard official ArchiMate shapes).
+ * Modern is an activatable option.
+ */
+export function getDrawioStencilMode(): DrawioStencilMode {
+  try {
+    const saved = localStorage.getItem(STORAGE_STENCIL_MODE_KEY);
+    if (saved === 'modern') return 'modern';
+  } catch (e) {}
+  return 'standard';
+}
+
+/**
+ * Sets the Stencil Look & Feel mode.
+ */
+export function setDrawioStencilMode(mode: DrawioStencilMode): void {
+  try {
+    localStorage.setItem(STORAGE_STENCIL_MODE_KEY, mode);
+  } catch (e) {}
+}
 
 /**
  * Returns the currently active Draw.io server mode.
@@ -94,6 +124,8 @@ export interface DrawioSessionOptions {
   initialXml: string;
   readonly?: boolean;
   serverUrl?: string;
+  stencilMode?: DrawioStencilMode;
+  stereotypes?: any[];
   authToken?: string;
   username?: string;
   fullName?: string;
@@ -120,16 +152,40 @@ export function setCacheInvalidationCookies(schemaId: string, version?: string):
 /**
  * Builds the Draw.io Web URL with all cache-invalidation and UI parameters.
  */
-export function buildDrawioWebUrl(options?: { title?: string; readonly?: boolean; serverUrl?: string }): string {
+export function buildDrawioWebUrl(options?: {
+  title?: string;
+  readonly?: boolean;
+  serverUrl?: string;
+  stencilMode?: DrawioStencilMode;
+}): string {
   const timestamp = Date.now();
   const baseUrl = (options?.serverUrl || getDrawioBaseUrl()).replace(/\/+$/, '');
+  const stencilMode = options?.stencilMode || getDrawioStencilMode();
+
+  // Layer library IDs for ArchiMate 3.x (divided by layer)
+  const layerLibIds = [
+    'easyea_archimate_application',
+    'easyea_archimate_business',
+    'easyea_archimate_technology',
+    'easyea_archimate_strategy',
+    'easyea_archimate_motivation',
+    'easyea_archimate_implementation'
+  ];
+
+  // In Modern mode: easyea_modern is primary, with ArchiMate layer libs and official libs
+  // In Standard mode: layer libs are primary
+  const activeLibs = stencilMode === 'modern'
+    ? ['easyea_modern', ...layerLibIds, 'archimate3', 'general'].join(';')
+    : [...layerLibIds, 'easyea_modern', 'archimate3', 'general'].join(';');
+
   const params = new URLSearchParams({
     embed: '1',
     proto: 'json',
     spin: '1',
     configure: '1',
     libraries: '1',
-    libs: 'archimate3',
+    libs: activeLibs,
+    stencil: stencilMode,
     // Plugin integration (loads EasyEA menu in Draw.io Web)
     p: 'easyea',
     // Cache invalidation & isolation flags:
@@ -166,7 +222,13 @@ export class DrawioWebSession {
 
   constructor(options: DrawioSessionOptions) {
     this.options = options;
-    this.currentXml = options.initialXml;
+    const stencilMode = options.stencilMode || getDrawioStencilMode();
+    // Transform existing diagram XML so pre-existing elements reflect the chosen stencil mode (Modern vs Standard)
+    this.currentXml = transformDiagramXmlStencilMode(
+      options.initialXml,
+      stencilMode,
+      options.stereotypes || []
+    );
   }
 
   /**
@@ -182,10 +244,12 @@ export class DrawioWebSession {
     setCacheInvalidationCookies(this.options.schemaId, this.options.version);
 
     // 2. Build URL with cache busting
+    const stencilMode = this.options.stencilMode || getDrawioStencilMode();
     const url = buildDrawioWebUrl({
       title: this.options.schemaName,
       readonly: this.options.readonly,
-      serverUrl: this.options.serverUrl
+      serverUrl: this.options.serverUrl,
+      stencilMode: stencilMode
     });
 
     try {
@@ -251,53 +315,123 @@ export class DrawioWebSession {
       const msg = JSON.parse(event.data);
       const postOrigin = this.targetOrigin || '*';
 
-      // Event 1: Configure - Inject ArchiMate 3.x Palette & Workspace Catalog
+      // Event 1: Configure - Inject ArchiMate 3.x Palettes (Modern + Divided by Layer)
       if (msg.event === 'configure') {
         this.isConfigured = true;
-        const archimateLibs = buildDrawioArchimateLibrary();
-        
-        const customEntriesList: any[] = [];
+        const stencilMode = this.options.stencilMode || getDrawioStencilMode();
+        const archimateModernLibs = buildDrawioModernLibrary(this.options.stereotypes);
+        const archimateLayerLibs = buildDrawioArchimateLayerLibraries();
 
-        // 1. If catalog elements exist, inject them in the primary top library
-        if (this.options.catalogElements && this.options.catalogElements.length > 0) {
-          const catalogEntries = buildDrawioCatalogLibrary(this.options.catalogElements);
-          if (catalogEntries.length > 0) {
-            customEntriesList.push({
-              id: 'easyea_catalog',
-              libs: [
-                {
-                  title: `🏛️ EasyEA Catalogo (${catalogEntries.length} elementi)`,
-                  expand: true,
-                  data: catalogEntries
-                }
-              ]
-            });
-          }
+        const sectionEntries: any[] = [];
+        const customLibrariesList: any[] = [];
+
+        const toI18nTitle = (text: string) => ({
+          main: text,
+          it: text,
+          'it-it': text,
+          'it-IT': text,
+          'it_IT': text,
+          en: text,
+          'en-us': text,
+          'en-US': text,
+          'en_US': text,
+          default: text
+        });
+
+        // 1. Modern Stencils
+        const modernTitle = '✨ EasyEA Stencil Moderni';
+        const modernDesc = 'Componenti e stereotipi con look & feel moderno, angoli arrotondati e ombre';
+
+        if (stencilMode === 'modern') {
+          sectionEntries.push({
+            id: 'easyea_modern',
+            title: toI18nTitle(modernTitle),
+            desc: toI18nTitle(modernDesc),
+            preview: '',
+            libs: [
+              {
+                title: toI18nTitle(modernTitle),
+                expand: true,
+                data: archimateModernLibs
+              }
+            ]
+          });
+          customLibrariesList.push({
+            title: modernTitle,
+            entries: archimateModernLibs
+          });
         }
 
-        // 2. Add ArchiMate 3.x Standard Palette
-        customEntriesList.push({
-          id: 'easyea_archimate',
-          libs: [
-            {
-              title: '📐 EasyEA ArchiMate 3.x (Forme Standard)',
-              expand: true,
-              data: archimateLibs
-            }
-          ]
+        // 2. ArchiMate 3.x Divided By Layer Palettes
+        archimateLayerLibs.forEach((layerLib) => {
+          const isAppLayer = layerLib.layer === 'Application';
+          const shouldExpand = (stencilMode !== 'modern' && isAppLayer);
+          sectionEntries.push({
+            id: layerLib.id,
+            title: toI18nTitle(layerLib.title),
+            desc: toI18nTitle(`Forme ArchiMate 3.x per il layer ${layerLib.layer}`),
+            preview: '',
+            libs: [
+              {
+                title: toI18nTitle(layerLib.title),
+                expand: shouldExpand,
+                data: layerLib.entries
+              }
+            ]
+          });
+          customLibrariesList.push({
+            title: layerLib.title,
+            entries: layerLib.entries
+          });
         });
+
+        // If in Standard mode, append Modern Stencils as optional entry
+        if (stencilMode !== 'modern') {
+          const optionalModernTitle = '✨ EasyEA Stencil Moderni (Opzionali)';
+          sectionEntries.push({
+            id: 'easyea_modern',
+            title: toI18nTitle(optionalModernTitle),
+            desc: toI18nTitle(modernDesc),
+            preview: '',
+            libs: [
+              {
+                title: toI18nTitle(optionalModernTitle),
+                expand: false,
+                data: archimateModernLibs
+              }
+            ]
+          });
+          customLibrariesList.push({
+            title: optionalModernTitle,
+            entries: archimateModernLibs
+          });
+        }
+
+        const layerLibIds = archimateLayerLibs.map((ll) => ll.id);
+        const activeDefaultLibs = stencilMode === 'modern'
+          ? ['easyea_modern', ...layerLibIds, 'archimate3', 'general'].join(';')
+          : [...layerLibIds, 'easyea_modern', 'archimate3', 'general'].join(';');
+
+        const enabledLibs = [
+          'easyea_modern',
+          ...layerLibIds,
+          'archimate3',
+          'general'
+        ];
 
         this.windowRef?.postMessage(
           JSON.stringify({
             action: 'configure',
             config: {
-              defaultLibraries: 'archimate3;general',
-              enabledLibraries: ['archimate3', 'general'],
-              expandLibraries: true,
+              defaultLibraries: activeDefaultLibs,
+              enabledLibraries: enabledLibs,
+              expandLibraries: false,
               appendCustomLibraries: false,
+              customLibraries: customLibrariesList,
               libraries: [
                 {
-                  entries: customEntriesList
+                  title: toI18nTitle('EasyEA Enterprise Architecture'),
+                  entries: sectionEntries
                 }
               ]
             }
@@ -314,6 +448,7 @@ export class DrawioWebSession {
         // Deliver active user session & auth token to the EasyEA plugin running inside Draw.io Web
         if (this.options.authToken) {
           const serverUrl = window.location.origin;
+          const activeStencilMode = this.options.stencilMode || getDrawioStencilMode();
           this.windowRef?.postMessage(
             JSON.stringify({
               action: 'easyeaAuthSession',
@@ -321,7 +456,9 @@ export class DrawioWebSession {
                 server_url: serverUrl,
                 token: this.options.authToken,
                 username: this.options.username || 'admin',
-                full_name: this.options.fullName || 'Utente EasyEA'
+                full_name: this.options.fullName || 'Utente EasyEA',
+                stencil_mode: activeStencilMode,
+                stereotypes: this.options.stereotypes || []
               },
               active_schema: {
                 schema_id: this.options.schemaId,

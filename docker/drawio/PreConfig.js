@@ -19,6 +19,7 @@ window.DRAWIO_VIEWER_URL = '';
 window.DRAWIO_LIGHTBOX_URL = '';
 window.EXPORT_URL = null;
 window.ALLOW_CUSTOM_PLUGINS = true;
+window.EASYEA_CACHE_BUST = Date.now();
 
 // Ensure plugins are enabled and auto-load easyea
 urlParams['plugins'] = '1';

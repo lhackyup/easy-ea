@@ -17,6 +17,7 @@ class ModelWorkspace(Base):
     version = Column(String, default="1.0.0")
     source_format = Column(String, default="manual") # archi_native, open_exchange, manual
     modeling_tool = Column(String, default="archi") # archi, drawio
+    stencil_style = Column(String, default="standard", nullable=True) # standard, modern
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)
 
@@ -207,6 +208,9 @@ class ElementStereotype(Base):
     label = Column(String, nullable=False) # e.g. "«Microservice»"
     description = Column(Text, nullable=True)
     icon_color = Column(String, default="indigo") # e.g. "blue", "indigo", "emerald", "amber", "rose", "purple", "cyan"
+    stencil_shape = Column(String, nullable=True) # e.g. "modern_card", "hexagon", "cylinder", "container", "chevron", "badge_card"
+    stencil_icon = Column(String, nullable=True) # e.g. "cube", "database", "server", "cloud", "cpu", "globe", "zap"
+    custom_drawio_style = Column(String, nullable=True) # Optional fine-grained mxGraph style overrides
     is_system = Column(Boolean, default=False, nullable=False, server_default='0', index=True)
     created_at = Column(DateTime, default=utc_now)
     updated_at = Column(DateTime, default=utc_now, onupdate=utc_now)

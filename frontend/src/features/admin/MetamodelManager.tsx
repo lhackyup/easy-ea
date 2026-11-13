@@ -121,6 +121,9 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
     label: string;
     description: string;
     icon_color: string;
+    stencil_shape: string;
+    stencil_icon: string;
+    custom_drawio_style: string;
     base_type: string;
     model_id: string | null;
     saving: boolean;
@@ -133,6 +136,9 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
     label: '',
     description: '',
     icon_color: 'indigo',
+    stencil_shape: '',
+    stencil_icon: '',
+    custom_drawio_style: '',
     base_type: '',
     model_id: null,
     saving: false,
@@ -419,6 +425,9 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
       label: '',
       description: '',
       icon_color: 'indigo',
+      stencil_shape: '',
+      stencil_icon: '',
+      custom_drawio_style: '',
       base_type: baseType,
       model_id: selectedScope !== 'global' ? selectedScope : null,
       saving: false,
@@ -435,6 +444,9 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
       label: st.label,
       description: st.description || '',
       icon_color: st.icon_color || 'indigo',
+      stencil_shape: st.stencil_shape || '',
+      stencil_icon: st.stencil_icon || '',
+      custom_drawio_style: st.custom_drawio_style || '',
       base_type: st.base_type,
       model_id: st.model_id || null,
       saving: false,
@@ -456,6 +468,9 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
           label: stereotypeModal.label.trim(),
           description: stereotypeModal.description.trim(),
           icon_color: stereotypeModal.icon_color,
+          stencil_shape: stereotypeModal.stencil_shape || null,
+          stencil_icon: stereotypeModal.stencil_icon || null,
+          custom_drawio_style: stereotypeModal.custom_drawio_style.trim() || null,
         });
       } else {
         await api.createStereotype({
@@ -464,6 +479,9 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
           base_type: stereotypeModal.base_type,
           description: stereotypeModal.description.trim() || undefined,
           icon_color: stereotypeModal.icon_color,
+          stencil_shape: stereotypeModal.stencil_shape || undefined,
+          stencil_icon: stereotypeModal.stencil_icon || undefined,
+          custom_drawio_style: stereotypeModal.custom_drawio_style.trim() || undefined,
           model_id: stereotypeModal.model_id,
         });
       }
@@ -1124,7 +1142,7 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                         {/* Stereotype Header */}
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2 pb-2.5 border-b border-indigo-100/80">
                           <div className="space-y-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className={`text-xs font-bold px-2.5 py-0.5 rounded-lg border font-mono ${getStereotypeColorClass(st.icon_color)}`}>
                                 {st.label}
                               </span>
@@ -1140,6 +1158,12 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                               ) : (
                                 <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-2 py-0.2 rounded-full">
                                   Globale
+                                </span>
+                              )}
+                              {st.stencil_shape && (
+                                <span className="text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md flex items-center gap-1 shadow-2xs" title="Stencil Draw.io Moderno associato">
+                                  <Sparkles className="w-2.5 h-2.5 text-amber-600" />
+                                  <span>{st.stencil_shape}</span>
                                 </span>
                               )}
                             </div>
@@ -2146,12 +2170,83 @@ export const MetamodelManager: React.FC<MetamodelManagerProps> = ({
                   {t.metamodel.stereotypeDescription}
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder={t.metamodel.stereotypeDescPlaceholder}
                   value={stereotypeModal.description}
                   onChange={(e) => setStereotypeModal((prev) => ({ ...prev, description: e.target.value }))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 focus:bg-white resize-none"
                 />
+              </div>
+
+              {/* Draw.io Web Modern Stencil Configuration */}
+              <div className="p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl space-y-3">
+                <div className="flex items-center space-x-1.5 text-xs font-bold text-amber-900">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Stencil Moderno Draw.io (Opzionale / Pacchetto)</span>
+                </div>
+                <p className="text-[11px] text-amber-800/80 leading-relaxed">
+                  Associa a questo stereotipo una forma con look & feel moderno attiva in Draw.io Web quando è abilitata la modalità Modern Stencils (mantiene i colori ArchiMate del livello).
+                </p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Forma Stencil
+                    </label>
+                    <select
+                      value={stereotypeModal.stencil_shape}
+                      onChange={(e) => setStereotypeModal((prev) => ({ ...prev, stencil_shape: e.target.value }))}
+                      className="w-full bg-white border border-amber-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="">(Predefinito ArchiMate)</option>
+                      <option value="modern_card">Modern Card (Ombreggiata)</option>
+                      <option value="modern_microservice">Modern Microservice (Doppio bordo)</option>
+                      <option value="modern_database">Modern Database (Cilindro)</option>
+                      <option value="modern_cloud_node">Modern Cloud Node (Cubo 3D soft)</option>
+                      <option value="modern_api_interface">Modern API Gateway (Pill)</option>
+                      <option value="modern_hex">Modern Hexagon (Domain DDD)</option>
+                      <option value="modern_process">Modern Process Step (Smussato)</option>
+                      <option value="modern_event_stream">Modern Event Stream / Topic</option>
+                      <option value="modern_actor">Modern Actor / Persona</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Badge Icona
+                    </label>
+                    <select
+                      value={stereotypeModal.stencil_icon}
+                      onChange={(e) => setStereotypeModal((prev) => ({ ...prev, stencil_icon: e.target.value }))}
+                      className="w-full bg-white border border-amber-200 rounded-xl px-3 py-1.5 text-xs text-slate-900 focus:outline-none focus:border-indigo-500 cursor-pointer"
+                    >
+                      <option value="">(Nessuna icona badge)</option>
+                      <option value="api">⚡ API / Gateway</option>
+                      <option value="database">🗄️ Database / Storage</option>
+                      <option value="cloud">☁️ Cloud / Provider</option>
+                      <option value="server">🖥️ Server / Host</option>
+                      <option value="shield">🛡️ Sicurezza / Shield</option>
+                      <option value="cog">⚙️ Servizio / Processo</option>
+                      <option value="cpu">💾 Core / Calcolo</option>
+                      <option value="layers">📦 Modulo / Package</option>
+                      <option value="network">🌐 Rete / Mesh</option>
+                      <option value="user">👤 Utente / Ruolo</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                    Stile Draw.io Personalizzato (mxGraph XML Style opzionale)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="es. shape=ext;rounded=1;arcSize=14;shadow=1;"
+                    value={stereotypeModal.custom_drawio_style}
+                    onChange={(e) => setStereotypeModal((prev) => ({ ...prev, custom_drawio_style: e.target.value }))}
+                    className="w-full bg-white border border-amber-200 rounded-xl px-3 py-1.5 text-xs font-mono text-slate-900 focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
               </div>
 
               <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-100">
