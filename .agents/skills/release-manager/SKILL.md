@@ -109,14 +109,15 @@ Questa skill orchestra l'intero ciclo di rilascio di una nuova versione di **Eas
 
 ### Fase 5: Creazione Bozza Post per Buy Me a Coffee
 1. **Generazione del Post per la Community**:
-   - Tono accattivante, empatico, focalizzato sul valore reale per gli utenti e per i supporter della community.
+   - **Lingua obbligatoria**: Il post per Buy Me a Coffee **DEVE ESSERE SCRITTO IN INGLESE (`English`)**, poiché la community di sostenitori e architetti è internazionale.
+   - **Tone of voice**: Accattivante, empatico, focalizzato sul valore reale per gli utenti e per i supporter.
    - Evita gerghi tecnici da commit grezzi; racconta le novità dal punto di vista dell'utente finale (nuove feature, miglioramenti all'usabilità, impatti pratici sui modelli di architettura).
-   - Inserisci i link alle guide appena pubblicate su `https://easyea.lhackyup.dev`.
+   - Inserisci sempre i link diretti alle guide ufficiali in inglese: `https://easyea.lhackyup.dev/docs/en/...`.
 2. **Salvataggio della Bozza**:
    - Salva l'articolo formattato in Markdown in:
      `.agents/releases/vX.Y.Z/buymeacoffee_post.md`
 3. **Presentazione all'utente**:
-   - Mostra il testo formattato pronto da copiare direttamente nella chat o nell'artifact finale.
+   - Mostra il testo formattato in inglese pronto da copiare direttamente nella chat o nell'artifact finale.
    - Fornisci il link diretto con un clic per incollare e pubblicare:
      👉 [Buy Me a Coffee Post Editor](https://www.buymeacoffee.com/dashboard/posts)
 

@@ -1,54 +1,56 @@
-# EasyEA v1.1.0: Modellazione visuale con Draw.io Web integrato, nuovi standard di settore e ancora più sicurezza! ☕🎨
+# EasyEA v1.1.0 Released: Embedded Draw.io Web Modeling, Industry Framework Packages & Hardened Enterprise Security! ☕🎨
 
-Ciao a tutti i sostenitori e amici della community di **EasyEA**! 🚀
+Hello everyone, and a warm welcome to all supporters and friends in the **EasyEA** community! 🚀
 
-Oggi abbiamo una novità davvero speciale da condividere con voi: è ufficialmente disponibile la versione **v1.1.0** di EasyEA! 
+Today we are thrilled to announce that **EasyEA v1.1.0** is officially live!
 
-Questa nuova release segna un importante passo avanti per rendere la piattaforma ancora più accessibile, flessibile e piacevole da usare ogni giorno, sia per chi fa architettura d'impresa formale sia per chi vuole visualizzare processi e schemi tecnologici in modo rapido.
-
----
-
-### 🎨 1. Draw.io Web arriva direttamente nel Browser (Zero Installazioni!)
-
-Una delle richieste più sentite era quella di poter disegnare e modificare diagrammi senza dover necessariamente installare applicazioni desktop sul proprio computer.
-
-Con **EasyEA v1.1.0**, abbiamo integrato direttamente **Draw.io Web**:
-- Cliccando su *"Modifica in Draw.io Web"*, l'editor si apre a tutto schermo dentro EasyEA.
-- **Palette ArchiMate 3.x Completa**: Tutte le forme vettoriali, i colori canonici e gli stereotipi sono già pronti nella barra laterale, pronti da trascinare.
-- **Salvataggio automatico**: Quando chiudete l'editor, le modifiche vengono sincronizzate all'istante nel catalogo di EasyEA creando una nuova revisione tracciata.
-
-Per chi ama lavorare sul client desktop nativo, niente paura: l'integrazione via protocollo `easyea://` e gli script per **Archi Tool** continuano a essere supportati al 100%!
+This release represents a major milestone in making EasyEA more intuitive, accessible, and enjoyable for daily use — whether you are crafting rigorous enterprise architecture models or quickly sketching process and technology blueprints with your team.
 
 ---
 
-### 🏛️ 2. Package di Settore e Stereotipi Custom
+### 🎨 1. Draw.io Web Embedded Directly in Your Browser (Zero Installation Required!)
 
-Abbiamo potenziato il metamodello per supportare con eleganza i grandi framework internazionali di settore (come **BIAN** per il banking, **TM Forum** per le telecomunicazioni, **ACORD** per le assicurazioni e **RAMI 4.0 / ISA-95** per l'industry 4.0). Ora ogni elemento può indossare il suo stereotipo formale e le sue proprietà tipizzate.
+One of the most requested features was the ability to edit diagrams directly on the web without having to install desktop software or local plugins.
 
----
+With **EasyEA v1.1.0**, we have natively embedded **Draw.io Web**:
+- Click *"Edit in Draw.io Web"* from any schema, and the full-screen visual canvas opens right inside EasyEA.
+- **Complete ArchiMate 3.x Shape Palette**: Canonical notation shapes, colors, and industry stereotypes are injected into your sidebar, ready to drag and drop.
+- **Automated Two-Way Sync**: When you close the modal, revisions are automatically committed and versioned in EasyEA's schema repository.
+- **Transparent SSO**: Seamless pass-through authentication ensures your session stays active securely.
 
-### 🛡️ 3. Sicurezza di Livello Enterprise
-
-Sotto il cofano abbiamo dedicato moltissima cura alla protezione dei dati e all'affidabilità:
-- Policy rafforzate per il Content Security Policy (CSP) e HSTS Preload.
-- Gestione della revoca immediata delle sessioni e dei token.
-- Supporto avanzato al Multi-Factor Authentication (MFA) e Audit Trail crittografico degli accessi.
-
----
-
-### 📖 Scoprite la Documentazione Aggiornata
-
-Tutte le guide sul nuovo Draw.io Web e sulle modalità di installazione cloud su Render sono già consultabili in italiano e inglese sul nostro sito ufficiale:
-👉 [Guida Integrazione Draw.io & Desktop](https://easyea.lhackyup.dev/docs/it/user-guide/architecture/desktop-protocol-and-plugins/)  
-👉 [Guida al Deploy Cloud su Render](https://easyea.lhackyup.dev/docs/it/getting-started/deploy-render/)
+*Prefer desktop tools?* No worries! The native desktop integration via the `easyea://` protocol handler and our smart **Archi Tool** jArchi scripts remain 100% supported!
 
 ---
 
-### ❤️ Grazie di cuore per il vostro supporto!
+### 🏛️ 2. Industry Standard Packages & Custom Stereotypes
 
-EasyEA cresce giorno dopo giorno grazie ai vostri feedback, alle vostre idee e al vostro incoraggiamento su questa piattaforma. 
+We have expanded the core metamodel to natively embrace major enterprise frameworks — including **BIAN** (Banking), **TM Forum** (Telecom), **ACORD** (Insurance), **RAMI 4.0 / ISA-95** (Smart Manufacturing), and **SCOR-DS** (Supply Chain). Elements can now carry domain-specific stereotypes, typed attributes, and customized stencil styles.
 
-Se vi va di provare la **v1.1.0**, fatemi sapere cosa ne pensate nei commenti qui sotto o via messaggio. E se EasyEA vi fa risparmiare tempo o vi aiuta a fare ordine nelle architetture aziendali, potete sempre offrirmi un caffè per supportare le prossime ore di sviluppo! ☕
+---
 
-Un abbraccio e buona architettura a tutti!  
-*Lucky & il team di EasyEA*
+### 🛡️ 3. Enterprise-Grade Security Hardening
+
+Under the hood, we invested heavily in rock-solid security and data governance:
+- **Comprehensive Content Security Policy (CSP)** & **HSTS Preload** to prevent clickjacking and code injection.
+- **Strict JWT Token Revocation**: Instant session invalidation stored with JTI blacklist tracking in PostgreSQL/SQLite.
+- **Multi-Factor Authentication (MFA)**: Support for self-service TOTP enrollment and organization-wide enforcement policies.
+- **Tamper-Evident Audit Trail**: Cryptographically chained audit logging for all authentication and administrative actions.
+
+---
+
+### 📖 Explore the Updated Documentation
+
+The official guides for Draw.io Web integration and modular cloud deployments on Render are live on our documentation portal:
+👉 **Draw.io & Desktop Guide**: https://easyea.lhackyup.dev/docs/en/user-guide/architecture/desktop-protocol-and-plugins/  
+👉 **Cloud Deployment Guide on Render**: https://easyea.lhackyup.dev/docs/en/getting-started/deploy-render/
+
+---
+
+### ❤️ Thank You for Your Support!
+
+EasyEA is evolving rapidly thanks to your feedback, suggestions, and generous coffee donations. 
+
+Take **v1.1.0** for a spin, and let us know your thoughts in the comments below. If EasyEA is saving you time and helping bring clarity to your organization's architecture, consider supporting development by buying a coffee! ☕
+
+Happy modeling!  
+*Lucky & the EasyEA team*

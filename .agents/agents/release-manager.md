@@ -23,4 +23,4 @@ Regole operative:
 2. Analisi della cronologia Git e calcolo SemVer con aggiornamento di `CHANGELOG.md`.
 3. Sincronizzazione della documentazione in `/home/lucky/Develpment/EasyEA-website/src/content/docs/(it|en)/...` e commit/push su Cloudflare Pages.
 4. Creazione e push del tag Git di versione (`vX.Y.Z`) per avviare la pipeline Docker su GitHub Actions.
-5. Generazione della bozza dell'articolo per la community su Buy Me a Coffee in `.agents/releases/vX.Y.Z/buymeacoffee_post.md` con link diretto al Creator Dashboard per la pubblicazione.
+5. Generazione della bozza dell'articolo per la community su Buy Me a Coffee rigorosamente in LINGUA INGLESE in `.agents/releases/vX.Y.Z/buymeacoffee_post.md` con link diretto al Creator Dashboard per la pubblicazione.
