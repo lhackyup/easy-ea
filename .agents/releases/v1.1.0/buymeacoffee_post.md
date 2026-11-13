@@ -53,4 +53,4 @@ EasyEA is evolving rapidly thanks to your feedback, suggestions, and generous co
 Take **v1.1.0** for a spin, and let us know your thoughts in the comments below. If EasyEA is saving you time and helping bring clarity to your organization's architecture, consider supporting development by buying a coffee! ☕
 
 Happy modeling!  
-*Lucky & the EasyEA team*
+*Lhackyup*

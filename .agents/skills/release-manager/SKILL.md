@@ -113,6 +113,7 @@ Questa skill orchestra l'intero ciclo di rilascio di una nuova versione di **Eas
    - **Tone of voice**: Accattivante, empatico, focalizzato sul valore reale per gli utenti e per i supporter.
    - Evita gerghi tecnici da commit grezzi; racconta le novità dal punto di vista dell'utente finale (nuove feature, miglioramenti all'usabilità, impatti pratici sui modelli di architettura).
    - Inserisci sempre i link diretti alle guide ufficiali in inglese con la corretta struttura Starlight: `https://easyea.lhackyup.dev/en/docs/...` (oppure `https://easyea.lhackyup.dev/it/docs/...` per l'italiano). Nota bene: il codice lingua precede `/docs/`.
+   - **Firma obbligatoria**: Firma sempre il post come **`Lhackyup`** (mai 'Lucky & the EasyEA team').
 2. **Salvataggio della Bozza**:
    - Salva l'articolo formattato in Markdown in:
      `.agents/releases/vX.Y.Z/buymeacoffee_post.md`
