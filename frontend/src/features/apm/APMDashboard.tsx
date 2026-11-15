@@ -108,19 +108,6 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-96">
-        <div className="flex flex-col items-center space-y-3">
-          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-slate-500 font-medium">{t.apm.loadingPortfolio}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!data) return null;
-
   const isAsset = (a: ApplicationInfo) => a.is_business_app !== false && a.is_enterprise_app !== false && a.in_apm_scope !== false;
 
   const businessApps = useMemo(() => {
@@ -153,7 +140,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
   };
 
   const timeSummary = useMemo(() => {
-    if (!businessApps) return null;
+    if (!businessApps || businessApps.length === 0) return null;
     const counts = { Invest: 0, Tolerate: 0, Migrate: 0, Eliminate: 0 };
     const costs = { Invest: 0, Tolerate: 0, Migrate: 0, Eliminate: 0 };
 
@@ -241,6 +228,19 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
       };
     });
   }, [businessApps]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-96">
+        <div className="flex flex-col items-center space-y-3">
+          <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+          <p className="text-xs text-slate-500 font-medium">{t.apm.loadingPortfolio}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!data) return null;
 
   return (
     <div className="space-y-6 pb-12">
