@@ -16,6 +16,7 @@ import { UploadModal } from './components/UploadModal';
 import { ExecutiveOverview } from './features/business/ExecutiveOverview';
 import { FrameworkInsights } from './features/business/FrameworkInsights';
 import { APMDashboard } from './features/apm/APMDashboard';
+import { TechRiskRadar } from './features/apm/TechRiskRadar';
 import { OverlapMatrix } from './features/overlap/OverlapMatrix';
 import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
@@ -267,8 +268,8 @@ export function App() {
                         />
                       )
                     )}
-                    {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} initialTab="portfolio" />}
-                    {businessTab === 'tech_risk' && <APMDashboard modelId={selectedModelId} initialTab="tech_risk" />}
+                    {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} />}
+                    {businessTab === 'tech_risk' && <TechRiskRadar modelId={selectedModelId} />}
                     {businessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
                     {businessTab === 'processes' && <ProcessNavigator modelId={selectedModelId} />}
                   </>

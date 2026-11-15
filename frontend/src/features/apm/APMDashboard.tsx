@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { APMPortfolio, ApplicationInfo } from '../../types';
 import { api } from '../../lib/api';
-import { TechRiskRadar } from './TechRiskRadar';
 import {
   DollarSign,
   TrendingUp,
@@ -22,24 +21,15 @@ import { useLanguage } from '../../context/LanguageContext';
 
 interface APMDashboardProps {
   modelId: string;
-  initialTab?: 'portfolio' | 'tech_risk';
 }
 
-export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab = 'portfolio' }) => {
+export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
   const { t, language, interpolate } = useLanguage();
   const [data, setData] = useState<APMPortfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedQuadrant, setSelectedQuadrant] = useState<string | null>(null);
-  const [scopeFilter, setScopeFilter] = useState<'in_scope' | 'all' | 'out_of_scope'>('in_scope');
-  const [activeApmTab, setActiveApmTab] = useState<'portfolio' | 'tech_risk'>(initialTab);
   const [matrixViewMode, setMatrixViewMode] = useState<'bubble' | 'cards'>('bubble');
-
-  useEffect(() => {
-    if (initialTab) {
-      setActiveApmTab(initialTab);
-    }
-  }, [initialTab]);
   const [techRiskMap, setTechRiskMap] = useState<Record<string, { level: string; score: number; eolCount: number }>>({});
   const [editingApp, setEditingApp] = useState<ApplicationInfo | null>(null);
   const [editForm, setEditForm] = useState<Partial<ApplicationInfo>>({});
@@ -74,22 +64,6 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
   useEffect(() => {
     loadData();
   }, [modelId]);
-
-  const handleToggleScope = async (app: ApplicationInfo, e: React.MouseEvent) => {
-    e.stopPropagation();
-    const isCurrentlyAsset = isAsset(app);
-    const nextScope = !isCurrentlyAsset;
-    try {
-      await api.updateApplicationAPM(app.id, {
-        is_business_app: nextScope,
-        is_enterprise_app: nextScope,
-        in_apm_scope: nextScope
-      });
-      await loadData();
-    } catch (err) {
-      console.error(err);
-    }
-  };
 
   const handleEditClick = (app: ApplicationInfo) => {
     setEditingApp(app);
@@ -148,22 +122,26 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
   if (!data) return null;
 
   const isAsset = (a: ApplicationInfo) => a.is_business_app !== false && a.is_enterprise_app !== false && a.in_apm_scope !== false;
-  const inScopeCount = data.applications.filter(isAsset).length;
-  const outScopeCount = data.applications.filter((a) => !isAsset(a)).length;
-  const totalCount = data.applications.length;
 
-  const filteredApps = data.applications.filter((app) => {
-    const isInScope = isAsset(app);
-    if (scopeFilter === 'in_scope' && !isInScope) return false;
-    if (scopeFilter === 'out_of_scope' && isInScope) return false;
+  const businessApps = useMemo(() => {
+    if (!data?.applications) return [];
+    return data.applications.filter(isAsset);
+  }, [data?.applications]);
 
-    const matchesSearch =
-      app.name.toLowerCase().includes(search.toLowerCase()) ||
-      app.vendor.toLowerCase().includes(search.toLowerCase()) ||
-      app.business_owner.toLowerCase().includes(search.toLowerCase());
-    const matchesQuad = selectedQuadrant ? app.time_quadrant === selectedQuadrant : true;
-    return matchesSearch && matchesQuad;
-  });
+  const totalBusinessCost = useMemo(() => {
+    return businessApps.reduce((acc, a) => acc + (a.annual_cost || 0), 0);
+  }, [businessApps]);
+
+  const filteredApps = useMemo(() => {
+    return businessApps.filter((app) => {
+      const matchesSearch =
+        app.name.toLowerCase().includes(search.toLowerCase()) ||
+        app.vendor.toLowerCase().includes(search.toLowerCase()) ||
+        app.business_owner.toLowerCase().includes(search.toLowerCase());
+      const matchesQuad = selectedQuadrant ? (app.time_quadrant_override || app.time_quadrant) === selectedQuadrant : true;
+      return matchesSearch && matchesQuad;
+    });
+  }, [businessApps, search, selectedQuadrant]);
 
   const formatEUR = (val: number) =>
     new Intl.NumberFormat(language === 'en' ? 'en-US' : 'it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
@@ -175,11 +153,11 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
   };
 
   const timeSummary = useMemo(() => {
-    if (!data?.applications) return null;
+    if (!businessApps) return null;
     const counts = { Invest: 0, Tolerate: 0, Migrate: 0, Eliminate: 0 };
     const costs = { Invest: 0, Tolerate: 0, Migrate: 0, Eliminate: 0 };
 
-    data.applications.filter(isAsset).forEach((app) => {
+    businessApps.forEach((app) => {
       const q = (app.time_quadrant_override || app.time_quadrant) as keyof typeof counts;
       if (counts[q] !== undefined) {
         counts[q] += 1;
@@ -188,20 +166,18 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
     });
 
     return { counts, costs };
-  }, [data?.applications]);
+  }, [businessApps]);
 
   const bubbleApps = useMemo(() => {
-    if (!data?.applications) return [];
-    const inScope = data.applications.filter(isAsset);
-    if (inScope.length === 0) return [];
+    if (!businessApps || businessApps.length === 0) return [];
 
-    const costs = inScope.map((r) => Number(r.annual_cost) || 0);
+    const costs = businessApps.map((r) => Number(r.annual_cost) || 0);
     const minCost = Math.min(...costs);
     const maxCost = Math.max(...costs);
     const costSpread = Math.max(1, maxCost - minCost);
 
     const groups: { [key: string]: ApplicationInfo[] } = {};
-    inScope.forEach((r) => {
+    businessApps.forEach((r) => {
       const bFit = Number(r.business_fit) || 3;
       const tFit = Number(r.technical_fit) || 3;
       const key = `${bFit}_${tFit}`;
@@ -209,7 +185,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
       groups[key].push(r);
     });
 
-    return inScope.map((app) => {
+    return businessApps.map((app) => {
       const bFit = Number(app.business_fit) || 3;
       const tFit = Number(app.technical_fit) || 3;
       const cost = Number(app.annual_cost) || 0;
@@ -264,7 +240,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
         tFit
       };
     });
-  }, [data?.applications]);
+  }, [businessApps]);
 
   return (
     <div className="space-y-6 pb-12">
@@ -276,82 +252,8 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
             {t.apm.subtitle}
           </p>
         </div>
-        
-        {/* APM Scope Filter Pills */}
-        <div className="flex items-center space-x-2 bg-white border border-slate-200 p-1 rounded-2xl shadow-sm">
-          <button
-            onClick={() => setScopeFilter('in_scope')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
-              scopeFilter === 'in_scope'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
-            }`}
-          >
-            <Check className="w-3.5 h-3.5" />
-            <span>{interpolate(t.apm.scopeFilterInScope, { count: inScopeCount })}</span>
-          </button>
-
-          <button
-            onClick={() => setScopeFilter('all')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
-              scopeFilter === 'all'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
-            }`}
-          >
-            <span>{interpolate(t.apm.scopeFilterAll, { count: totalCount })}</span>
-          </button>
-
-          <button
-            onClick={() => setScopeFilter('out_of_scope')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
-              scopeFilter === 'out_of_scope'
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-50'
-            }`}
-          >
-            <X className="w-3.5 h-3.5" />
-            <span>{interpolate(t.apm.scopeFilterOutOfScope, { count: outScopeCount })}</span>
-          </button>
-        </div>
       </div>
 
-      {/* Top Module Navigation Bar */}
-      <div className="flex items-center space-x-3 border-b border-slate-200 pb-3">
-        <button
-          onClick={() => setActiveApmTab('portfolio')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition ${
-            activeApmTab === 'portfolio'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
-          }`}
-        >
-          <TrendingUp className="w-4 h-4" />
-          <span>Gartner TIME &amp; Portfolio</span>
-        </button>
-
-        <button
-          onClick={() => setActiveApmTab('tech_risk')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative ${
-            activeApmTab === 'tech_risk'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
-          }`}
-        >
-          <ShieldAlert className="w-4 h-4" />
-          <span>Obsolescence &amp; Risk Radar</span>
-          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider">
-            Attivo
-          </span>
-        </button>
-      </div>
-
-      {activeApmTab === 'tech_risk' && (
-        <TechRiskRadar modelId={modelId} />
-      )}
-
-      {activeApmTab === 'portfolio' && (
-        <>
       {/* Top Metric Cards & Executive KPI */}
       <div className="space-y-4">
         {/* Total Cost & Scope Summary Bar */}
@@ -362,13 +264,13 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
             </div>
             <div>
               <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.apm.totalAnnualCost}</span>
-              <div className="text-2xl font-black text-slate-900">{formatEUR(data.total_annual_cost)}</div>
+              <div className="text-2xl font-black text-slate-900">{formatEUR(totalBusinessCost)}</div>
               <p className="text-[11px] text-slate-500">{t.apm.costDesc}</p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-slate-600">
-              <span className="font-bold text-slate-800">{inScopeCount}</span> su <span className="font-bold text-slate-800">{totalCount}</span> applicazioni in ambito APM
+              <span className="font-bold text-slate-800">{businessApps.length}</span> Business Application censite nel portfolio APM
             </div>
             {selectedQuadrant && (
               <button
@@ -699,11 +601,11 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                 <div className="flex items-center justify-between pb-2 border-b border-blue-200/60 mb-2">
                   <span className="text-xs font-black text-blue-900">{t.apm.quadrantTolerateTitle}</span>
                   <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded font-mono">
-                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length} app
+                    {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length} app
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').map((app) => (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').map((app) => (
                     <button
                       key={app.id}
                       onClick={() => handleEditClick(app)}
@@ -715,7 +617,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                       <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
                     </button>
                   ))}
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length === 0 && (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length === 0 && (
                     <span className="text-xs text-blue-500 italic p-2">Nessuna applicazione in questo quadrante</span>
                   )}
                 </div>
@@ -726,11 +628,11 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                 <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60 mb-2">
                   <span className="text-xs font-black text-emerald-900">{t.apm.quadrantInvestTitle}</span>
                   <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-mono">
-                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Invest').length} app
+                    {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Invest').length} app
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Invest').map((app) => (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Invest').map((app) => (
                     <button
                       key={app.id}
                       onClick={() => handleEditClick(app)}
@@ -742,7 +644,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                       <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
                     </button>
                   ))}
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Invest').length === 0 && (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Invest').length === 0 && (
                     <span className="text-xs text-emerald-500 italic p-2">Nessuna applicazione in questo quadrante</span>
                   )}
                 </div>
@@ -753,11 +655,11 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                 <div className="flex items-center justify-between pb-2 border-b border-rose-200/60 mb-2">
                   <span className="text-xs font-black text-rose-900">{t.apm.quadrantEliminateTitle}</span>
                   <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded font-mono">
-                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length} app
+                    {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length} app
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').map((app) => (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').map((app) => (
                     <button
                       key={app.id}
                       onClick={() => handleEditClick(app)}
@@ -769,7 +671,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                       <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
                     </button>
                   ))}
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length === 0 && (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length === 0 && (
                     <span className="text-xs text-rose-500 italic p-2">Nessuna applicazione in questo quadrante</span>
                   )}
                 </div>
@@ -780,11 +682,11 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                 <div className="flex items-center justify-between pb-2 border-b border-amber-200/60 mb-2">
                   <span className="text-xs font-black text-amber-900">{t.apm.quadrantMigrateTitle}</span>
                   <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded font-mono">
-                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length} app
+                    {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length} app
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Migrate').map((app) => (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Migrate').map((app) => (
                     <button
                       key={app.id}
                       onClick={() => handleEditClick(app)}
@@ -796,7 +698,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                       <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
                     </button>
                   ))}
-                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length === 0 && (
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length === 0 && (
                     <span className="text-xs text-amber-600 italic p-2">Nessuna applicazione in questo quadrante</span>
                   )}
                 </div>
@@ -841,7 +743,6 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
             <thead className="bg-slate-50 text-slate-600 uppercase tracking-wider text-[10px] font-bold border-b border-slate-200">
               <tr>
                 <th className="py-3 px-4">{t.apm.colApplication}</th>
-                <th className="py-3 px-4">{t.apm.colApmScope}</th>
                 <th className="py-3 px-4">{t.apm.colTimeQuadrant}</th>
                 <th className="py-3 px-4">Tech Risk (EOL)</th>
                 <th className="py-3 px-4">{t.apm.colFitScores}</th>
@@ -860,38 +761,12 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
                     <div className="flex flex-col">
                       <div className="flex items-center space-x-1.5">
                         <span>{app.name}</span>
-                        {isAsset(app) && (
-                          <span className="px-1.5 py-0.2 text-[9px] font-black rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase tracking-wider">
-                            «Business App»
-                          </span>
-                        )}
+                        <span className="px-1.5 py-0.2 text-[9px] font-black rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200 uppercase tracking-wider">
+                          «Business App»
+                        </span>
                       </div>
                       <span className="text-[10px] text-slate-400 font-mono font-normal">{app.id}</span>
                     </div>
-                  </td>
-                  <td className="py-3.5 px-4">
-                    <button
-                      type="button"
-                      onClick={(e) => handleToggleScope(app, e)}
-                      className={`px-2.5 py-1 rounded-xl text-[10px] font-bold border flex items-center space-x-1 transition ${
-                        isAsset(app)
-                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 shadow-xs'
-                          : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'
-                      }`}
-                      title={t.apm.toggleScopeTooltip}
-                    >
-                      {isAsset(app) ? (
-                        <>
-                          <Check className="w-3 h-3 text-indigo-600" />
-                          <span>{t.apm.inScopeBadge}</span>
-                        </>
-                      ) : (
-                        <>
-                          <X className="w-3 h-3 text-slate-400" />
-                          <span>{t.apm.outOfScopeBadge}</span>
-                        </>
-                      )}
-                    </button>
                   </td>
                   <td className="py-3.5 px-4">
                     <span
@@ -973,8 +848,6 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab 
           </table>
         </div>
       </div>
-      </>
-      )}
 
       {/* Edit Modal */}
       {editingApp && (
