@@ -1382,6 +1382,127 @@ def seed_default_attribute_packages(db: Session):
             "is_required": False,
             "section": "Risk, Security & Compliance",
             "sort_order": 19
+        },
+
+        # Section 7: Technology Stack & Obsolescence (Target: Technology Layer)
+        {
+            "id": "item-apm-tech-vendor",
+            "name": "tech_vendor",
+            "label": "Technology Vendor / Provider",
+            "description": "Hardware or software provider (e.g. Oracle, IBM, Red Hat, Microsoft, Apache Foundation, AWS, Google Cloud).",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 20
+        },
+        {
+            "id": "item-apm-tech-version",
+            "name": "tech_version",
+            "label": "Release / Version",
+            "description": "Official software release or firmware version (e.g. 10.2.0.5, 8u202, 11g, 17 LTS, 3.6.1).",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "string",
+            "options": [],
+            "default_value": "",
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 21
+        },
+        {
+            "id": "item-apm-tech-category",
+            "name": "tech_category",
+            "label": "Technology Category",
+            "description": "Architectural classification of the technology component.",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "select",
+            "options": [
+                "Database / RDBMS",
+                "Runtime & Programming Language",
+                "Middleware & Messaging",
+                "Operating System",
+                "Container & Kubernetes",
+                "Application Server / Web Server",
+                "Mainframe Software & OS",
+                "Cloud Platform Service",
+                "In-Memory Cache & NoSQL",
+                "Virtualization & Cloud"
+            ],
+            "default_value": "Database / RDBMS",
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 22
+        },
+        {
+            "id": "item-apm-tech-lifecycle-status",
+            "name": "tech_lifecycle_status",
+            "label": "Obsolescence Status",
+            "description": "Current lifecycle support status from the technology vendor.",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "select",
+            "options": [
+                "Supported",
+                "Approaching EOL",
+                "Extended Support",
+                "End of Life / Obsolete"
+            ],
+            "default_value": "Supported",
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 23
+        },
+        {
+            "id": "item-apm-tech-eol-date",
+            "name": "tech_eol_date",
+            "label": "End of Life Date (EOL)",
+            "description": "Official date when regular vendor support, maintenance, and security patches ended or will end.",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "date",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 24
+        },
+        {
+            "id": "item-apm-tech-eoes-date",
+            "name": "tech_eoes_date",
+            "label": "End of Extended Support (EOES)",
+            "description": "Date when extended or custom support terminates completely.",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "date",
+            "options": [],
+            "default_value": None,
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 25
+        },
+        {
+            "id": "item-apm-tech-cve-risk",
+            "name": "tech_cve_risk",
+            "label": "Vulnerability / CVE Severity",
+            "description": "Known security vulnerabilities or CVE exposure level due to obsolescence.",
+            "element_type": "*",
+            "layer": "Technology",
+            "data_type": "select",
+            "options": [
+                "Low / Negligible",
+                "Medium",
+                "High",
+                "Critical / Active Exploits"
+            ],
+            "default_value": "Low / Negligible",
+            "is_required": False,
+            "section": "Technology Lifecycle & Obsolescence",
+            "sort_order": 26
         }
     ]
 

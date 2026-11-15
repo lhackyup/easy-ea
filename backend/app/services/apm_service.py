@@ -7,16 +7,16 @@ def calculate_time_quadrant(business_fit: int, technical_fit: int) -> str:
     """
     Gartner TIME Model Matrix:
     - Business/Functional Fit >= 3 & Technical Fit >= 3  => INVEST (Strategic value, modern tech)
-    - Business/Functional Fit >= 3 & Technical Fit < 3   => MIGRATE (High business value, legacy tech)
-    - Business/Functional Fit < 3 & Technical Fit >= 3   => TOLERATE (Low business value, stable tech)
+    - Business/Functional Fit >= 3 & Technical Fit < 3   => TOLERATE (High business value, legacy tech)
+    - Business/Functional Fit < 3 & Technical Fit >= 3   => MIGRATE (Low business value, modern tech)
     - Business/Functional Fit < 3 & Technical Fit < 3    => ELIMINATE (Low value, high technical debt)
     """
     if business_fit >= 3 and technical_fit >= 3:
         return "Invest"
     elif business_fit >= 3 and technical_fit < 3:
-        return "Migrate"
-    elif business_fit < 3 and technical_fit >= 3:
         return "Tolerate"
+    elif business_fit < 3 and technical_fit >= 3:
+        return "Migrate"
     else:
         return "Eliminate"
 
@@ -131,6 +131,8 @@ class APMService:
             app_list.append({
                 "id": app.id,
                 "name": app.name,
+                "short_name": props.get("apm_short_name") or "",
+                "app_code": props.get("apm_app_code") or "",
                 "documentation": app.documentation,
                 "business_fit": b_fit,
                 "technical_fit": t_fit,

@@ -1,6 +1,7 @@
 import {
   ModelWorkspace,
   APMPortfolio,
+  TechRiskAnalysisData,
   OverlapMatrixData,
   BusinessProcessItem,
   ImpactSimulationResult,
@@ -135,6 +136,22 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Failed to update application');
+    return res.json();
+  },
+
+  getTechRiskAnalysis: async (modelId: string): Promise<TechRiskAnalysisData> => {
+    const res = await fetch(`${API_BASE}/apm/tech-risk/${modelId}`, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch Technology Risk Analysis');
+    return res.json();
+  },
+
+  updateTechnologyLifecycle: async (elementId: string, data: any): Promise<any> => {
+    const res = await fetch(`${API_BASE}/apm/technologies/${elementId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update technology lifecycle');
     return res.json();
   },
 

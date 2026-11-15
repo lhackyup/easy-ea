@@ -51,8 +51,8 @@ def setup_db():
 
 def test_time_quadrant_logic():
     assert calculate_time_quadrant(5, 5) == "Invest"
-    assert calculate_time_quadrant(4, 2) == "Migrate"
-    assert calculate_time_quadrant(2, 4) == "Tolerate"
+    assert calculate_time_quadrant(4, 2) == "Tolerate"
+    assert calculate_time_quadrant(2, 4) == "Migrate"
     assert calculate_time_quadrant(1, 1) == "Eliminate"
 
 def test_layer_detection():

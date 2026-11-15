@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { APMPortfolio, OverlapMatrixData, PlateauRoadmap, ArchitecturalRisksReport } from '../../types';
+import { APMPortfolio, OverlapMatrixData, PlateauRoadmap, ArchitecturalRisksReport, TechRiskAnalysisData } from '../../types';
 import { api } from '../../lib/api';
 import { useLanguage } from '../../context/LanguageContext';
 import {
@@ -17,7 +17,7 @@ import {
 
 interface ExecutiveOverviewProps {
   modelId: string;
-  onNavigateTab: (tab: 'apm' | 'overlap' | 'processes') => void;
+  onNavigateTab: (tab: 'apm' | 'tech_risk' | 'overlap' | 'processes') => void;
 }
 
 export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, onNavigateTab }) => {
@@ -26,22 +26,25 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
   const [overlap, setOverlap] = useState<OverlapMatrixData | null>(null);
   const [plateaus, setPlateaus] = useState<PlateauRoadmap | null>(null);
   const [risks, setRisks] = useState<ArchitecturalRisksReport | null>(null);
+  const [techRisk, setTechRisk] = useState<TechRiskAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [aData, oData, pData, rData] = await Promise.all([
+        const [aData, oData, pData, rData, tData] = await Promise.all([
           api.getAPMPortfolio(modelId),
           api.getOverlapMatrix(modelId),
           api.getPlateauRoadmap(modelId).catch(() => null),
-          api.getArchitecturalRisks(modelId).catch(() => null)
+          api.getArchitecturalRisks(modelId).catch(() => null),
+          api.getTechRiskAnalysis(modelId).catch(() => null)
         ]);
         setApm(aData);
         setOverlap(oData);
         setPlateaus(pData);
         setRisks(rData);
+        setTechRisk(tData);
       } catch (err) {
         console.error(err);
       } finally {
@@ -160,6 +163,40 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
           </p>
         </div>
       </div>
+
+      {/* Technology Obsolescence & DORA Risk Banner */}
+      {techRisk && (techRisk.summary.dora_compliance_alerts_count > 0 || techRisk.summary.obsolete_technologies_count > 0) && (
+        <div className="p-4 bg-rose-50 border border-rose-200 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-center space-x-3">
+            <div className="p-2 bg-rose-100 rounded-xl text-rose-700">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-rose-900">
+                  DORA / NIS2 Tech Obsolescence Risk Radar
+                </span>
+                {techRisk.summary.dora_compliance_alerts_count > 0 && (
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-600 text-white uppercase tracking-wider animate-pulse">
+                    {techRisk.summary.dora_compliance_alerts_count} Allerte DORA Critiche
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-rose-800/90 mt-0.5">
+                Rilevate <strong>{techRisk.summary.obsolete_technologies_count} tecnologie End-of-Life (EOL)</strong> e <strong>{techRisk.summary.approaching_eol_count} in scadenza</strong> che impattano applicazioni core del portafoglio.
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onNavigateTab('tech_risk')}
+            className="px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0 shadow-xs"
+          >
+            <span>Apri Radar Obsolescenza</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Architectural Governance & SPOF Risk Alert Banner (if risks detected) */}
       {risks && risks.summary.total_risks > 0 && (

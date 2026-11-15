@@ -13,10 +13,19 @@ from app.services.apm_service import calculate_time_quadrant
 
 def seed_sample_model(db: Session) -> str:
     """Creates or resets a comprehensive sample ArchiMate model with business data in English."""
-    existing = db.query(ModelWorkspace).filter(ModelWorkspace.id == "sample-easybank-ea").first()
-    if existing:
-        db.delete(existing)
-        db.commit()
+    from app.models.archimate import ArchimateView, ArchiSchema, SchemaFolder, SchemaVersionHistory, ApplicationBusinessAttributes, WorkspaceAttributePackage
+    db.query(SchemaVersionHistory).delete(synchronize_session=False)
+    db.query(ApplicationBusinessAttributes).delete(synchronize_session=False)
+    db.query(WorkspaceAttributePackage).filter(WorkspaceAttributePackage.model_id == "sample-easybank-ea").delete(synchronize_session=False)
+    db.query(ArchiSchema).filter(ArchiSchema.model_id == "sample-easybank-ea").delete(synchronize_session=False)
+    db.query(SchemaFolder).filter(SchemaFolder.model_id == "sample-easybank-ea").delete(synchronize_session=False)
+    db.query(ArchimateView).filter(ArchimateView.model_id == "sample-easybank-ea").delete(synchronize_session=False)
+    db.query(ArchimateRelationship).filter(ArchimateRelationship.model_id == "sample-easybank-ea").delete(synchronize_session=False)
+    db.query(ArchimateElement).filter(ArchimateElement.model_id == "sample-easybank-ea").delete(synchronize_session=False)
+    db.query(ModelWorkspace).filter(
+        (ModelWorkspace.id == "sample-easybank-ea") | (ModelWorkspace.code == "EASY")
+    ).delete(synchronize_session=False)
+    db.commit()
 
     workspace = ModelWorkspace(
         id="sample-easybank-ea",

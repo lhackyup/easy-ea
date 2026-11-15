@@ -270,6 +270,8 @@ try:
         seed_sample_adrs(db, "sample-easybank-ea")
         from app.services.archimate_packages_seed import seed_easybank_layer_elements_and_views
         seed_easybank_layer_elements_and_views(db, "sample-easybank-ea")
+        from app.services.seed_easybank_tech_risk_data import seed_easybank_tech_risk_portfolio
+        seed_easybank_tech_risk_portfolio(db, "sample-easybank-ea")
 finally:
     db.close()
 

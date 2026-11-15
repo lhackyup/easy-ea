@@ -124,6 +124,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Sparkles
     },
     {
+      id: 'apm' as BusinessSubTab,
+      label: t.subtabs.applicationPortfolio,
+      icon: Layers
+    },
+    {
+      id: 'tech_risk' as BusinessSubTab,
+      label: t.subtabs.techRiskRadar,
+      icon: ShieldAlert
+    },
+    {
       id: 'overlap' as BusinessSubTab,
       label: t.subtabs.functionalOverlap,
       icon: GitMerge

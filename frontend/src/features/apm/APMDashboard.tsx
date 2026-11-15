@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { APMPortfolio, ApplicationInfo } from '../../types';
 import { api } from '../../lib/api';
+import { TechRiskRadar } from './TechRiskRadar';
 import {
   DollarSign,
   TrendingUp,
@@ -13,21 +14,33 @@ import {
   Filter,
   ShieldAlert,
   SlidersHorizontal,
-  Cloud
+  Cloud,
+  CircleDot,
+  LayoutGrid
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
 interface APMDashboardProps {
   modelId: string;
+  initialTab?: 'portfolio' | 'tech_risk';
 }
 
-export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
+export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId, initialTab = 'portfolio' }) => {
   const { t, language, interpolate } = useLanguage();
   const [data, setData] = useState<APMPortfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedQuadrant, setSelectedQuadrant] = useState<string | null>(null);
   const [scopeFilter, setScopeFilter] = useState<'in_scope' | 'all' | 'out_of_scope'>('in_scope');
+  const [activeApmTab, setActiveApmTab] = useState<'portfolio' | 'tech_risk'>(initialTab);
+  const [matrixViewMode, setMatrixViewMode] = useState<'bubble' | 'cards'>('bubble');
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveApmTab(initialTab);
+    }
+  }, [initialTab]);
+  const [techRiskMap, setTechRiskMap] = useState<Record<string, { level: string; score: number; eolCount: number }>>({});
   const [editingApp, setEditingApp] = useState<ApplicationInfo | null>(null);
   const [editForm, setEditForm] = useState<Partial<ApplicationInfo>>({});
   const [saving, setSaving] = useState(false);
@@ -35,8 +48,22 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
   const loadData = async () => {
     setLoading(true);
     try {
-      const res = await api.getAPMPortfolio(modelId);
+      const [res, techRes] = await Promise.all([
+        api.getAPMPortfolio(modelId),
+        api.getTechRiskAnalysis(modelId).catch(() => null)
+      ]);
       setData(res);
+      if (techRes && techRes.applications) {
+        const tMap: Record<string, { level: string; score: number; eolCount: number }> = {};
+        techRes.applications.forEach((a: any) => {
+          tMap[a.id] = {
+            level: a.tech_risk_level,
+            score: a.composite_risk_score,
+            eolCount: a.counts?.obsolete || 0
+          };
+        });
+        setTechRiskMap(tMap);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -141,6 +168,104 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
   const formatEUR = (val: number) =>
     new Intl.NumberFormat(language === 'en' ? 'en-US' : 'it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
 
+  const formatCompactEUR = (val: number) => {
+    if (val >= 1000000) return `€${(val / 1000000).toFixed(1)}M`;
+    if (val >= 1000) return `€${(val / 1000).toFixed(0)}k`;
+    return `€${val}`;
+  };
+
+  const timeSummary = useMemo(() => {
+    if (!data?.applications) return null;
+    const counts = { Invest: 0, Tolerate: 0, Migrate: 0, Eliminate: 0 };
+    const costs = { Invest: 0, Tolerate: 0, Migrate: 0, Eliminate: 0 };
+
+    data.applications.filter(isAsset).forEach((app) => {
+      const q = (app.time_quadrant_override || app.time_quadrant) as keyof typeof counts;
+      if (counts[q] !== undefined) {
+        counts[q] += 1;
+        costs[q] += app.annual_cost || 0;
+      }
+    });
+
+    return { counts, costs };
+  }, [data?.applications]);
+
+  const bubbleApps = useMemo(() => {
+    if (!data?.applications) return [];
+    const inScope = data.applications.filter(isAsset);
+    if (inScope.length === 0) return [];
+
+    const costs = inScope.map((r) => Number(r.annual_cost) || 0);
+    const minCost = Math.min(...costs);
+    const maxCost = Math.max(...costs);
+    const costSpread = Math.max(1, maxCost - minCost);
+
+    const groups: { [key: string]: ApplicationInfo[] } = {};
+    inScope.forEach((r) => {
+      const bFit = Number(r.business_fit) || 3;
+      const tFit = Number(r.technical_fit) || 3;
+      const key = `${bFit}_${tFit}`;
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+
+    return inScope.map((app) => {
+      const bFit = Number(app.business_fit) || 3;
+      const tFit = Number(app.technical_fit) || 3;
+      const cost = Number(app.annual_cost) || 0;
+
+      const costRatio = Math.sqrt(Math.max(0, cost - minCost) / costSpread);
+      const radius = 20 + costRatio * 32;
+
+      const minX = 8;
+      const maxX = 92;
+      const baseX = minX + ((tFit - 1) / 3) * (maxX - minX);
+
+      const minY = 9;
+      const maxY = 91;
+      const baseY = maxY - ((bFit - 1) / 3) * (maxY - minY);
+
+      const key = `${bFit}_${tFit}`;
+      const group = groups[key] || [];
+      const indexInGroup = group.indexOf(app);
+      let offsetX = 0;
+      let offsetY = 0;
+
+      if (group.length > 1) {
+        const angle = indexInGroup * 2.39996;
+        const dist = Math.min(4.5, 1.2 + Math.sqrt(indexInGroup) * 0.95);
+        offsetX = Math.cos(angle) * dist;
+        offsetY = Math.sin(angle) * dist;
+
+        if (tFit >= 2.5 && baseX + offsetX < 52) offsetX = Math.abs(offsetX);
+        if (tFit < 2.5 && baseX + offsetX > 48) offsetX = -Math.abs(offsetX);
+        if (bFit >= 2.5 && baseY + offsetY > 48) offsetY = -Math.abs(offsetY);
+        if (bFit < 2.5 && baseY + offsetY < 52) offsetY = Math.abs(offsetY);
+      }
+
+      const posX = Math.max(minX, Math.min(maxX, baseX + offsetX));
+      const posY = Math.max(minY, Math.min(maxY, baseY + offsetY));
+
+      const quadrant = app.time_quadrant_override || app.time_quadrant;
+      const shortName = app.short_name || (app.name ? app.name.slice(0, 14) : 'App');
+      const appCode = app.app_code || (app.id.startsWith('elem-') ? app.id.replace('elem-', 'AP') : 'AP0000');
+
+      return {
+        app,
+        posX,
+        posY,
+        radius,
+        diameter: radius * 2,
+        quadrant,
+        shortName,
+        appCode,
+        cost,
+        bFit,
+        tFit
+      };
+    });
+  }, [data?.applications]);
+
   return (
     <div className="space-y-6 pb-12">
       {/* Page Title & Intro */}
@@ -191,167 +316,494 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
         </div>
       </div>
 
-      {/* Top Metric Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Cost */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.apm.totalAnnualCost}</span>
-            <div className="p-2.5 bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100">
-              <DollarSign className="w-5 h-5" />
+      {/* Top Module Navigation Bar */}
+      <div className="flex items-center space-x-3 border-b border-slate-200 pb-3">
+        <button
+          onClick={() => setActiveApmTab('portfolio')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition ${
+            activeApmTab === 'portfolio'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>Gartner TIME &amp; Portfolio</span>
+        </button>
+
+        <button
+          onClick={() => setActiveApmTab('tech_risk')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative ${
+            activeApmTab === 'tech_risk'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4" />
+          <span>Obsolescence &amp; Risk Radar</span>
+          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider">
+            Attivo
+          </span>
+        </button>
+      </div>
+
+      {activeApmTab === 'tech_risk' && (
+        <TechRiskRadar modelId={modelId} />
+      )}
+
+      {activeApmTab === 'portfolio' && (
+        <>
+      {/* Top Metric Cards & Executive KPI */}
+      <div className="space-y-4">
+        {/* Total Cost & Scope Summary Bar */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-center space-x-3.5">
+            <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100">
+              <DollarSign className="w-6 h-6" />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.apm.totalAnnualCost}</span>
+              <div className="text-2xl font-black text-slate-900">{formatEUR(data.total_annual_cost)}</div>
+              <p className="text-[11px] text-slate-500">{t.apm.costDesc}</p>
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-slate-900">{formatEUR(data.total_annual_cost)}</div>
-          <p className="text-[11px] text-slate-500 mt-1">{t.apm.costDesc}</p>
+          <div className="flex flex-wrap items-center gap-3 text-xs">
+            <div className="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-slate-600">
+              <span className="font-bold text-slate-800">{inScopeCount}</span> su <span className="font-bold text-slate-800">{totalCount}</span> applicazioni in ambito APM
+            </div>
+            {selectedQuadrant && (
+              <button
+                onClick={() => setSelectedQuadrant(null)}
+                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1.5 transition"
+              >
+                <X className="w-3.5 h-3.5" />
+                <span>Rimuovi Filtro ({selectedQuadrant})</span>
+              </button>
+            )}
+          </div>
         </div>
 
-        {/* Invest Quadrant */}
-        <div
-          onClick={() => setSelectedQuadrant(selectedQuadrant === 'Invest' ? null : 'Invest')}
-          className={`bg-white border rounded-2xl p-5 shadow-sm cursor-pointer transition ${
-            selectedQuadrant === 'Invest' ? 'border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/20' : 'border-slate-200 hover:border-emerald-400'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-emerald-700 uppercase tracking-wider">{t.apm.investTitle}</span>
-            <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-              {data.time_distribution.Invest} App
-            </span>
+        {/* 4 Quadrants Summary Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {/* Invest */}
+          <div
+            onClick={() => setSelectedQuadrant(selectedQuadrant === 'Invest' ? null : 'Invest')}
+            className={`bg-emerald-50/60 border rounded-2xl p-4 shadow-2xs cursor-pointer transition ${
+              selectedQuadrant === 'Invest' ? 'border-emerald-500 ring-2 ring-emerald-500/30 bg-emerald-100/50' : 'border-emerald-200/80 hover:border-emerald-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-emerald-800">{t.apm.investTitle}</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-emerald-950">{timeSummary?.counts.Invest || 0} app</div>
+            <div className="text-xs font-bold text-emerald-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Invest || 0)}</div>
+            <p className="text-[11px] text-emerald-800/80 mt-1">{t.apm.investDesc}</p>
           </div>
-          <div className="mt-3 text-xl font-bold text-slate-900">{formatEUR(data.time_cost_distribution.Invest)}</div>
-          <p className="text-[11px] text-slate-600 mt-1">{t.apm.investDesc}</p>
-        </div>
 
-        {/* Migrate Quadrant */}
-        <div
-          onClick={() => setSelectedQuadrant(selectedQuadrant === 'Migrate' ? null : 'Migrate')}
-          className={`bg-white border rounded-2xl p-5 shadow-sm cursor-pointer transition ${
-            selectedQuadrant === 'Migrate' ? 'border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/20' : 'border-slate-200 hover:border-amber-400'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">{t.apm.migrateTitle}</span>
-            <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-              {data.time_distribution.Migrate} App
-            </span>
+          {/* Tolerate */}
+          <div
+            onClick={() => setSelectedQuadrant(selectedQuadrant === 'Tolerate' ? null : 'Tolerate')}
+            className={`bg-blue-50/60 border rounded-2xl p-4 shadow-2xs cursor-pointer transition ${
+              selectedQuadrant === 'Tolerate' ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-100/50' : 'border-blue-200/80 hover:border-blue-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-blue-800">{t.apm.tolerateTitle}</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-blue-950">{timeSummary?.counts.Tolerate || 0} app</div>
+            <div className="text-xs font-bold text-blue-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Tolerate || 0)}</div>
+            <p className="text-[11px] text-blue-800/80 mt-1">{t.apm.tolerateDesc}</p>
           </div>
-          <div className="mt-3 text-xl font-bold text-slate-900">{formatEUR(data.time_cost_distribution.Migrate)}</div>
-          <p className="text-[11px] text-slate-600 mt-1">{t.apm.migrateDesc}</p>
-        </div>
 
-        {/* Tolerate & Eliminate */}
-        <div
-          onClick={() => setSelectedQuadrant(selectedQuadrant === 'Eliminate' ? null : 'Eliminate')}
-          className={`bg-white border rounded-2xl p-5 shadow-sm cursor-pointer transition ${
-            selectedQuadrant === 'Eliminate' ? 'border-rose-500 ring-2 ring-rose-500/20 bg-rose-50/20' : 'border-slate-200 hover:border-rose-400'
-          }`}
-        >
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">{t.apm.eliminateTitle}</span>
-            <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-              {data.time_distribution.Eliminate} App
-            </span>
+          {/* Migrate */}
+          <div
+            onClick={() => setSelectedQuadrant(selectedQuadrant === 'Migrate' ? null : 'Migrate')}
+            className={`bg-amber-50/60 border rounded-2xl p-4 shadow-2xs cursor-pointer transition ${
+              selectedQuadrant === 'Migrate' ? 'border-amber-500 ring-2 ring-amber-500/30 bg-amber-100/50' : 'border-amber-200/80 hover:border-amber-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-800">{t.apm.migrateTitle}</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-amber-950">{timeSummary?.counts.Migrate || 0} app</div>
+            <div className="text-xs font-bold text-amber-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Migrate || 0)}</div>
+            <p className="text-[11px] text-amber-800/80 mt-1">{t.apm.migrateDesc}</p>
           </div>
-          <div className="mt-3 text-xl font-bold text-slate-900">{formatEUR(data.time_cost_distribution.Eliminate)}</div>
-          <p className="text-[11px] text-slate-600 mt-1">{t.apm.eliminateDesc}</p>
+
+          {/* Eliminate */}
+          <div
+            onClick={() => setSelectedQuadrant(selectedQuadrant === 'Eliminate' ? null : 'Eliminate')}
+            className={`bg-rose-50/60 border rounded-2xl p-4 shadow-2xs cursor-pointer transition ${
+              selectedQuadrant === 'Eliminate' ? 'border-rose-500 ring-2 ring-rose-500/30 bg-rose-100/50' : 'border-rose-200/80 hover:border-rose-400'
+            }`}
+          >
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-rose-800">{t.apm.eliminateTitle}</span>
+              <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+            </div>
+            <div className="mt-2 text-2xl font-black text-rose-950">{timeSummary?.counts.Eliminate || 0} app</div>
+            <div className="text-xs font-bold text-rose-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Eliminate || 0)}</div>
+            <p className="text-[11px] text-rose-800/80 mt-1">{t.apm.eliminateDesc}</p>
+          </div>
         </div>
       </div>
 
-      {/* Gartner TIME Matrix (Interactive Visual Scatter Grid) */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-4 border-b border-slate-100 gap-2">
+      {/* Gartner TIME Matrix (Interactive Visual 2x2 Bubble Matrix & Cards) */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-slate-100 gap-3">
           <div>
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <span>{t.apm.matrixTitle}</span>
-              <span className="text-xs font-normal text-slate-500">{t.apm.matrixSubtitle}</span>
+            <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
+              <CircleDot className="w-4 h-4 text-indigo-600" />
+              <span>Matrice Cartesiana a Bolle 2x2 (Gartner TIME)</span>
             </h3>
-            <p className="text-xs text-slate-500">{t.apm.matrixHint}</p>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Ogni pallino posizionato all'incrocio di <strong>Technical Fit</strong> (X) e <strong>Business Fit</strong> (Y), con raggio proporzionale al <strong>TCO</strong>.
+            </p>
           </div>
-          <div className="flex items-center space-x-3 text-xs font-semibold">
-            <span className="flex items-center gap-1.5 text-emerald-800"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Invest</span>
-            <span className="flex items-center gap-1.5 text-amber-800"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Migrate</span>
-            <span className="flex items-center gap-1.5 text-blue-800"><span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span> Tolerate</span>
-            <span className="flex items-center gap-1.5 text-rose-800"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Eliminate</span>
+          <div className="flex items-center gap-3">
+            {/* Legend */}
+            <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="font-semibold text-slate-700">Dimensione Bolla:</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" /> Basso TCO</span>
+              <span className="text-slate-300">➔</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-slate-700 inline-block" /> Alto TCO</span>
+            </div>
+
+            {/* View Switcher: Bubble vs Cards */}
+            <div className="flex items-center bg-slate-100 border border-slate-200 p-1 rounded-xl">
+              <button
+                type="button"
+                onClick={() => setMatrixViewMode('bubble')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  matrixViewMode === 'bubble'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Vista Matrice a Bolle Cartesiana"
+              >
+                <CircleDot className="w-3.5 h-3.5" />
+                <span>Bolle</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMatrixViewMode('cards')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition ${
+                  matrixViewMode === 'cards'
+                    ? 'bg-white text-indigo-700 shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+                title="Vista Quadranti a Schede"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span>Schede</span>
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* 2x2 Matrix Visual Container */}
-        <div className="mt-6 relative h-[430px] bg-slate-50/70 border border-slate-200 rounded-2xl p-4 overflow-hidden">
-          {/* Axis Labels */}
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 text-[11px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-100 px-3 py-0.5 rounded-full border border-emerald-300 shadow-sm z-10">
-            {t.apm.highBusinessFit}
-          </div>
-          <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[11px] font-bold uppercase tracking-wider text-rose-800 bg-rose-100 px-3 py-0.5 rounded-full border border-rose-300 shadow-sm z-10">
-            {t.apm.lowBusinessFit}
-          </div>
-          <div className="absolute left-2 top-1/2 -translate-y-1/2 -rotate-90 text-[11px] font-bold uppercase tracking-wider text-amber-800 bg-amber-100 px-3 py-0.5 rounded-full border border-amber-300 shadow-sm z-10">
-            {t.apm.lowTechFit}
-          </div>
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 rotate-90 text-[11px] font-bold uppercase tracking-wider text-blue-800 bg-blue-100 px-3 py-0.5 rounded-full border border-blue-300 shadow-sm z-10">
-            {t.apm.highTechFit}
-          </div>
+        {matrixViewMode === 'bubble' ? (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-stretch gap-2.5">
+              {/* Y-Axis Label Area */}
+              <div className="w-10 sm:w-12 shrink-0 flex flex-col items-center justify-between py-6 select-none bg-slate-50/80 border border-slate-200/90 rounded-2xl">
+                <div className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Massimo (4.0)">
+                  4.0
+                </div>
+                <div className="-rotate-90 whitespace-nowrap text-[11px] font-black uppercase tracking-wider text-slate-800 bg-white border border-slate-300 px-3 py-1 rounded-full shadow-xs">
+                  ▲ BUSINESS FIT
+                </div>
+                <div className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Minimo (1.0)">
+                  1.0
+                </div>
+              </div>
 
-          {/* Quadrant Background Grid */}
-          <div className="grid grid-cols-2 grid-rows-2 w-full h-full gap-2">
-            {/* Top-Left: MIGRATE */}
-            <div className="bg-amber-50/60 border border-amber-200/80 rounded-xl p-3.5 flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-amber-800">{t.apm.quadrantMigrateTitle}</span>
-              <span className="text-[11px] font-medium text-amber-700/80">{t.apm.quadrantMigrateSubtitle}</span>
-            </div>
-            {/* Top-Right: INVEST */}
-            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3.5 flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-emerald-800">{t.apm.quadrantInvestTitle}</span>
-              <span className="text-[11px] font-medium text-emerald-700/80">{t.apm.quadrantInvestSubtitle}</span>
-            </div>
-            {/* Bottom-Left: ELIMINATE */}
-            <div className="bg-rose-50/60 border border-rose-200/80 rounded-xl p-3.5 flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-rose-800">{t.apm.quadrantEliminateTitle}</span>
-              <span className="text-[11px] font-medium text-rose-700/80">{t.apm.quadrantEliminateSubtitle}</span>
-            </div>
-            {/* Bottom-Right: TOLERATE */}
-            <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3.5 flex flex-col justify-between">
-              <span className="text-xs font-extrabold text-blue-800">{t.apm.quadrantTolerateTitle}</span>
-              <span className="text-[11px] font-medium text-blue-700/80">{t.apm.quadrantTolerateSubtitle}</span>
-            </div>
-          </div>
-
-
-          {/* Interactive Scatter App Badges on Matrix (Only In-Scope Applications) */}
-          <div className="absolute inset-8">
-            {data.applications.filter((a) => a.in_apm_scope !== false).map((app) => {
-              const leftPercent = ((app.technical_fit - 1) / 4) * 80 + 10;
-              const topPercent = 90 - ((app.business_fit - 1) / 4) * 80;
-
-              const colorMap: Record<string, string> = {
-                Invest: 'bg-emerald-600 text-white border-emerald-700 shadow-emerald-600/30',
-                Migrate: 'bg-amber-500 text-slate-950 border-amber-600 shadow-amber-500/30',
-                Tolerate: 'bg-blue-600 text-white border-blue-700 shadow-blue-600/30',
-                Eliminate: 'bg-rose-600 text-white border-rose-700 shadow-rose-600/30',
-              };
-
-              return (
-                <div
-                  key={app.id}
-                  onClick={() => handleEditClick(app)}
-                  style={{ left: `${leftPercent}%`, top: `${topPercent}%` }}
-                  className="absolute -translate-x-1/2 -translate-y-1/2 cursor-pointer group z-20"
-                >
-                  <div className={`px-2.5 py-1 text-xs font-bold rounded-lg shadow-md border ring-2 ring-white/80 transition transform group-hover:scale-110 flex items-center space-x-1.5 ${colorMap[app.time_quadrant]}`}>
-                    <span>{app.name}</span>
-                    <span className="text-[10px] opacity-90 font-mono">({formatEUR(app.annual_cost)})</span>
+              {/* Chart Canvas Area */}
+              <div className="relative flex-1 h-[640px] bg-slate-900/[0.02] border-2 border-slate-200/90 rounded-2xl overflow-hidden select-none">
+                {/* 4 Quadrants Background Areas */}
+                {/* Top-Left: TOLERATE */}
+                <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-gradient-to-br from-blue-500/10 via-blue-500/5 to-transparent border-r-2 border-b-2 border-dashed border-slate-300 p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-blue-900 bg-blue-100/90 border border-blue-300 px-2.5 py-1 rounded-lg shadow-2xs">
+                      {t.apm.quadrantTolerateTitle}
+                    </span>
+                    <span className="text-[11px] font-bold text-blue-700 bg-white/80 px-2 py-0.5 rounded-md border border-blue-200 font-mono">
+                      {timeSummary?.counts.Tolerate || 0} app
+                    </span>
                   </div>
-                  {/* Tooltip on Hover */}
-                  <div className="hidden group-hover:block absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 p-2.5 bg-slate-900 text-white text-[11px] rounded-xl shadow-2xl z-30 pointer-events-none">
-                    <p className="font-bold text-white">{app.name}</p>
-                    <p className="text-slate-300">Vendor: {app.vendor}</p>
-                    <p className="text-slate-300">Owner: {app.business_owner}</p>
-                    <p className="text-indigo-300 font-bold mt-1">B-Fit: {app.business_fit}/5 | T-Fit: {app.technical_fit}/5</p>
+                  <div className="text-[11px] font-semibold text-blue-800/60 max-w-[260px]">
+                    {t.apm.quadrantTolerateSubtitle}
                   </div>
                 </div>
-              );
-            })}
+
+                {/* Top-Right: INVEST */}
+                <div className="absolute top-0 left-1/2 w-1/2 h-1/2 bg-gradient-to-bl from-emerald-500/10 via-emerald-500/5 to-transparent border-b-2 border-dashed border-slate-300 p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-emerald-900 bg-emerald-100/90 border border-emerald-300 px-2.5 py-1 rounded-lg shadow-2xs">
+                      {t.apm.quadrantInvestTitle}
+                    </span>
+                    <span className="text-[11px] font-bold text-emerald-700 bg-white/80 px-2 py-0.5 rounded-md border border-emerald-200 font-mono">
+                      {timeSummary?.counts.Invest || 0} app
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-semibold text-emerald-800/60 max-w-[260px] text-right ml-auto">
+                    {t.apm.quadrantInvestSubtitle}
+                  </div>
+                </div>
+
+                {/* Bottom-Left: ELIMINATE */}
+                <div className="absolute top-1/2 left-0 w-1/2 h-1/2 bg-gradient-to-tr from-rose-500/10 via-rose-500/5 to-transparent border-r-2 border-dashed border-slate-300 p-4 flex flex-col justify-between">
+                  <div className="text-[11px] font-semibold text-rose-800/60 max-w-[260px]">
+                    {t.apm.quadrantEliminateSubtitle}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-rose-900 bg-rose-100/90 border border-rose-300 px-2.5 py-1 rounded-lg shadow-2xs">
+                      {t.apm.quadrantEliminateTitle}
+                    </span>
+                    <span className="text-[11px] font-bold text-rose-700 bg-white/80 px-2 py-0.5 rounded-md border border-rose-200 font-mono">
+                      {timeSummary?.counts.Eliminate || 0} app
+                    </span>
+                  </div>
+                </div>
+
+                {/* Bottom-Right: MIGRATE */}
+                <div className="absolute top-1/2 left-1/2 w-1/2 h-1/2 bg-gradient-to-tl from-amber-500/10 via-amber-500/5 to-transparent p-4 flex flex-col justify-between">
+                  <div className="text-[11px] font-semibold text-amber-800/60 max-w-[260px] text-right ml-auto">
+                    {t.apm.quadrantMigrateSubtitle}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black uppercase tracking-wider text-amber-900 bg-amber-100/90 border border-amber-300 px-2.5 py-1 rounded-lg shadow-2xs">
+                      {t.apm.quadrantMigrateTitle}
+                    </span>
+                    <span className="text-[11px] font-bold text-amber-800 bg-white/80 px-2 py-0.5 rounded-md border border-amber-200 font-mono">
+                      {timeSummary?.counts.Migrate || 0} app
+                    </span>
+                  </div>
+                </div>
+
+                {/* Center Origin Threshold Marker */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg z-30 border border-slate-600">
+                  Soglia 2.5
+                </div>
+
+                {/* Bubble Elements */}
+                {bubbleApps.map((b) => (
+                  <div
+                    key={b.app.id}
+                    className="absolute group z-20 hover:z-50 transition-all duration-200"
+                    style={{
+                      left: `${b.posX}%`,
+                      top: `${b.posY}%`,
+                      transform: 'translate(-50%, -50%)'
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleEditClick(b.app)}
+                      className={`rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 transform group-hover:scale-115 group-hover:shadow-xl focus:outline-none focus:ring-4 ${
+                        b.quadrant === 'Invest'
+                          ? 'bg-emerald-600/95 hover:bg-emerald-500 text-white border-2 border-emerald-300 shadow-md ring-2 ring-emerald-500/30'
+                          : b.quadrant === 'Tolerate'
+                          ? 'bg-blue-600/95 hover:bg-blue-500 text-white border-2 border-blue-300 shadow-md ring-2 ring-blue-500/30'
+                          : b.quadrant === 'Migrate'
+                          ? 'bg-amber-500/95 hover:bg-amber-400 text-slate-950 font-black border-2 border-amber-200 shadow-md ring-2 ring-amber-500/30'
+                          : 'bg-rose-600/95 hover:bg-rose-500 text-white border-2 border-rose-300 shadow-md ring-2 ring-rose-500/30'
+                      }`}
+                      style={{
+                        width: `${b.diameter}px`,
+                        height: `${b.diameter}px`
+                      }}
+                      aria-label={`${b.shortName} (${b.appCode})`}
+                    >
+                      <span className="font-extrabold text-[10px] leading-tight px-1 text-center truncate max-w-full select-none">
+                        {b.shortName}
+                      </span>
+                      {b.diameter >= 52 && (
+                        <span className="text-[9px] font-mono opacity-85 mt-0.5 select-none font-bold">
+                          {formatCompactEUR(b.cost)}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Rich Hover Floating Tooltip */}
+                    <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-slate-950/95 text-white border border-slate-700/80 rounded-xl p-3 shadow-2xl z-50 min-w-[250px] max-w-[320px] pointer-events-none backdrop-blur-md">
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-1.5">
+                        <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
+                          {b.appCode}
+                        </span>
+                        <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                          b.quadrant === 'Invest' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                          b.quadrant === 'Tolerate' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                          b.quadrant === 'Migrate' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                          'bg-rose-950 text-rose-300 border border-rose-800'
+                        }`}>
+                          {b.quadrant}
+                        </span>
+                      </div>
+                      <div className="text-xs font-black text-slate-100 leading-snug">{b.app.name}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">Nome Breve: <span className="text-slate-200 font-bold">{b.shortName}</span></div>
+                      <div className="mt-2 space-y-1 text-[11px] border-t border-slate-800/80 pt-1.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">TCO Annuo:</span>
+                          <span className="font-mono font-bold text-amber-300">{formatEUR(b.cost)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Business Fit:</span>
+                          <span className="font-bold text-slate-200">{b.bFit} / 4</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-400">Technical Fit:</span>
+                          <span className="font-bold text-slate-200">{b.tFit} / 4</span>
+                        </div>
+                        {b.app.business_owner && (
+                          <div className="text-[10px] text-slate-400 truncate pt-1 border-t border-slate-900">
+                            Owner: {b.app.business_owner}
+                          </div>
+                        )}
+                        {b.app.vendor && (
+                          <div className="text-[10px] text-slate-400 truncate">
+                            Vendor: {b.app.vendor}
+                          </div>
+                        )}
+                      </div>
+                      <div className="text-[9px] text-indigo-300/90 mt-2 text-center italic">
+                        Fai clic per aprire la scheda di modifica
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* X-Axis Label Area */}
+            <div className="flex items-center justify-between pl-12 sm:pl-14 pr-4 py-2 select-none bg-slate-50/80 border border-slate-200/90 rounded-2xl">
+              <div className="text-[10px] font-bold text-slate-600 bg-white px-2.5 py-1 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Minimo (1.0)">
+                1.0 Obsoleto
+              </div>
+              <div className="text-[11px] font-black uppercase tracking-wider text-slate-800 bg-white border border-slate-300 px-4 py-1 rounded-full shadow-xs flex items-center gap-1.5">
+                <span>TECHNICAL FIT (Qualità Architetturale & Tecnologia)</span>
+                <span className="text-slate-400">►</span>
+              </div>
+              <div className="text-[10px] font-bold text-slate-600 bg-white px-2.5 py-1 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Massimo (4.0)">
+                4.0 Cloud Native
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          /* VISTA 2: QUADRANTI A SCHEDE (CARDS) */
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Top-Left: TOLERATE */}
+              <div className="bg-blue-50/40 border border-blue-200/80 rounded-xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-2 border-b border-blue-200/60 mb-2">
+                  <span className="text-xs font-black text-blue-900">{t.apm.quadrantTolerateTitle}</span>
+                  <span className="text-[10px] font-bold text-blue-700 bg-blue-100 px-2 py-0.5 rounded font-mono">
+                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length} app
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => handleEditClick(app)}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
+                    >
+                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                      <span>{app.short_name || app.name}</span>
+                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                    </button>
+                  ))}
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length === 0 && (
+                    <span className="text-xs text-blue-500 italic p-2">Nessuna applicazione in questo quadrante</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Top-Right: INVEST */}
+              <div className="bg-emerald-50/40 border border-emerald-200/80 rounded-xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60 mb-2">
+                  <span className="text-xs font-black text-emerald-900">{t.apm.quadrantInvestTitle}</span>
+                  <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded font-mono">
+                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Invest').length} app
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Invest').map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => handleEditClick(app)}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs border border-emerald-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
+                    >
+                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                      <span>{app.short_name || app.name}</span>
+                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                    </button>
+                  ))}
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Invest').length === 0 && (
+                    <span className="text-xs text-emerald-500 italic p-2">Nessuna applicazione in questo quadrante</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom-Left: ELIMINATE */}
+              <div className="bg-rose-50/40 border border-rose-200/80 rounded-xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-2 border-b border-rose-200/60 mb-2">
+                  <span className="text-xs font-black text-rose-900">{t.apm.quadrantEliminateTitle}</span>
+                  <span className="text-[10px] font-bold text-rose-700 bg-rose-100 px-2 py-0.5 rounded font-mono">
+                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length} app
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => handleEditClick(app)}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs border border-rose-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
+                    >
+                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                      <span>{app.short_name || app.name}</span>
+                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                    </button>
+                  ))}
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length === 0 && (
+                    <span className="text-xs text-rose-500 italic p-2">Nessuna applicazione in questo quadrante</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Bottom-Right: MIGRATE */}
+              <div className="bg-amber-50/40 border border-amber-200/80 rounded-xl p-4 flex flex-col justify-between">
+                <div className="flex items-center justify-between pb-2 border-b border-amber-200/60 mb-2">
+                  <span className="text-xs font-black text-amber-900">{t.apm.quadrantMigrateTitle}</span>
+                  <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-2 py-0.5 rounded font-mono">
+                    {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length} app
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Migrate').map((app) => (
+                    <button
+                      key={app.id}
+                      onClick={() => handleEditClick(app)}
+                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-xs border border-amber-600 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
+                    >
+                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                      <span>{app.short_name || app.name}</span>
+                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                    </button>
+                  ))}
+                  {data.applications.filter((a) => isAsset(a) && (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length === 0 && (
+                    <span className="text-xs text-amber-600 italic p-2">Nessuna applicazione in questo quadrante</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Application Inventory Table */}
@@ -391,6 +843,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                 <th className="py-3 px-4">{t.apm.colApplication}</th>
                 <th className="py-3 px-4">{t.apm.colApmScope}</th>
                 <th className="py-3 px-4">{t.apm.colTimeQuadrant}</th>
+                <th className="py-3 px-4">Tech Risk (EOL)</th>
                 <th className="py-3 px-4">{t.apm.colFitScores}</th>
                 <th className="py-3 px-4">{t.apm.colAnnualCost}</th>
                 <th className="py-3 px-4">{t.apm.colCriticality}</th>
@@ -455,6 +908,30 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                       {app.time_quadrant}
                     </span>
                   </td>
+                  <td className="py-3.5 px-4">
+                    {techRiskMap[app.id] ? (
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          techRiskMap[app.id].level === 'Critical'
+                            ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                            : techRiskMap[app.id].level === 'High'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                            : techRiskMap[app.id].level === 'Medium'
+                            ? 'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                            : techRiskMap[app.id].level === 'Low'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                            : 'bg-slate-100 text-slate-500 border border-slate-200'
+                        }`}
+                      >
+                        {techRiskMap[app.id].level === 'Critical' ? '🔴 Critical' :
+                         techRiskMap[app.id].level === 'High' ? '🟠 High' :
+                         techRiskMap[app.id].level === 'Medium' ? '🟡 Medium' :
+                         techRiskMap[app.id].level === 'Low' ? '🟢 Supported' : '⚪ N/A'}
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-slate-400">⚪ N/A</span>
+                    )}
+                  </td>
                   <td className="py-3.5 px-4 font-mono font-semibold">
                     <span className="text-slate-900">B:{app.business_fit}</span> / <span className="text-slate-500">T:{app.technical_fit}</span>
                   </td>
@@ -496,6 +973,8 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Edit Modal */}
       {editingApp && (

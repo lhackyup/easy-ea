@@ -267,7 +267,8 @@ export function App() {
                         />
                       )
                     )}
-                    {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} />}
+                    {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} initialTab="portfolio" />}
+                    {businessTab === 'tech_risk' && <APMDashboard modelId={selectedModelId} initialTab="tech_risk" />}
                     {businessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
                     {businessTab === 'processes' && <ProcessNavigator modelId={selectedModelId} />}
                   </>

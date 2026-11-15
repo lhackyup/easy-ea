@@ -1,6 +1,6 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
-export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'overlap' | 'processes';
+export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'tech_risk' | 'overlap' | 'processes';
 
 export interface ActivePackageViewSelection {
   packageId: string;
@@ -343,6 +343,8 @@ export interface ModelWorkspace {
 export interface ApplicationInfo {
   id: string;
   name: string;
+  short_name?: string;
+  app_code?: string;
   documentation?: string;
   business_fit: number;
   technical_fit: number;
@@ -397,6 +399,96 @@ export interface APMPortfolio {
   hosting_distribution: Record<string, number>;
   top_vendors_by_cost: Array<{ vendor: string; cost: number }>;
   applications: ApplicationInfo[];
+}
+
+export interface TechnologyItemInfo {
+  id: string;
+  name: string;
+  type: string;
+  layer: string;
+  vendor: string;
+  version: string;
+  category: string;
+  status: 'Supported' | 'Approaching EOL' | 'Extended Support' | 'End of Life / Obsolete';
+  risk_score: number;
+  risk_level: 'Critical' | 'High' | 'Medium' | 'Low';
+  eol_date: string | null;
+  eoes_date: string | null;
+  days_to_eol: number | null;
+  cve_risk: string;
+  documentation?: string;
+  impacted_applications_count?: number;
+  impacted_applications?: Array<{ id: string; name: string; business_criticality?: string; annual_cost?: number }>;
+  total_impacted_annual_cost?: number;
+  highest_criticality?: string;
+}
+
+export interface AppTechRiskInfo {
+  id: string;
+  name: string;
+  documentation?: string;
+  business_criticality: string;
+  time_quadrant: string;
+  annual_cost: number;
+  business_owner: string;
+  technical_owner: string;
+  tech_risk_level: 'Critical' | 'High' | 'Medium' | 'Low' | 'Unassessed';
+  max_risk_score: number;
+  composite_risk_score: number;
+  is_dora_violation: boolean;
+  next_eol_date: string | null;
+  days_to_next_eol: number | null;
+  counts: {
+    total: number;
+    obsolete: number;
+    approaching_eol: number;
+    extended_support: number;
+    supported: number;
+  };
+  technologies: TechnologyItemInfo[];
+}
+
+export interface DoraComplianceAlert {
+  application_id: string;
+  application_name: string;
+  business_criticality: string;
+  tech_risk_level: string;
+  annual_cost: number;
+  business_owner: string;
+  technical_owner: string;
+  obsolete_components: string[];
+  reason: string;
+}
+
+export interface TechRiskAnalysisData {
+  summary: {
+    total_applications: number;
+    assessed_applications: number;
+    unassessed_applications: number;
+    total_technologies: number;
+    obsolete_technologies_count: number;
+    approaching_eol_count: number;
+    dora_compliance_alerts_count: number;
+    risk_distribution: {
+      Critical: number;
+      High: number;
+      Medium: number;
+      Low: number;
+      Unassessed: number;
+    };
+    high_critical_risk_pct: number;
+  };
+  criticality_vs_risk_matrix: Record<string, Record<string, number>>;
+  dora_compliance_alerts: DoraComplianceAlert[];
+  eol_timeline_horizon: {
+    already_expired: TechnologyItemInfo[];
+    expiring_6_months: TechnologyItemInfo[];
+    expiring_12_months: TechnologyItemInfo[];
+    expiring_24_months_plus: TechnologyItemInfo[];
+    supported_indefinitely: TechnologyItemInfo[];
+  };
+  technology_blast_radius: TechnologyItemInfo[];
+  applications: AppTechRiskInfo[];
 }
 
 export interface OverlapMatrixData {
