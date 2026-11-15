@@ -1,7 +1,10 @@
 import {
   ModelWorkspace,
   APMPortfolio,
+  InterfaceInventoryData,
   TechRiskAnalysisData,
+  TCOBreakdownData,
+  LifecycleAnalysisData,
   OverlapMatrixData,
   BusinessProcessItem,
   ImpactSimulationResult,
@@ -145,6 +148,18 @@ export const api = {
     return res.json();
   },
 
+  getTCOBreakdown: async (modelId: string): Promise<TCOBreakdownData> => {
+    const res = await fetch(`${API_BASE}/apm/tco-breakdown/${modelId}`, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch TCO Breakdown');
+    return res.json();
+  },
+
+  getLifecycleAnalysis: async (modelId: string): Promise<LifecycleAnalysisData> => {
+    const res = await fetch(`${API_BASE}/apm/lifecycle/${modelId}`, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch Lifecycle Analysis');
+    return res.json();
+  },
+
   updateTechnologyLifecycle: async (elementId: string, data: any): Promise<any> => {
     const res = await fetch(`${API_BASE}/apm/technologies/${elementId}`, {
       method: 'PUT',
@@ -152,6 +167,32 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Failed to update technology lifecycle');
+    return res.json();
+  },
+
+  getInterfaceInventory: async (modelId: string): Promise<InterfaceInventoryData> => {
+    const res = await fetch(`${API_BASE}/apm/interfaces/${modelId}`, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch interface inventory');
+    return res.json();
+  },
+
+  updateInterfaceAttributes: async (interfaceId: string, data: any): Promise<any> => {
+    const res = await fetch(`${API_BASE}/apm/interfaces/${interfaceId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update interface');
+    return res.json();
+  },
+
+  createInterface: async (modelId: string, data: any): Promise<any> => {
+    const res = await fetch(`${API_BASE}/apm/interfaces/${modelId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create interface');
     return res.json();
   },
 

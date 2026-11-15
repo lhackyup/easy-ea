@@ -1702,6 +1702,55 @@ APP_CODE_AND_SHORT_NAMES: Dict[str, tuple] = {
 }
 
 
+def enrich_tco_breakdown(props: Dict[str, Any]) -> Dict[str, Any]:
+    """Ensures realistic TCO breakdown fields exist for the application."""
+    cost = float(props.get("apm_annual_cost", 0.0) or 0.0)
+    hosting = props.get("apm_hosting_type", "Public Cloud")
+    
+    if "apm_cost_software_licenses" not in props:
+        if hosting == "SaaS":
+            lic = round(cost * 0.65, 0)
+            cld = round(cost * 0.05, 0)
+            mnt = round(cost * 0.18, 0)
+            lab = round(cost - (lic + cld + mnt), 0)
+            capex = 5.0
+        elif hosting in ("Public Cloud", "Hybrid"):
+            lic = round(cost * 0.25, 0)
+            cld = round(cost * 0.45, 0)
+            mnt = round(cost * 0.15, 0)
+            lab = round(cost - (lic + cld + mnt), 0)
+            capex = 25.0
+        else: # On-Premise, Mainframe, Private Cloud
+            lic = round(cost * 0.35, 0)
+            cld = round(cost * 0.20, 0)
+            mnt = round(cost * 0.30, 0)
+            lab = round(cost - (lic + cld + mnt), 0)
+            capex = 35.0
+
+        props["apm_cost_software_licenses"] = lic
+        props["apm_cost_cloud_infrastructure"] = cld
+        props["apm_cost_vendor_maintenance"] = mnt
+        props["apm_cost_internal_labor"] = max(0.0, lab)
+        props["apm_capex_ratio"] = capex
+
+    if "apm_active_users" not in props:
+        crit = props.get("apm_business_criticality", "Business Operational")
+        if crit == "Mission Critical":
+            users = max(500, int(cost / 350))
+        elif crit == "Business Critical":
+            users = max(250, int(cost / 450))
+        elif crit == "Business Operational":
+            users = max(100, int(cost / 600))
+        else:
+            users = max(30, int(cost / 800))
+        props["apm_active_users"] = users
+
+    if "apm_cost_center" not in props or not props["apm_cost_center"]:
+        props["apm_cost_center"] = "CC-3010 Core Platforms"
+
+    return props
+
+
 def seed_easybank_apm_portfolio(db: Session) -> Dict[str, int]:
     """Updates existing apps and inserts 50 realistic business applications in EasyBank Global (EASY)."""
     model = db.query(ModelWorkspace).filter(ModelWorkspace.code == "EASY").first()
@@ -1721,6 +1770,7 @@ def seed_easybank_apm_portfolio(db: Session) -> Dict[str, int]:
             c, sn = APP_CODE_AND_SHORT_NAMES[app_id]
             props['apm_app_code'] = c
             props['apm_short_name'] = sn
+        props = enrich_tco_breakdown(props)
         elem = db.query(ArchimateElement).filter(
             ArchimateElement.id == app_id,
             ArchimateElement.model_id == model.id
@@ -1746,6 +1796,8 @@ def seed_easybank_apm_portfolio(db: Session) -> Dict[str, int]:
         else:
             props.setdefault('apm_app_code', f"AP{abs(hash(app_id)) % 9000 + 1000}"[:6])
             props.setdefault('apm_short_name', (app.get('name') or 'App')[:12])
+
+        props = enrich_tco_breakdown(props)
 
         elem = db.query(ArchimateElement).filter(
             ArchimateElement.id == app_id,

@@ -1,6 +1,6 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
-export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'tech_risk' | 'overlap' | 'processes';
+export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'tech_risk' | 'tco' | 'overlap' | 'processes';
 
 export interface ActivePackageViewSelection {
   packageId: string;
@@ -353,6 +353,13 @@ export interface ApplicationInfo {
   time_quadrant: 'Invest' | 'Migrate' | 'Tolerate' | 'Eliminate';
   time_quadrant_override?: string;
   annual_cost: number;
+  cost_software_licenses?: number;
+  cost_cloud_infrastructure?: number;
+  cost_vendor_maintenance?: number;
+  cost_internal_labor?: number;
+  active_users?: number;
+  capex_ratio?: number;
+  cost_per_user?: number;
   cost_type?: string;
   cost_center?: string;
   business_criticality: string;
@@ -378,6 +385,7 @@ export interface ApplicationInfo {
 }
 
 export interface APMPortfolio {
+  is_apm_package_active?: boolean;
   total_applications: number;
   total_in_scope?: number;
   total_out_of_scope?: number;
@@ -399,6 +407,95 @@ export interface APMPortfolio {
   hosting_distribution: Record<string, number>;
   top_vendors_by_cost: Array<{ vendor: string; cost: number }>;
   applications: ApplicationInfo[];
+}
+
+export interface InterfaceAppRef {
+  id: string;
+  name: string;
+  type?: string;
+  layer?: string;
+  app_code?: string;
+  short_name?: string;
+}
+
+export interface InterfaceItem {
+  id: string;
+  kind: 'application_flow' | 'interface_element';
+  name: string;
+  documentation?: string;
+  source_app: InterfaceAppRef | null;
+  target_app: InterfaceAppRef | null;
+  consumer_apps?: InterfaceAppRef[];
+  protocol: string;
+  pattern: string;
+  data_format: string;
+  criticality: string;
+  frequency: string;
+  security_auth: string;
+  data_classification: string;
+  status: string;
+  properties?: Record<string, any>;
+  used_in_schemas: Array<{
+    id: string;
+    name: string;
+    viewpoint: string;
+  }>;
+  schemas_count: number;
+}
+
+export interface InterfaceInventorySummary {
+  total_interfaces: number;
+  unique_applications: number;
+  protocols_breakdown: Record<string, number>;
+  patterns_breakdown: Record<string, number>;
+  criticality_breakdown: Record<string, number>;
+  status_breakdown: Record<string, number>;
+  top_providers: Array<{ name: string; count: number }>;
+  top_consumers: Array<{ name: string; count: number }>;
+}
+
+export interface InterfaceInventoryData {
+  summary: InterfaceInventorySummary;
+  interfaces: InterfaceItem[];
+}
+
+export interface LifecycleApplicationInfo extends ApplicationInfo {
+  is_ready_for_decommission: boolean;
+  active_dependencies_count: number;
+  dependent_live_apps: Array<{
+    id: string;
+    name: string;
+    type: string;
+    relation_type: string;
+  }>;
+  dependent_processes: Array<{
+    id: string;
+    name: string;
+    type: string;
+    relation_type: string;
+  }>;
+  is_sunset: boolean;
+}
+
+export interface LifecycleAnalysisData {
+  summary: {
+    total_applications: number;
+    total_takeout_savings: number;
+    retirements_next_6m: number;
+    retirements_next_12m: number;
+    retirements_next_24m: number;
+    ready_for_decommission_count: number;
+    blocked_decommission_count: number;
+    counts_by_status: Record<string, number>;
+    costs_by_status: Record<string, number>;
+  };
+  timeline_range: {
+    min_year: number;
+    max_year: number;
+    current_year: number;
+    current_date: string;
+  };
+  applications: LifecycleApplicationInfo[];
 }
 
 export interface TechnologyItemInfo {
@@ -489,6 +586,63 @@ export interface TechRiskAnalysisData {
   };
   technology_blast_radius: TechnologyItemInfo[];
   applications: AppTechRiskInfo[];
+}
+
+export interface TCOCostCategory {
+  category: string;
+  category_key: string;
+  amount: number;
+  percentage: number;
+  color: string;
+}
+
+export interface TCOCostCenterBreakdown {
+  cost_center: string;
+  total_cost: number;
+  app_count: number;
+  percentage: number;
+}
+
+export interface TCOCostVsValueItem {
+  id: string;
+  name: string;
+  annual_cost: number;
+  business_fit: number;
+  time_quadrant?: string;
+  cost_center?: string;
+}
+
+export interface TCOBreakdownData {
+  summary: {
+    total_annual_tco: number;
+    total_software_licenses: number;
+    total_cloud_infrastructure: number;
+    total_vendor_maintenance: number;
+    total_internal_labor: number;
+    total_unallocated: number;
+    total_capex: number;
+    total_opex: number;
+    capex_percentage: number;
+    opex_percentage: number;
+    total_active_users: number;
+    average_cost_per_user: number;
+    waste_eliminate_cost: number;
+    waste_eliminate_count: number;
+    strategic_invest_cost: number;
+    total_applications: number;
+    average_cost_per_app: number;
+  };
+  cost_by_category: TCOCostCategory[];
+  cost_by_cost_center: TCOCostCenterBreakdown[];
+  cost_by_time_quadrant: Record<string, number>;
+  cost_by_criticality: Record<string, number>;
+  cost_vs_value: {
+    bad_cost_apps: TCOCostVsValueItem[];
+    strategic_core_apps: TCOCostVsValueItem[];
+    efficiency_apps: TCOCostVsValueItem[];
+    low_priority_apps: TCOCostVsValueItem[];
+  };
+  applications: ApplicationInfo[];
 }
 
 export interface OverlapMatrixData {

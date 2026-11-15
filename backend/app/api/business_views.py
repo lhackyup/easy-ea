@@ -393,6 +393,13 @@ def _build_element_row(el: ArchimateElement) -> Dict[str, Any]:
             "apm_hosting_type": apm.hosting_type,
             "apm_data_classification": apm.data_classification,
             "apm_sla_level": apm.sla_level,
+            "apm_cost_software_licenses": getattr(apm, "cost_software_licenses", 0.0),
+            "apm_cost_cloud_infrastructure": getattr(apm, "cost_cloud_infrastructure", 0.0),
+            "apm_cost_vendor_maintenance": getattr(apm, "cost_vendor_maintenance", 0.0),
+            "apm_cost_internal_labor": getattr(apm, "cost_internal_labor", 0.0),
+            "apm_active_users": getattr(apm, "active_users", 0),
+            "apm_capex_ratio": getattr(apm, "capex_ratio", 0.0),
+            "apm_cost_center": getattr(apm, "cost_center", ""),
             # aliases
             "business_criticality": apm.business_criticality,
             "eea_business_criticality": apm.business_criticality,
@@ -400,6 +407,13 @@ def _build_element_row(el: ArchimateElement) -> Dict[str, Any]:
             "eea_lifecycle_status": apm.lifecycle_status,
             "annual_cost": apm.annual_cost,
             "eea_annual_cost": apm.annual_cost,
+            "cost_software_licenses": getattr(apm, "cost_software_licenses", 0.0),
+            "cost_cloud_infrastructure": getattr(apm, "cost_cloud_infrastructure", 0.0),
+            "cost_vendor_maintenance": getattr(apm, "cost_vendor_maintenance", 0.0),
+            "cost_internal_labor": getattr(apm, "cost_internal_labor", 0.0),
+            "active_users": getattr(apm, "active_users", 0),
+            "capex_ratio": getattr(apm, "capex_ratio", 0.0),
+            "cost_center": getattr(apm, "cost_center", ""),
             "business_fit": apm.business_fit,
             "eea_business_fit": apm.business_fit,
             "technical_fit": apm.technical_fit,
@@ -465,6 +479,16 @@ def _build_element_row(el: ArchimateElement) -> Dict[str, Any]:
         row["obsolescence_risk"] = "Dismissione Programmata"
     else:
         row["obsolescence_risk"] = "Stabile / Manutenuta"
+
+    # Calculate Unit Cost per user
+    users = row.get("apm_active_users") or row.get("active_users") or 0
+    tot_cost = row.get("apm_annual_cost") or row.get("annual_cost") or 0.0
+    try:
+        u_num = int(users)
+        c_num = float(tot_cost)
+        row["cost_per_user"] = round(c_num / u_num, 2) if u_num > 0 else 0.0
+    except (ValueError, TypeError):
+        row["cost_per_user"] = 0.0
 
     return row
 

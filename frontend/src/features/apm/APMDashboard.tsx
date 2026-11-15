@@ -15,18 +15,60 @@ import {
   SlidersHorizontal,
   Cloud,
   CircleDot,
-  LayoutGrid
+  LayoutGrid,
+  Coins,
+  Download,
+  Zap,
+  Calendar,
+  Package,
+  ArrowRight,
+  Layers,
+  Network
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { TechRiskRadar } from './TechRiskRadar';
+import { TCOBreakdownDashboard } from './TCOBreakdownDashboard';
+import { LifecycleRoadmapDashboard } from './LifecycleRoadmapDashboard';
+import { ApplicationCatalogDashboard } from './ApplicationCatalogDashboard';
+import { InterfaceInventoryDashboard } from './InterfaceInventoryDashboard';
 
 interface APMDashboardProps {
   modelId: string;
+  isApmPackageActive?: boolean;
+  onNavigateMetamodel?: () => void;
+  initialTab?: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle';
+  activeTab?: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle';
+  onTabChange?: (tab: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle') => void;
 }
 
-export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
+export const APMDashboard: React.FC<APMDashboardProps> = ({
+  modelId,
+  isApmPackageActive,
+  onNavigateMetamodel,
+  initialTab = 'catalog',
+  activeTab,
+  onTabChange
+}) => {
   const { t, language, interpolate } = useLanguage();
   const [data, setData] = useState<APMPortfolio | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isBannerDismissed, setIsBannerDismissed] = useState(false);
+  const isPackageActive = isApmPackageActive !== undefined ? isApmPackageActive : (data?.is_apm_package_active ?? true);
+  const [internalActiveApmTab, setInternalActiveApmTab] = useState<'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle'>(activeTab || initialTab);
+
+  const activeApmTab = activeTab !== undefined ? activeTab : internalActiveApmTab;
+  const setActiveApmTab = (tab: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle') => {
+    setInternalActiveApmTab(tab);
+    onTabChange?.(tab);
+  };
+
+  useEffect(() => {
+    if (activeTab) {
+      setInternalActiveApmTab(activeTab);
+    } else if (initialTab) {
+      setInternalActiveApmTab(initialTab);
+    }
+  }, [activeTab, initialTab]);
   const [search, setSearch] = useState('');
   const [selectedQuadrant, setSelectedQuadrant] = useState<string | null>(null);
   const [matrixViewMode, setMatrixViewMode] = useState<'bubble' | 'cards'>('bubble');
@@ -73,6 +115,12 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
       technical_fit: app.technical_fit,
       time_quadrant_override: app.time_quadrant_override || '',
       annual_cost: app.annual_cost,
+      cost_software_licenses: app.cost_software_licenses || 0,
+      cost_cloud_infrastructure: app.cost_cloud_infrastructure || 0,
+      cost_vendor_maintenance: app.cost_vendor_maintenance || 0,
+      cost_internal_labor: app.cost_internal_labor || 0,
+      active_users: app.active_users || 0,
+      capex_ratio: app.capex_ratio || 0,
       cost_type: app.cost_type || 'OPEX (SaaS / Canone Cloud)',
       cost_center: app.cost_center || '',
       business_criticality: app.business_criticality,
@@ -130,6 +178,72 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
     });
   }, [businessApps, search, selectedQuadrant]);
 
+  const handleExportCsv = () => {
+    const appsToExport = filteredApps.length > 0 ? filteredApps : businessApps;
+    if (appsToExport.length === 0) return;
+
+    const isEn = language === 'en';
+
+    const columnsToExport = [
+      { field: 'name', label: isEn ? 'Application Name' : 'Nome Applicazione' },
+      { field: 'app_code', label: isEn ? 'Application Code' : 'Codice Applicazione' },
+      { field: 'short_name', label: isEn ? 'Short Name' : 'Nome Breve' },
+      { field: 'documentation', label: isEn ? 'Description / Documentation' : 'Descrizione / Documentazione' },
+      { field: 'time_quadrant', label: isEn ? 'Gartner TIME Quadrant' : 'Quadrante Gartner TIME' },
+      { field: 'time_quadrant_override', label: isEn ? 'TIME Override' : 'TIME Override' },
+      { field: 'business_fit', label: isEn ? 'Business Fit Score (1-4)' : 'Business Fit Score (1-4)' },
+      { field: 'technical_fit', label: isEn ? 'Technical Fit Score (1-4)' : 'Technical Fit Score (1-4)' },
+      { field: 'business_criticality', label: isEn ? 'Business Criticality' : 'Criticità di Business' },
+      { field: 'lifecycle_status', label: isEn ? 'Lifecycle Status' : 'Stato Ciclo di Vita' },
+      { field: 'live_date', label: isEn ? 'Go-Live Date' : 'Data Rilascio (Go-Live)' },
+      { field: 'retirement_date', label: isEn ? 'Planned Retirement Date' : 'Data Dismissione Prevista' },
+      { field: 'annual_cost', label: isEn ? 'Total Annual TCO (€)' : 'TCO Annuo Totale (€)' },
+      { field: 'cost_software_licenses', label: isEn ? 'Software Licenses & SaaS (€)' : 'Licenze Software & SaaS (€)' },
+      { field: 'cost_cloud_infrastructure', label: isEn ? 'Cloud & Hosting Infrastructure (€)' : 'Cloud & Hosting Infrastructure (€)' },
+      { field: 'cost_vendor_maintenance', label: isEn ? 'Vendor Support & AMS (€)' : 'Supporto Fornitore & AMS (€)' },
+      { field: 'cost_internal_labor', label: isEn ? 'Internal FTE Labor (€)' : 'Personale Interno FTE (€)' },
+      { field: 'active_users', label: isEn ? 'Active Users (Count)' : 'Utenti Attivi (Conteggio)' },
+      { field: 'cost_per_user', label: isEn ? 'Annual Cost per User (€)' : 'Costo Annuo per Utente (€)' },
+      { field: 'capex_ratio', label: isEn ? 'CAPEX Ratio (%)' : 'Quota CAPEX (%)' },
+      { field: 'cost_type', label: isEn ? 'Cost Model' : 'Modello di Costo' },
+      { field: 'cost_center', label: isEn ? 'Cost Center' : 'Centro di Costo' },
+      { field: 'business_owner', label: isEn ? 'Business Owner' : 'Business Owner' },
+      { field: 'technical_owner', label: isEn ? 'Technical Owner' : 'Technical Owner' },
+      { field: 'vendor', label: isEn ? 'Vendor / Supplier' : 'Fornitore / Vendor' },
+      { field: 'hosting_type', label: isEn ? 'Hosting Model' : 'Modello di Hosting' },
+      { field: 'architecture_type', label: isEn ? 'Architecture Pattern' : 'Pattern Architetturale' },
+      { field: 'sla_level', label: isEn ? 'SLA Level' : 'Livello SLA' },
+      { field: 'rto_hours', label: isEn ? 'RTO (Recovery Time Objective)' : 'RTO (Recovery Time Objective)' },
+      { field: 'data_classification', label: isEn ? 'Data Classification' : 'Classificazione Dati' },
+      { field: 'personal_data', label: isEn ? 'GDPR Personal Data' : 'Trattamento Dati Personali (GDPR)' },
+      { field: 'notes', label: isEn ? 'Notes' : 'Note' }
+    ];
+
+    const getCellValue = (row: any, col: { field: string }) => {
+      const val = row[col.field];
+      if (val === undefined || val === null) return '';
+      if (typeof val === 'boolean') return val ? 'Sì' : 'No';
+      if (typeof val === 'object') return JSON.stringify(val);
+      return String(val);
+    };
+
+    const headers = columnsToExport.map((c) => `"${c.label.replace(/"/g, '""')}"`).join(';');
+    const rows = appsToExport.map((row) =>
+      columnsToExport.map((c) => `"${getCellValue(row, c).replace(/"/g, '""')}"`).join(';')
+    );
+
+    const csvContent = '\uFEFF' + [headers, ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `business_applications_apm_full_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   const formatEUR = (val: number) =>
     new Intl.NumberFormat(language === 'en' ? 'en-US' : 'it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
 
@@ -137,6 +251,13 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
     if (val >= 1000000) return `€${(val / 1000000).toFixed(1)}M`;
     if (val >= 1000) return `€${(val / 1000).toFixed(0)}k`;
     return `€${val}`;
+  };
+
+  const getCalculatedTimeQuadrant = (businessFit: number, technicalFit: number): 'Invest' | 'Tolerate' | 'Migrate' | 'Eliminate' => {
+    if (businessFit >= 3 && technicalFit >= 3) return 'Invest';
+    if (businessFit >= 3 && technicalFit < 3) return 'Tolerate';
+    if (businessFit < 3 && technicalFit >= 3) return 'Migrate';
+    return 'Eliminate';
   };
 
   const timeSummary = useMemo(() => {
@@ -209,7 +330,12 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
       const posX = Math.max(minX, Math.min(maxX, baseX + offsetX));
       const posY = Math.max(minY, Math.min(maxY, baseY + offsetY));
 
-      const quadrant = app.time_quadrant_override || app.time_quadrant;
+      const calculatedQuadrant = getCalculatedTimeQuadrant(bFit, tFit);
+      const quadrant = app.time_quadrant_override || app.time_quadrant || calculatedQuadrant;
+      const hasOverride = Boolean(
+        (app.time_quadrant_override && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(app.time_quadrant_override) && app.time_quadrant_override !== calculatedQuadrant) ||
+        (app.time_quadrant && app.time_quadrant !== calculatedQuadrant)
+      );
       const shortName = app.short_name || (app.name ? app.name.slice(0, 14) : 'App');
       const appCode = app.app_code || (app.id.startsWith('elem-') ? app.id.replace('elem-', 'AP') : 'AP0000');
 
@@ -220,6 +346,8 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
         radius,
         diameter: radius * 2,
         quadrant,
+        calculatedQuadrant,
+        hasOverride,
         shortName,
         appCode,
         cost,
@@ -254,6 +382,156 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
         </div>
       </div>
 
+      {/* Informative Banner when APM package is not active on this workspace */}
+      {!loading && !isPackageActive && !isBannerDismissed && (
+        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border border-amber-300/80 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start space-x-3.5">
+            <div className="p-2.5 bg-amber-500/20 text-amber-700 rounded-xl shrink-0 mt-0.5 md:mt-0">
+              <Package className="w-5 h-5" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="text-sm font-bold text-amber-900 flex items-center gap-2">
+                <span>{t.apm.pkgInactiveBannerTitle}</span>
+                <span className="px-2 py-0.5 text-[10px] font-black uppercase tracking-wider bg-amber-200 text-amber-800 rounded-full">
+                  TIP
+                </span>
+              </h4>
+              <p className="text-xs text-amber-800/90 leading-relaxed max-w-3xl">
+                {t.apm.pkgInactiveBannerMessage}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0 self-end md:self-auto">
+            {onNavigateMetamodel && (
+              <button
+                onClick={onNavigateMetamodel}
+                className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-xs transition flex items-center gap-1.5 cursor-pointer"
+              >
+                <ArrowRight className="w-3.5 h-3.5" />
+                <span>{t.apm.pkgInactiveBannerAction}</span>
+              </button>
+            )}
+            <button
+              onClick={() => setIsBannerDismissed(true)}
+              className="p-1.5 rounded-xl text-amber-700 hover:text-amber-900 hover:bg-amber-100/60 transition cursor-pointer"
+              title={t.apm.pkgInactiveBannerDismiss}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Module Switcher Bar */}
+      <div className="flex items-center space-x-2 border-b border-slate-200 pb-3 overflow-x-auto">
+        <button
+          onClick={() => setActiveApmTab('catalog')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 ${
+            activeApmTab === 'catalog'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <Layers className="w-4 h-4 text-purple-500" />
+          <span>{t.apm.tabCatalog}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveApmTab('interfaces')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 ${
+            activeApmTab === 'interfaces'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <Network className="w-4 h-4 text-cyan-500" />
+          <span>{t.apm.tabInterfaces}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveApmTab('portfolio')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 ${
+            activeApmTab === 'portfolio'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          <span>{t.apm.tabGartnerTime}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveApmTab('tech_risk')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative shrink-0 ${
+            activeApmTab === 'tech_risk'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <ShieldAlert className="w-4 h-4 text-rose-500" />
+          <span>{t.apm.tabTechRisk}</span>
+          <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] font-black bg-rose-500 text-white uppercase tracking-wider">
+            {t.apm.tabBadgeDora}
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveApmTab('tco')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative shrink-0 ${
+            activeApmTab === 'tco'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <Coins className="w-4 h-4 text-emerald-500" />
+          <span>{t.apm.tabTcoBreakdown}</span>
+        </button>
+
+        <button
+          onClick={() => setActiveApmTab('lifecycle')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative shrink-0 ${
+            activeApmTab === 'lifecycle'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <Calendar className="w-4 h-4 text-amber-500" />
+          <span>{t.apm.tabLifecycle}</span>
+        </button>
+      </div>
+
+      {activeApmTab === 'catalog' && (
+        <ApplicationCatalogDashboard
+          modelId={modelId}
+          applications={businessApps}
+          onEditApp={handleEditClick}
+          onRefreshParent={loadData}
+          loading={loading}
+        />
+      )}
+
+      {activeApmTab === 'interfaces' && (
+        <InterfaceInventoryDashboard
+          modelId={modelId}
+          applications={businessApps}
+          onRefreshParent={loadData}
+        />
+      )}
+
+      {activeApmTab === 'tech_risk' && (
+        <TechRiskRadar modelId={modelId} />
+      )}
+
+      {activeApmTab === 'tco' && (
+        <TCOBreakdownDashboard modelId={modelId} onRefreshParent={loadData} />
+      )}
+
+      {activeApmTab === 'lifecycle' && (
+        <LifecycleRoadmapDashboard modelId={modelId} onEditApp={handleEditClick} onRefreshParent={loadData} />
+      )}
+
+      {activeApmTab === 'portfolio' && (
+        <>
       {/* Top Metric Cards & Executive KPI */}
       <div className="space-y-4">
         {/* Total Cost & Scope Summary Bar */}
@@ -270,7 +548,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs">
             <div className="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-slate-600">
-              <span className="font-bold text-slate-800">{businessApps.length}</span> Business Application censite nel portfolio APM
+              {interpolate(t.apm.businessAppsRegistered, { count: businessApps.length })}
             </div>
             {selectedQuadrant && (
               <button
@@ -278,7 +556,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                 className="px-3 py-1.5 rounded-xl text-xs font-bold bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1.5 transition"
               >
                 <X className="w-3.5 h-3.5" />
-                <span>Rimuovi Filtro ({selectedQuadrant})</span>
+                <span>{interpolate(t.apm.removeFilter, { quadrant: selectedQuadrant })}</span>
               </button>
             )}
           </div>
@@ -358,19 +636,26 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
           <div>
             <h3 className="text-sm font-extrabold text-slate-900 flex items-center gap-2">
               <CircleDot className="w-4 h-4 text-indigo-600" />
-              <span>Matrice Cartesiana a Bolle 2x2 (Gartner TIME)</span>
+              <span>{t.apm.matrixCartesianTitle}</span>
             </h3>
             <p className="text-xs text-slate-500 mt-0.5">
-              Ogni pallino posizionato all'incrocio di <strong>Technical Fit</strong> (X) e <strong>Business Fit</strong> (Y), con raggio proporzionale al <strong>TCO</strong>.
+              {t.apm.matrixCartesianSubtitle}
             </p>
           </div>
           <div className="flex items-center gap-3">
             {/* Legend */}
-            <div className="hidden lg:flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
-              <span className="font-semibold text-slate-700">Dimensione Bolla:</span>
-              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" /> Basso TCO</span>
+            <div className="hidden lg:flex items-center gap-2.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl">
+              <span className="font-semibold text-slate-700">{t.apm.bubbleSizeLegend}</span>
+              <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" /> {t.apm.bubbleSizeLow}</span>
               <span className="text-slate-300">➔</span>
-              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-slate-700 inline-block" /> Alto TCO</span>
+              <span className="flex items-center gap-1"><span className="w-4 h-4 rounded-full bg-slate-700 inline-block" /> {t.apm.bubbleSizeHigh}</span>
+              <span className="text-slate-300">|</span>
+              <span className="flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                <span className="w-3.5 h-3.5 rounded-full bg-amber-400 flex items-center justify-center text-slate-950 font-black">
+                  <Zap className="w-2 h-2 fill-slate-950 text-slate-950" />
+                </span>
+                {t.apm.overrideLegend}
+              </span>
             </div>
 
             {/* View Switcher: Bubble vs Cards */}
@@ -383,10 +668,10 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                     ? 'bg-white text-indigo-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Vista Matrice a Bolle Cartesiana"
+                title={t.apm.viewModeBubbleTitle}
               >
                 <CircleDot className="w-3.5 h-3.5" />
-                <span>Bolle</span>
+                <span>{t.apm.viewModeBubble}</span>
               </button>
               <button
                 type="button"
@@ -396,10 +681,10 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                     ? 'bg-white text-indigo-700 shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
-                title="Vista Quadranti a Schede"
+                title={t.apm.viewModeCardsTitle}
               >
                 <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Schede</span>
+                <span>{t.apm.viewModeCards}</span>
               </button>
             </div>
           </div>
@@ -414,7 +699,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   4.0
                 </div>
                 <div className="-rotate-90 whitespace-nowrap text-[11px] font-black uppercase tracking-wider text-slate-800 bg-white border border-slate-300 px-3 py-1 rounded-full shadow-xs">
-                  ▲ BUSINESS FIT
+                  {t.apm.axisBusinessFit}
                 </div>
                 <div className="text-[10px] font-bold text-slate-600 bg-white px-1.5 py-0.5 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Minimo (1.0)">
                   1.0
@@ -486,7 +771,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
 
                 {/* Center Origin Threshold Marker */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 text-white text-[10px] font-extrabold px-2.5 py-1 rounded-full shadow-lg z-30 border border-slate-600">
-                  Soglia 2.5
+                  {t.apm.threshold25}
                 </div>
 
                 {/* Bubble Elements */}
@@ -503,7 +788,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                     <button
                       type="button"
                       onClick={() => handleEditClick(b.app)}
-                      className={`rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 transform group-hover:scale-115 group-hover:shadow-xl focus:outline-none focus:ring-4 ${
+                      className={`relative rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 transform group-hover:scale-115 group-hover:shadow-xl focus:outline-none focus:ring-4 ${
                         b.quadrant === 'Invest'
                           ? 'bg-emerald-600/95 hover:bg-emerald-500 text-white border-2 border-emerald-300 shadow-md ring-2 ring-emerald-500/30'
                           : b.quadrant === 'Tolerate'
@@ -518,6 +803,18 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                       }}
                       aria-label={`${b.shortName} (${b.appCode})`}
                     >
+                      {b.hasOverride && (
+                        <span
+                          className="absolute -top-1 -right-1 z-30 flex items-center justify-center w-5 h-5 rounded-full bg-amber-400 text-slate-950 shadow-md ring-2 ring-white border border-amber-500 font-black animate-pulse"
+                          title={interpolate(t.apm.overrideDetail, {
+                            calculated: b.calculatedQuadrant,
+                            bFit: String(b.bFit),
+                            tFit: String(b.tFit)
+                          })}
+                        >
+                          <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                        </span>
+                      )}
                       <span className="font-extrabold text-[10px] leading-tight px-1 text-center truncate max-w-full select-none">
                         {b.shortName}
                       </span>
@@ -529,48 +826,76 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                     </button>
 
                     {/* Rich Hover Floating Tooltip */}
-                    <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-slate-950/95 text-white border border-slate-700/80 rounded-xl p-3 shadow-2xl z-50 min-w-[250px] max-w-[320px] pointer-events-none backdrop-blur-md">
+                    <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-slate-950/95 text-white border border-slate-700/80 rounded-xl p-3 shadow-2xl z-50 min-w-[260px] max-w-[340px] pointer-events-none backdrop-blur-md">
                       <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-1.5">
                         <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
                           {b.appCode}
                         </span>
-                        <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                          b.quadrant === 'Invest' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                          b.quadrant === 'Tolerate' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
-                          b.quadrant === 'Migrate' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                          'bg-rose-950 text-rose-300 border border-rose-800'
-                        }`}>
-                          {b.quadrant}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {b.hasOverride && (
+                            <span className="flex items-center gap-0.5 text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
+                              <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                              {t.apm.overrideBadge}
+                            </span>
+                          )}
+                          <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                            b.quadrant === 'Invest' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                            b.quadrant === 'Tolerate' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                            b.quadrant === 'Migrate' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                            'bg-rose-950 text-rose-300 border border-rose-800'
+                          }`}>
+                            {b.quadrant}
+                          </span>
+                        </div>
                       </div>
                       <div className="text-xs font-black text-slate-100 leading-snug">{b.app.name}</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">Nome Breve: <span className="text-slate-200 font-bold">{b.shortName}</span></div>
-                      <div className="mt-2 space-y-1 text-[11px] border-t border-slate-800/80 pt-1.5">
+                      <div className="text-[11px] text-slate-400 mt-0.5">{t.apm.tooltipShortName} <span className="text-slate-200 font-bold">{b.shortName}</span></div>
+
+                      {b.hasOverride && (
+                        <div className="bg-amber-500/20 border border-amber-400/40 rounded-lg p-2 my-2 text-[10px] space-y-1">
+                          <div className="flex items-center gap-1.5 font-black text-amber-300 uppercase tracking-wider">
+                            <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
+                            <span>{t.apm.overrideStrategic}</span>
+                          </div>
+                          <div className="text-amber-100 font-medium leading-tight">
+                            {interpolate(t.apm.overrideDetail, {
+                              calculated: b.calculatedQuadrant,
+                              bFit: String(b.bFit),
+                              tFit: String(b.tFit)
+                            })}
+                          </div>
+                          <div className="text-amber-200/70 text-[9px] italic">
+                            {t.apm.overrideTooltip}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="mt-1 space-y-1 text-[11px] border-t border-slate-800/80 pt-1.5">
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-400">TCO Annuo:</span>
+                          <span className="text-slate-400">{t.apm.tooltipAnnualTco}</span>
                           <span className="font-mono font-bold text-amber-300">{formatEUR(b.cost)}</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Business Fit:</span>
+                          <span className="text-slate-400">{t.apm.tooltipBusinessFit}</span>
                           <span className="font-bold text-slate-200">{b.bFit} / 4</span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-slate-400">Technical Fit:</span>
+                          <span className="text-slate-400">{t.apm.tooltipTechnicalFit}</span>
                           <span className="font-bold text-slate-200">{b.tFit} / 4</span>
                         </div>
                         {b.app.business_owner && (
                           <div className="text-[10px] text-slate-400 truncate pt-1 border-t border-slate-900">
-                            Owner: {b.app.business_owner}
+                            {t.apm.tooltipOwner} {b.app.business_owner}
                           </div>
                         )}
                         {b.app.vendor && (
                           <div className="text-[10px] text-slate-400 truncate">
-                            Vendor: {b.app.vendor}
+                            {t.apm.tooltipVendor} {b.app.vendor}
                           </div>
                         )}
                       </div>
                       <div className="text-[9px] text-indigo-300/90 mt-2 text-center italic">
-                        Fai clic per aprire la scheda di modifica
+                        {t.apm.clickToEditTooltip}
                       </div>
                     </div>
                   </div>
@@ -581,14 +906,13 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
             {/* X-Axis Label Area */}
             <div className="flex items-center justify-between pl-12 sm:pl-14 pr-4 py-2 select-none bg-slate-50/80 border border-slate-200/90 rounded-2xl">
               <div className="text-[10px] font-bold text-slate-600 bg-white px-2.5 py-1 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Minimo (1.0)">
-                1.0 Obsoleto
+                {t.apm.axisObsolete}
               </div>
               <div className="text-[11px] font-black uppercase tracking-wider text-slate-800 bg-white border border-slate-300 px-4 py-1 rounded-full shadow-xs flex items-center gap-1.5">
-                <span>TECHNICAL FIT (Qualità Architetturale & Tecnologia)</span>
-                <span className="text-slate-400">►</span>
+                <span>{t.apm.axisTechnicalFit}</span>
               </div>
               <div className="text-[10px] font-bold text-slate-600 bg-white px-2.5 py-1 rounded shadow-2xs border border-slate-200 font-mono" title="Punteggio Massimo (4.0)">
-                4.0 Cloud Native
+                {t.apm.axisCloudNative}
               </div>
             </div>
           </div>
@@ -605,20 +929,39 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => handleEditClick(app)}
-                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
-                    >
-                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
-                      <span>{app.short_name || app.name}</span>
-                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
-                    </button>
-                  ))}
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').map((app) => {
+                    const calcQ = getCalculatedTimeQuadrant(Number(app.business_fit) || 3, Number(app.technical_fit) || 3);
+                    const isOverride = Boolean(
+                      (app.time_quadrant_override && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(app.time_quadrant_override) && app.time_quadrant_override !== calcQ) ||
+                      (app.time_quadrant && app.time_quadrant !== calcQ)
+                    );
+                    return (
+                      <button
+                        key={app.id}
+                        onClick={() => handleEditClick(app)}
+                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Tolerate]` : ''}`}
+                      >
+                        <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                        <span>{app.short_name || app.name}</span>
+                        {isOverride && (
+                          <span
+                            className="flex items-center text-amber-300"
+                            title={interpolate(t.apm.overrideDetail, {
+                              calculated: calcQ,
+                              bFit: String(app.business_fit || 3),
+                              tFit: String(app.technical_fit || 3)
+                            })}
+                          >
+                            <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
+                          </span>
+                        )}
+                        <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                      </button>
+                    );
+                  })}
                   {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Tolerate').length === 0 && (
-                    <span className="text-xs text-blue-500 italic p-2">Nessuna applicazione in questo quadrante</span>
+                    <span className="text-xs text-blue-500 italic p-2">{t.apm.noAppsInQuadrant}</span>
                   )}
                 </div>
               </div>
@@ -632,20 +975,39 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Invest').map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => handleEditClick(app)}
-                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs border border-emerald-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
-                    >
-                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
-                      <span>{app.short_name || app.name}</span>
-                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
-                    </button>
-                  ))}
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Invest').map((app) => {
+                    const calcQ = getCalculatedTimeQuadrant(Number(app.business_fit) || 3, Number(app.technical_fit) || 3);
+                    const isOverride = Boolean(
+                      (app.time_quadrant_override && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(app.time_quadrant_override) && app.time_quadrant_override !== calcQ) ||
+                      (app.time_quadrant && app.time_quadrant !== calcQ)
+                    );
+                    return (
+                      <button
+                        key={app.id}
+                        onClick={() => handleEditClick(app)}
+                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs border border-emerald-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Invest]` : ''}`}
+                      >
+                        <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                        <span>{app.short_name || app.name}</span>
+                        {isOverride && (
+                          <span
+                            className="flex items-center text-amber-300"
+                            title={interpolate(t.apm.overrideDetail, {
+                              calculated: calcQ,
+                              bFit: String(app.business_fit || 3),
+                              tFit: String(app.technical_fit || 3)
+                            })}
+                          >
+                            <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
+                          </span>
+                        )}
+                        <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                      </button>
+                    );
+                  })}
                   {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Invest').length === 0 && (
-                    <span className="text-xs text-emerald-500 italic p-2">Nessuna applicazione in questo quadrante</span>
+                    <span className="text-xs text-emerald-500 italic p-2">{t.apm.noAppsInQuadrant}</span>
                   )}
                 </div>
               </div>
@@ -659,20 +1021,39 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => handleEditClick(app)}
-                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs border border-rose-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
-                    >
-                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
-                      <span>{app.short_name || app.name}</span>
-                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
-                    </button>
-                  ))}
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').map((app) => {
+                    const calcQ = getCalculatedTimeQuadrant(Number(app.business_fit) || 3, Number(app.technical_fit) || 3);
+                    const isOverride = Boolean(
+                      (app.time_quadrant_override && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(app.time_quadrant_override) && app.time_quadrant_override !== calcQ) ||
+                      (app.time_quadrant && app.time_quadrant !== calcQ)
+                    );
+                    return (
+                      <button
+                        key={app.id}
+                        onClick={() => handleEditClick(app)}
+                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs border border-rose-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Eliminate]` : ''}`}
+                      >
+                        <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                        <span>{app.short_name || app.name}</span>
+                        {isOverride && (
+                          <span
+                            className="flex items-center text-amber-300"
+                            title={interpolate(t.apm.overrideDetail, {
+                              calculated: calcQ,
+                              bFit: String(app.business_fit || 3),
+                              tFit: String(app.technical_fit || 3)
+                            })}
+                          >
+                            <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
+                          </span>
+                        )}
+                        <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                      </button>
+                    );
+                  })}
                   {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Eliminate').length === 0 && (
-                    <span className="text-xs text-rose-500 italic p-2">Nessuna applicazione in questo quadrante</span>
+                    <span className="text-xs text-rose-500 italic p-2">{t.apm.noAppsInQuadrant}</span>
                   )}
                 </div>
               </div>
@@ -686,20 +1067,39 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5 content-start max-h-72 overflow-y-auto">
-                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Migrate').map((app) => (
-                    <button
-                      key={app.id}
-                      onClick={() => handleEditClick(app)}
-                      className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-xs border border-amber-600 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                      title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}`}
-                    >
-                      <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
-                      <span>{app.short_name || app.name}</span>
-                      <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
-                    </button>
-                  ))}
+                  {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Migrate').map((app) => {
+                    const calcQ = getCalculatedTimeQuadrant(Number(app.business_fit) || 3, Number(app.technical_fit) || 3);
+                    const isOverride = Boolean(
+                      (app.time_quadrant_override && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(app.time_quadrant_override) && app.time_quadrant_override !== calcQ) ||
+                      (app.time_quadrant && app.time_quadrant !== calcQ)
+                    );
+                    return (
+                      <button
+                        key={app.id}
+                        onClick={() => handleEditClick(app)}
+                        className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-xs border border-amber-600 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
+                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Migrate]` : ''}`}
+                      >
+                        <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
+                        <span>{app.short_name || app.name}</span>
+                        {isOverride && (
+                          <span
+                            className="flex items-center text-slate-950"
+                            title={interpolate(t.apm.overrideDetail, {
+                              calculated: calcQ,
+                              bFit: String(app.business_fit || 3),
+                              tFit: String(app.technical_fit || 3)
+                            })}
+                          >
+                            <Zap className="w-3 h-3 fill-slate-950 text-slate-950" />
+                          </span>
+                        )}
+                        <span className="text-[10px] opacity-90 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                      </button>
+                    );
+                  })}
                   {businessApps.filter((a) => (a.time_quadrant_override || a.time_quadrant) === 'Migrate').length === 0 && (
-                    <span className="text-xs text-amber-600 italic p-2">Nessuna applicazione in questo quadrante</span>
+                    <span className="text-xs text-amber-600 italic p-2">{t.apm.noAppsInQuadrant}</span>
                   )}
                 </div>
               </div>
@@ -716,6 +1116,14 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
             <p className="text-xs text-slate-500">{t.apm.inventorySubtitle}</p>
           </div>
           <div className="flex items-center space-x-3">
+            <button
+              onClick={handleExportCsv}
+              className="flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold bg-white hover:bg-slate-50 border border-slate-200 rounded-xl text-slate-700 shadow-2xs transition shrink-0 cursor-pointer"
+              title={t.apm.btnExportCsvFullTitle}
+            >
+              <Download className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{t.apm.btnExportCsvFull}</span>
+            </button>
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
               <input
@@ -744,7 +1152,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
               <tr>
                 <th className="py-3 px-4">{t.apm.colApplication}</th>
                 <th className="py-3 px-4">{t.apm.colTimeQuadrant}</th>
-                <th className="py-3 px-4">Tech Risk (EOL)</th>
+                <th className="py-3 px-4">{t.apm.colTechRiskEol}</th>
                 <th className="py-3 px-4">{t.apm.colFitScores}</th>
                 <th className="py-3 px-4">{t.apm.colAnnualCost}</th>
                 <th className="py-3 px-4">{t.apm.colCriticality}</th>
@@ -769,19 +1177,44 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                     </div>
                   </td>
                   <td className="py-3.5 px-4">
-                    <span
-                      className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                        app.time_quadrant === 'Invest'
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                          : app.time_quadrant === 'Migrate'
-                          ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                          : app.time_quadrant === 'Tolerate'
-                          ? 'bg-blue-100 text-blue-800 border border-blue-300'
-                          : 'bg-rose-100 text-rose-800 border border-rose-300'
-                      }`}
-                    >
-                      {app.time_quadrant}
-                    </span>
+                    {(() => {
+                      const calcQ = getCalculatedTimeQuadrant(Number(app.business_fit) || 3, Number(app.technical_fit) || 3);
+                      const isOverride = Boolean(
+                        (app.time_quadrant_override && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(app.time_quadrant_override) && app.time_quadrant_override !== calcQ) ||
+                        (app.time_quadrant && app.time_quadrant !== calcQ)
+                      );
+                      return (
+                        <div className="flex flex-col gap-1 items-start">
+                          <span
+                            className={`inline-block px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                              app.time_quadrant === 'Invest'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : app.time_quadrant === 'Migrate'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : app.time_quadrant === 'Tolerate'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}
+                          >
+                            {app.time_quadrant}
+                          </span>
+                          {isOverride && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs"
+                              title={interpolate(t.apm.overrideDetail, {
+                                calculated: calcQ,
+                                bFit: String(app.business_fit || 3),
+                                tFit: String(app.technical_fit || 3)
+                              })}
+                            >
+                              <Zap className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                              <span>{t.apm.overrideBadge}</span>
+                              <span className="opacity-75 font-normal">({calcQ})</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="py-3.5 px-4">
                     {techRiskMap[app.id] ? (
@@ -848,6 +1281,8 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
           </table>
         </div>
       </div>
+      </>
+      )}
 
       {/* Edit Modal */}
       {editingApp && (
@@ -929,12 +1364,16 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
                       onChange={(e) => setEditForm({ ...editForm, time_quadrant_override: e.target.value })}
                       className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 focus:outline-none focus:border-indigo-500"
                     >
-                      <option value="">Auto (Calcolato dai Fit)</option>
-                      <option value="Invest">Invest (Alto Valore/Tecnologia)</option>
-                      <option value="Migrate">Migrate (Riprogettare/Cloud)</option>
-                      <option value="Tolerate">Tolerate (Mantenere/Stabile)</option>
-                      <option value="Eliminate">Eliminate (Dismettere)</option>
+                      <option value="">{t.apm.overrideAutoOption}</option>
+                      <option value="Invest">{t.apm.optionInvestDesc}</option>
+                      <option value="Migrate">{t.apm.optionMigrateDesc}</option>
+                      <option value="Tolerate">{t.apm.optionTolerateDesc}</option>
+                      <option value="Eliminate">{t.apm.optionEliminateDesc}</option>
                     </select>
+                    <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-500">
+                      <Zap className="w-3 h-3 text-amber-500 shrink-0" />
+                      <span>{interpolate(t.apm.editModalTimeAutoHelp, { calculated: getCalculatedTimeQuadrant(Number(editForm.business_fit) || 3, Number(editForm.technical_fit) || 3) })}</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -942,7 +1381,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
               {/* Sezione: Ciclo di Vita & Criticità */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
                 <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Ciclo di Vita & Criticità
+                  {t.apm.sectionLifecycleCriticality}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1006,7 +1445,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
               {/* Sezione: TCO & Finanza */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
                 <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Financials & Costi TCO
+                  {t.apm.sectionFinancialsTco}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>
@@ -1052,7 +1491,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
               {/* Sezione: Architettura & Hosting */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
                 <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Architettura Software & Hosting
+                  {t.apm.sectionArchitectureHosting}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
@@ -1093,7 +1532,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({ modelId }) => {
               {/* Sezione: Governance & Ownership */}
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-3">
                 <div className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500">
-                  Governance & Ownership
+                  {t.apm.sectionGovernanceOwnership}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div>

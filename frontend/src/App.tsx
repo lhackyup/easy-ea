@@ -43,6 +43,7 @@ export function App() {
   // 3 Hubs State
   const [activeHub, setActiveHub] = useState<MainHub>('business');
   const [businessTab, setBusinessTab] = useState<BusinessSubTab>('overview');
+  const [apmTab, setApmTab] = useState<'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle'>('catalog');
   const [architectureTab, setArchitectureTab] = useState<ArchitectureSubTab>('repository');
   const [adminTab, setAdminTab] = useState<AdminSubTab>('models');
   const [selectedSavedView, setSelectedSavedView] = useState<any | null>(null);
@@ -204,6 +205,8 @@ export function App() {
               setBusinessTab(tab);
               setIsMobileSidebarOpen(false);
             }}
+            apmTab={apmTab}
+            onSelectApmTab={setApmTab}
             architectureTab={architectureTab}
             onSelectArchitectureTab={(tab) => {
               setArchitectureTab(tab);
@@ -245,7 +248,17 @@ export function App() {
                     {businessTab === 'overview' && (
                       <ExecutiveOverview
                         modelId={selectedModelId}
-                        onNavigateTab={(tab) => setBusinessTab(tab)}
+                        onNavigateTab={(tab) => {
+                          if (tab === 'tech_risk') {
+                            setBusinessTab('apm');
+                            setApmTab('tech_risk');
+                          } else if (tab === 'tco') {
+                            setBusinessTab('apm');
+                            setApmTab('tco');
+                          } else {
+                            setBusinessTab(tab);
+                          }
+                        }}
                       />
                     )}
                     {(businessTab === 'package_view' || businessTab === 'insights') && (
@@ -268,8 +281,42 @@ export function App() {
                         />
                       )
                     )}
-                    {businessTab === 'apm' && <APMDashboard modelId={selectedModelId} />}
-                    {businessTab === 'tech_risk' && <TechRiskRadar modelId={selectedModelId} />}
+                    {businessTab === 'apm' && (
+                      <APMDashboard
+                        modelId={selectedModelId}
+                        isApmPackageActive={packagesWithViews.some((p) => p.id === 'pkg-apm' || p.code === 'APM')}
+                        onNavigateMetamodel={() => {
+                          setActiveHub('architecture');
+                          setArchitectureTab('schemas');
+                        }}
+                        activeTab={apmTab}
+                        onTabChange={setApmTab}
+                      />
+                    )}
+                    {businessTab === 'tech_risk' && (
+                      <APMDashboard
+                        modelId={selectedModelId}
+                        isApmPackageActive={packagesWithViews.some((p) => p.id === 'pkg-apm' || p.code === 'APM')}
+                        onNavigateMetamodel={() => {
+                          setActiveHub('architecture');
+                          setArchitectureTab('schemas');
+                        }}
+                        activeTab="tech_risk"
+                        onTabChange={setApmTab}
+                      />
+                    )}
+                    {businessTab === 'tco' && (
+                      <APMDashboard
+                        modelId={selectedModelId}
+                        isApmPackageActive={packagesWithViews.some((p) => p.id === 'pkg-apm' || p.code === 'APM')}
+                        onNavigateMetamodel={() => {
+                          setActiveHub('architecture');
+                          setArchitectureTab('schemas');
+                        }}
+                        activeTab="tco"
+                        onTabChange={setApmTab}
+                      />
+                    )}
                     {businessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
                     {businessTab === 'processes' && <ProcessNavigator modelId={selectedModelId} />}
                   </>

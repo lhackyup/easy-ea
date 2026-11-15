@@ -1301,7 +1301,7 @@ def seed_default_attribute_packages(db: Session):
             "id": "item-apm-annual-cost",
             "name": "apm_annual_cost",
             "label": "Total Annual Cost / TCO (€)",
-            "description": "Total annual cost of ownership (licenses, infrastructure, maintenance, and support).",
+            "description": "Total annual cost of ownership (sum of licenses, cloud, maintenance, and internal labor).",
             "element_type": "ApplicationComponent",
             "layer": "Application",
             "data_type": "number",
@@ -1310,6 +1310,90 @@ def seed_default_attribute_packages(db: Session):
             "is_required": True,
             "section": "Financials & TCO",
             "sort_order": 14
+        },
+        {
+            "id": "item-apm-cost-software-licenses",
+            "name": "apm_cost_software_licenses",
+            "label": "Software Licenses & SaaS (€)",
+            "description": "Annual expenses for software licenses, SaaS recurring subscriptions, and vendor packaging.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 15
+        },
+        {
+            "id": "item-apm-cost-cloud-infrastructure",
+            "name": "apm_cost_cloud_infrastructure",
+            "label": "Cloud & Hosting Infrastructure (€)",
+            "description": "Annual costs for IaaS, PaaS, database instances, storage, egress, and on-premise compute hosting.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 16
+        },
+        {
+            "id": "item-apm-cost-vendor-maintenance",
+            "name": "apm_cost_vendor_maintenance",
+            "label": "Vendor Maintenance & AMS (€)",
+            "description": "Third-party vendor maintenance contracts, Application Management Services (AMS), and external support SLAs.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 17
+        },
+        {
+            "id": "item-apm-cost-internal-labor",
+            "name": "apm_cost_internal_labor",
+            "label": "Internal Operations & FTE Labor (€)",
+            "description": "Estimated cost of internal IT personnel, DevOps, DBA, and application engineers allocated to this system.",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 18
+        },
+        {
+            "id": "item-apm-active-users",
+            "name": "apm_active_users",
+            "label": "Active Users Count",
+            "description": "Number of regular active business or customer users accessing the application (used for unit cost per user).",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 19
+        },
+        {
+            "id": "item-apm-capex-ratio",
+            "name": "apm_capex_ratio",
+            "label": "CAPEX Ratio (%)",
+            "description": "Percentage of application spending classified as Capital Expenditure (CAPEX) vs Operating Expense (OPEX).",
+            "element_type": "ApplicationComponent",
+            "layer": "Application",
+            "data_type": "number",
+            "options": [],
+            "default_value": "0",
+            "is_required": False,
+            "section": "Financials & TCO",
+            "sort_order": 20
         },
         {
             "id": "item-apm-cost-type",
@@ -1323,7 +1407,7 @@ def seed_default_attribute_packages(db: Session):
             "default_value": "OPEX (SaaS / Cloud Subscription)",
             "is_required": False,
             "section": "Financials & TCO",
-            "sort_order": 15
+            "sort_order": 21
         },
 
         # Section 6: Risk, Security & Compliance
@@ -2036,8 +2120,7 @@ def seed_default_attribute_packages(db: Session):
             existing_v.view_type = v_data["view_type"]
             existing_v.icon = v_data["icon"]
             existing_v.sort_order = v_data.get("sort_order", 0)
-            if not getattr(existing_v, "target_hub", None):
-                existing_v.target_hub = v_data.get("target_hub", "architecture")
+            existing_v.target_hub = v_data.get("target_hub", "architecture")
             existing_v.target_stereotypes = v_data["target_stereotypes"]
             existing_v.target_types = v_data.get("target_types", [])
             existing_v.config = v_data["config"]

@@ -4,7 +4,7 @@ from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateElement, User
+from app.models.archimate import ArchimateElement, ArchimateRelationship, User
 from app.api.deps import get_current_user, require_library_permission
 from app.services.apm_service import APMService
 from app.services.tech_risk_service import TechRiskService
@@ -25,8 +25,18 @@ class AppAttributeUpdate(BaseModel):
     technical_fit: Optional[int] = None
     time_quadrant: Optional[str] = None
     annual_cost: Optional[float] = None
+    cost_software_licenses: Optional[float] = None
+    cost_cloud_infrastructure: Optional[float] = None
+    cost_vendor_maintenance: Optional[float] = None
+    cost_internal_labor: Optional[float] = None
+    active_users: Optional[int] = None
+    capex_ratio: Optional[float] = None
+    cost_center: Optional[str] = None
+    cost_type: Optional[str] = None
     business_criticality: Optional[str] = None
     lifecycle_status: Optional[str] = None
+    live_date: Optional[str] = None
+    retirement_date: Optional[str] = None
     business_owner: Optional[str] = None
     technical_owner: Optional[str] = None
     vendor: Optional[str] = None
@@ -50,6 +60,39 @@ def get_apm_portfolio(
     - List of all applications with business metrics
     """
     return APMService.get_portfolio_summary(db, model_id)
+
+@router.get("/tco-breakdown/{model_id}")
+def get_tco_breakdown(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns full analytic TCO financial metrics:
+    - 4-bucket breakdown (Software licenses, Cloud infra, Vendor AMS, Internal FTEs)
+    - CAPEX vs OPEX breakdown
+    - Cost per active user metrics
+    - Cost allocation by Cost Center
+    - Cost allocation by TIME Quadrant (waste vs strategic)
+    - Cost vs Value (Business Fit) quadrants
+    """
+    return APMService.get_tco_breakdown(db, model_id)
+
+@router.get("/lifecycle/{model_id}")
+def get_lifecycle_analysis(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns full Application Lifecycle & Decommissioning metrics:
+    - Counts and costs per lifecycle phase (Plan, Phase In, Live, Phase Out, Retired)
+    - TCO Takeout Savings from decommissioning sunset applications
+    - Retirement milestones (<6m, <12m, <24m)
+    - Decommissioning readiness and architectural blockers (active serving/flow relations)
+    - Chronological multi-year timeline dataset
+    """
+    return APMService.get_lifecycle_analysis(db, model_id)
 
 @router.put("/applications/{element_id}")
 def update_application_apm(
@@ -111,6 +154,82 @@ def update_technology_lifecycle(
     update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
     try:
         return TechRiskService.update_technology_lifecycle(db, element_id, update_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+class InterfaceUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    documentation: Optional[str] = None
+    protocol: Optional[str] = None
+    pattern: Optional[str] = None
+    data_format: Optional[str] = None
+    criticality: Optional[str] = None
+    frequency: Optional[str] = None
+    security_auth: Optional[str] = None
+    data_classification: Optional[str] = None
+    status: Optional[str] = None
+
+class InterfaceCreatePayload(BaseModel):
+    name: str
+    source_id: str
+    target_id: str
+    documentation: Optional[str] = ""
+    protocol: Optional[str] = "REST API / JSON"
+    pattern: Optional[str] = "Synchronous"
+    data_format: Optional[str] = "JSON Payload"
+    criticality: Optional[str] = "Business Critical"
+    frequency: Optional[str] = "Real-time"
+    security_auth: Optional[str] = "OAuth 2.0 / JWT"
+    data_classification: Optional[str] = "Internal"
+    status: Optional[str] = "Live"
+
+@router.get("/interfaces/{model_id}")
+def get_interface_inventory(
+    model_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Returns full Interface & Data Flow Inventory:
+    - Summary metrics (totals, protocol distribution, integration patterns, top connected apps)
+    - Detailed list of all application interfaces and inter-application flows
+    - Diagram usage / schema traceability
+    """
+    return APMService.get_interface_inventory(db, model_id)
+
+@router.put("/interfaces/{interface_id}")
+def update_interface_attributes(
+    interface_id: str,
+    payload: InterfaceUpdatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Update metadata and properties for an interface or flow."""
+    rel = db.query(ArchimateRelationship).filter(ArchimateRelationship.id == interface_id).first()
+    model_id = rel.model_id if rel else None
+    if not model_id:
+        el = db.query(ArchimateElement).filter(ArchimateElement.id == interface_id).first()
+        model_id = el.model_id if el else None
+    if not model_id:
+        raise HTTPException(status_code=404, detail="Interface not found")
+    require_library_permission(db, current_user, "edit_apm_attributes", model_id)
+    update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    try:
+        return APMService.update_interface(db, interface_id, update_data)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/interfaces/{model_id}")
+def create_interface(
+    model_id: str,
+    payload: InterfaceCreatePayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new inter-application flow interface in the model."""
+    require_library_permission(db, current_user, "edit_apm_attributes", model_id)
+    try:
+        return APMService.create_interface(db, model_id, payload.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 

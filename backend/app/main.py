@@ -55,6 +55,13 @@ def _safe_add_column(table_name: str, column_def: str):
             print(f"Migration note ({table_name}.{col_name}): {exc}")
 
 _safe_add_column("application_business_attributes", "in_apm_scope BOOLEAN DEFAULT TRUE")
+_safe_add_column("application_business_attributes", "cost_software_licenses FLOAT DEFAULT 0.0")
+_safe_add_column("application_business_attributes", "cost_cloud_infrastructure FLOAT DEFAULT 0.0")
+_safe_add_column("application_business_attributes", "cost_vendor_maintenance FLOAT DEFAULT 0.0")
+_safe_add_column("application_business_attributes", "cost_internal_labor FLOAT DEFAULT 0.0")
+_safe_add_column("application_business_attributes", "active_users INTEGER DEFAULT 0")
+_safe_add_column("application_business_attributes", "capex_ratio FLOAT DEFAULT 0.0")
+_safe_add_column("application_business_attributes", "cost_center VARCHAR")
 _safe_add_column("model_workspaces", "code VARCHAR(4)")
 _safe_add_column("model_workspaces", "modeling_tool VARCHAR DEFAULT 'archi'")
 _safe_add_column("archi_schemas", "format VARCHAR DEFAULT 'archi'")

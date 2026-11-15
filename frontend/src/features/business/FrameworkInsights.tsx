@@ -54,7 +54,8 @@ import {
   Sparkles,
   Database,
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Zap
 } from 'lucide-react';
 
 interface FrameworkInsightsProps {
@@ -215,10 +216,17 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
       const posX = Math.max(minX, Math.min(maxX, baseX + offsetX));
       const posY = Math.max(minY, Math.min(maxY, baseY + offsetY));
 
-      const quadrant = app.computed_time_quadrant || app.apm_time_quadrant_override || (
+      const calculatedQuadrant = (
         bFit >= 2.5 && tFit >= 2.5 ? 'Invest' :
         bFit >= 2.5 && tFit < 2.5 ? 'Tolerate' :
         bFit < 2.5 && tFit >= 2.5 ? 'Migrate' : 'Eliminate'
+      );
+
+      const overrideVal = app.apm_time_quadrant_override || app.time_quadrant_override;
+      const quadrant = app.computed_time_quadrant || overrideVal || calculatedQuadrant;
+      const hasOverride = Boolean(
+        (overrideVal && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(overrideVal) && overrideVal !== calculatedQuadrant) ||
+        (quadrant && quadrant !== calculatedQuadrant)
       );
 
       const shortName = app.apm_short_name || (app.name ? app.name.slice(0, 12) : 'App');
@@ -231,6 +239,8 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
         radius,
         diameter: radius * 2,
         quadrant,
+        calculatedQuadrant,
+        hasOverride,
         shortName,
         appCode,
         cost,
@@ -498,15 +508,132 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
   const handleExportCsv = () => {
     if (!viewData || !viewData.rows || viewData.rows.length === 0) return;
 
-    const columns = viewData.columns || [
-      { field: 'name', label: 'Nome' },
-      { field: 'type', label: 'Tipo' },
-      { field: 'layer', label: 'Layer' }
-    ];
+    // Detect if this is the Business Applications Catalog or an APM / Application view
+    const isBusinessAppView =
+      viewData.view_key?.includes('business_applications') ||
+      viewData.view_key?.includes('apm') ||
+      selectedView?.id?.includes('business-applications') ||
+      (selectedView?.target_stereotypes &&
+        selectedView.target_stereotypes.some((s: string) =>
+          s.toLowerCase().includes('business application') || s.includes('stereo-business-app')
+        )) ||
+      (viewData.rows[0] && ('apm_app_code' in viewData.rows[0] || 'apm_lifecycle_status' in viewData.rows[0]));
 
-    const headers = columns.map((c) => `"${(c.label || c.field).replace(/"/g, '""')}"`).join(';');
+    let columnsToExport: Array<{ field: string; label: string; fallbackFields?: string[] }> = [];
+
+    if (isBusinessAppView) {
+      const isEn = language === 'en';
+      columnsToExport = [
+        { field: 'name', label: isEn ? 'Application Name' : 'Nome Applicazione' },
+        { field: 'apm_app_code', label: isEn ? 'Application Code' : 'Codice Applicazione', fallbackFields: ['app_code'] },
+        { field: 'apm_short_name', label: isEn ? 'Short Name' : 'Nome Breve', fallbackFields: ['short_name'] },
+        { field: 'documentation', label: isEn ? 'Description / Documentation' : 'Descrizione / Documentazione' },
+        { field: 'type', label: isEn ? 'ArchiMate Type' : 'Tipo ArchiMate' },
+        { field: 'layer', label: isEn ? 'ArchiMate Layer' : 'Layer ArchiMate' },
+        { field: 'stereotype_name', label: isEn ? 'Stereotype' : 'Stereotipo' },
+
+        // Governance & Ownership
+        { field: 'apm_business_owner', label: isEn ? 'Business Owner' : 'Business Owner', fallbackFields: ['business_owner'] },
+        { field: 'apm_technical_owner', label: isEn ? 'Technical Owner' : 'Technical Owner', fallbackFields: ['technical_owner'] },
+        { field: 'apm_vendor', label: isEn ? 'Vendor / Supplier' : 'Fornitore / Vendor', fallbackFields: ['vendor'] },
+        { field: 'apm_cost_center', label: isEn ? 'Cost Center' : 'Centro di Costo', fallbackFields: ['cost_center'] },
+
+        // Ciclo di Vita & Criticità
+        { field: 'apm_lifecycle_status', label: isEn ? 'Lifecycle Status' : 'Stato Ciclo di Vita', fallbackFields: ['lifecycle_status'] },
+        { field: 'apm_live_date', label: isEn ? 'Go-Live Date' : 'Data Rilascio (Go-Live)', fallbackFields: ['live_date'] },
+        { field: 'apm_retirement_date', label: isEn ? 'Planned Retirement Date' : 'Data Dismissione Prevista', fallbackFields: ['retirement_date'] },
+        { field: 'apm_business_criticality', label: isEn ? 'Business Criticality' : 'Criticità di Business', fallbackFields: ['business_criticality'] },
+        { field: 'obsolescence_risk', label: isEn ? 'Obsolescence Risk' : 'Rischio Obsolescenza' },
+
+        // TIME & Strategic Fit
+        { field: 'apm_functional_fit', label: isEn ? 'Functional Assessment (Business Fit)' : 'Valutazione Funzionale (Business Fit)', fallbackFields: ['functional_fit', 'business_fit'] },
+        { field: 'apm_technical_fit', label: isEn ? 'Technical Assessment (Technical Fit)' : 'Valutazione Tecnica (Technical Fit)', fallbackFields: ['technical_fit'] },
+        { field: 'computed_time_quadrant', label: isEn ? 'Gartner TIME Quadrant' : 'Quadrante Gartner TIME', fallbackFields: ['time_quadrant'] },
+        { field: 'apm_time_quadrant_override', label: isEn ? 'TIME Override' : 'TIME Override', fallbackFields: ['time_quadrant_override'] },
+
+        // Financials & TCO
+        { field: 'apm_annual_cost', label: isEn ? 'Total Annual TCO (€)' : 'TCO Annuo Totale (€)', fallbackFields: ['annual_cost'] },
+        { field: 'apm_cost_software_licenses', label: isEn ? 'Software Licenses & SaaS (€)' : 'Licenze Software & SaaS (€)', fallbackFields: ['cost_software_licenses'] },
+        { field: 'apm_cost_cloud_infrastructure', label: isEn ? 'Cloud & Hosting Infrastructure (€)' : 'Cloud & Hosting Infrastructure (€)', fallbackFields: ['cost_cloud_infrastructure'] },
+        { field: 'apm_cost_vendor_maintenance', label: isEn ? 'Vendor Support & AMS (€)' : 'Supporto Fornitore & AMS (€)', fallbackFields: ['cost_vendor_maintenance'] },
+        { field: 'apm_cost_internal_labor', label: isEn ? 'Internal FTE Labor & Operations (€)' : 'Personale Interno & Operations FTE (€)', fallbackFields: ['cost_internal_labor'] },
+        { field: 'apm_active_users', label: isEn ? 'Active Users (Count)' : 'Utenti Attivi (Conteggio)', fallbackFields: ['active_users'] },
+        { field: 'cost_per_user', label: isEn ? 'Annual Cost per User (€)' : 'Costo Annuo per Utente (€)' },
+        { field: 'apm_capex_ratio', label: isEn ? 'CAPEX Ratio (%)' : 'Quota CAPEX (%)', fallbackFields: ['capex_ratio'] },
+        { field: 'apm_cost_type', label: isEn ? 'Cost Model' : 'Modello di Costo', fallbackFields: ['cost_type'] },
+
+        // Architettura, Hosting & Resilienza
+        { field: 'apm_hosting_type', label: isEn ? 'Hosting Model' : 'Modello di Hosting', fallbackFields: ['hosting_type'] },
+        { field: 'apm_architecture_type', label: isEn ? 'Architecture Pattern' : 'Pattern Architetturale', fallbackFields: ['architecture_type'] },
+        { field: 'apm_sla_level', label: isEn ? 'SLA Level' : 'Livello SLA', fallbackFields: ['sla_level'] },
+        { field: 'apm_rto_hours', label: isEn ? 'RTO (Recovery Time Objective)' : 'RTO (Recovery Time Objective)', fallbackFields: ['rto_hours'] },
+
+        // Sicurezza & GDPR
+        { field: 'apm_data_classification', label: isEn ? 'Data Classification' : 'Classificazione Dati', fallbackFields: ['data_classification'] },
+        { field: 'apm_personal_data', label: isEn ? 'GDPR Personal Data' : 'Dati Personali GDPR', fallbackFields: ['personal_data'] }
+      ];
+
+      // Dynamically discover any additional custom attributes present in rows
+      const knownKeys = new Set(columnsToExport.map((c) => c.field));
+      columnsToExport.forEach((c) => {
+        if (c.fallbackFields) c.fallbackFields.forEach((f) => knownKeys.add(f));
+      });
+      const ignoredKeys = new Set(['id', 'stereotype_id', 'is_reference', 'business_fit_score', 'technical_fit_score', 'properties']);
+
+      viewData.rows.forEach((row) => {
+        Object.keys(row).forEach((k) => {
+          if (!knownKeys.has(k) && !ignoredKeys.has(k) && !k.startsWith('eea_')) {
+            knownKeys.add(k);
+            let cleanLabel = k.startsWith('apm_') ? k.slice(4) : k;
+            cleanLabel = cleanLabel.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+            columnsToExport.push({ field: k, label: cleanLabel });
+          }
+        });
+      });
+    } else {
+      // General view: start with configured columns
+      columnsToExport = [...(viewData.columns || [
+        { field: 'name', label: 'Nome' },
+        { field: 'type', label: 'Tipo' },
+        { field: 'layer', label: 'Layer' }
+      ])];
+
+      // Add any additional property keys present in rows
+      const knownKeys = new Set(columnsToExport.map((c) => c.field));
+      const ignoredKeys = new Set(['id', 'stereotype_id', 'is_reference', 'properties']);
+
+      viewData.rows.forEach((row) => {
+        Object.keys(row).forEach((k) => {
+          if (!knownKeys.has(k) && !ignoredKeys.has(k) && !k.startsWith('eea_')) {
+            knownKeys.add(k);
+            let cleanLabel = k.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+            columnsToExport.push({ field: k, label: cleanLabel });
+          }
+        });
+      });
+    }
+
+    const getCellValue = (row: any, col: { field: string; fallbackFields?: string[] }) => {
+      let val = row[col.field];
+      if (val === undefined || val === null || val === '') {
+        if (col.fallbackFields) {
+          for (const fb of col.fallbackFields) {
+            if (row[fb] !== undefined && row[fb] !== null && row[fb] !== '') {
+              val = row[fb];
+              break;
+            }
+          }
+        }
+      }
+      if (val === undefined || val === null) return '';
+      if (typeof val === 'boolean') return val ? 'Sì' : 'No';
+      if (typeof val === 'object') return JSON.stringify(val);
+      return String(val);
+    };
+
+    const headers = columnsToExport.map((c) => `"${(c.label || c.field).replace(/"/g, '""')}"`).join(';');
     const rows = viewData.rows.map((row) =>
-      columns.map((c) => `"${String(row[c.field] ?? '').replace(/"/g, '""')}"`).join(';')
+      columnsToExport.map((c) => `"${getCellValue(row, c).replace(/"/g, '""')}"`).join(';')
     );
 
     const csvContent = '\uFEFF' + [headers, ...rows].join('\r\n');
@@ -514,7 +641,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${viewData.view_key || 'export'}_${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `${viewData.view_key || 'business_applications_catalog'}_all_attributes_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1716,11 +1843,18 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                               Ogni pallino posizionato all'incrocio di <strong>Technical Fit</strong> (X) e <strong>Business Fit</strong> (Y), con raggio proporzionale al <strong>TCO</strong> e <strong>Nome Breve</strong> all'interno.
                             </p>
                           </div>
-                          <div className="flex items-center gap-2 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl">
+                          <div className="flex items-center gap-2.5 text-[11px] text-slate-500 bg-slate-50 border border-slate-200 px-3 py-1 rounded-xl">
                             <span className="font-semibold text-slate-700">Dimensione Bolla:</span>
                             <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-slate-400 inline-block" /> Basso TCO</span>
                             <span className="text-slate-300">➔</span>
                             <span className="flex items-center gap-1"><span className="w-4.5 h-4.5 rounded-full bg-slate-700 inline-block" /> Alto TCO</span>
+                            <span className="text-slate-300">|</span>
+                            <span className="flex items-center gap-1 font-semibold text-amber-800 bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                              <span className="w-3.5 h-3.5 rounded-full bg-amber-400 flex items-center justify-center text-slate-950 font-black">
+                                <Zap className="w-2 h-2 fill-slate-950 text-slate-950" />
+                              </span>
+                              {t.apm.overrideLegend}
+                            </span>
                           </div>
                         </div>
 
@@ -1822,7 +1956,7 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                               <button
                                 type="button"
                                 onClick={() => handleOpenElementDetail(b.app.id)}
-                                className={`rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 transform group-hover:scale-115 group-hover:shadow-xl focus:outline-none focus:ring-4 ${
+                                className={`relative rounded-full flex flex-col items-center justify-center cursor-pointer transition-all duration-200 transform group-hover:scale-115 group-hover:shadow-xl focus:outline-none focus:ring-4 ${
                                   b.quadrant === 'Invest'
                                     ? 'bg-emerald-600/95 hover:bg-emerald-500 text-white border-2 border-emerald-300 shadow-md ring-2 ring-emerald-500/30'
                                     : b.quadrant === 'Tolerate'
@@ -1837,6 +1971,18 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                                 }}
                                 aria-label={`${b.shortName} (${b.appCode})`}
                               >
+                                {b.hasOverride && (
+                                  <span
+                                    className="absolute -top-1 -right-1 z-30 flex items-center justify-center w-5 h-5 rounded-full bg-amber-400 text-slate-950 shadow-md ring-2 ring-white border border-amber-500 font-black animate-pulse"
+                                    title={interpolate(t.apm.overrideDetail, {
+                                      calculated: b.calculatedQuadrant,
+                                      bFit: String(b.bFit),
+                                      tFit: String(b.tFit)
+                                    })}
+                                  >
+                                    <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                                  </span>
+                                )}
                                 <span className="font-extrabold text-[10px] leading-tight px-1 text-center truncate max-w-full select-none">
                                   {b.shortName}
                                 </span>
@@ -1848,23 +1994,51 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                               </button>
 
                               {/* Rich Hover Floating Tooltip */}
-                              <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-slate-950/95 text-white border border-slate-700/80 rounded-xl p-3 shadow-2xl z-50 min-w-[250px] max-w-[320px] pointer-events-none backdrop-blur-md">
+                              <div className="absolute bottom-[calc(100%+8px)] left-1/2 -translate-x-1/2 hidden group-hover:flex flex-col bg-slate-950/95 text-white border border-slate-700/80 rounded-xl p-3 shadow-2xl z-50 min-w-[260px] max-w-[340px] pointer-events-none backdrop-blur-md">
                                 <div className="flex items-center justify-between gap-2 border-b border-slate-800 pb-1.5 mb-1.5">
                                   <span className="px-1.5 py-0.5 rounded font-mono text-[10px] font-black bg-indigo-500/30 text-indigo-300 border border-indigo-400/30">
                                     {b.appCode}
                                   </span>
-                                  <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                                    b.quadrant === 'Invest' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
-                                    b.quadrant === 'Tolerate' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
-                                    b.quadrant === 'Migrate' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
-                                    'bg-rose-950 text-rose-300 border border-rose-800'
-                                  }`}>
-                                    {b.quadrant}
-                                  </span>
+                                  <div className="flex items-center gap-1.5">
+                                    {b.hasOverride && (
+                                      <span className="flex items-center gap-0.5 text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-400 text-slate-950">
+                                        <Zap className="w-2.5 h-2.5 fill-slate-950 text-slate-950" />
+                                        {t.apm.overrideBadge}
+                                      </span>
+                                    )}
+                                    <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                      b.quadrant === 'Invest' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800' :
+                                      b.quadrant === 'Tolerate' ? 'bg-blue-950 text-blue-300 border border-blue-800' :
+                                      b.quadrant === 'Migrate' ? 'bg-amber-950 text-amber-300 border border-amber-800' :
+                                      'bg-rose-950 text-rose-300 border border-rose-800'
+                                    }`}>
+                                      {b.quadrant}
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="text-xs font-black text-slate-100 leading-snug">{b.app.name}</div>
                                 <div className="text-[11px] text-slate-400 mt-0.5">Nome Breve: <span className="text-slate-200 font-bold">{b.shortName}</span></div>
-                                <div className="mt-2 space-y-1 text-[11px] border-t border-slate-800/80 pt-1.5">
+
+                                {b.hasOverride && (
+                                  <div className="bg-amber-500/20 border border-amber-400/40 rounded-lg p-2 my-2 text-[10px] space-y-1">
+                                    <div className="flex items-center gap-1.5 font-black text-amber-300 uppercase tracking-wider">
+                                      <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
+                                      <span>{t.apm.overrideStrategic}</span>
+                                    </div>
+                                    <div className="text-amber-100 font-medium leading-tight">
+                                      {interpolate(t.apm.overrideDetail, {
+                                        calculated: b.calculatedQuadrant,
+                                        bFit: String(b.bFit),
+                                        tFit: String(b.tFit)
+                                      })}
+                                    </div>
+                                    <div className="text-amber-200/70 text-[9px] italic">
+                                      {t.apm.overrideTooltip}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="mt-1 space-y-1 text-[11px] border-t border-slate-800/80 pt-1.5">
                                   <div className="flex items-center justify-between">
                                     <span className="text-slate-400">TCO Annuo:</span>
                                     <span className="font-mono font-bold text-amber-300">{formatEUR(b.cost)}</span>
@@ -2615,12 +2789,37 @@ export const FrameworkInsights: React.FC<FrameworkInsightsProps> = ({
                                   Eliminate: 'bg-rose-50 text-rose-800 border-rose-200'
                                 };
                                 const qVal = String(val || '');
+                                const bFit = Number(row.business_fit_score) || (row.apm_functional_fit ? parseInt(String(row.apm_functional_fit)[0], 10) : 3) || 3;
+                                const tFit = Number(row.technical_fit_score) || (row.apm_technical_fit ? parseInt(String(row.apm_technical_fit)[0], 10) : 3) || 3;
+                                const calcQ = (bFit >= 2.5 && tFit >= 2.5) ? 'Invest' : (bFit >= 2.5 && tFit < 2.5) ? 'Tolerate' : (bFit < 2.5 && tFit >= 2.5) ? 'Migrate' : 'Eliminate';
+                                const overrideVal = row.apm_time_quadrant_override || row.time_quadrant_override;
+                                const isRowOverride = Boolean(
+                                  (overrideVal && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(overrideVal) && overrideVal !== calcQ) ||
+                                  (qVal && ['Invest', 'Tolerate', 'Migrate', 'Eliminate'].includes(qVal) && qVal !== calcQ)
+                                );
+
                                 return (
                                   <td key={col.field} className="px-4 py-3">
                                     {qVal ? (
-                                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${qColor[qVal] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
-                                        {qVal}
-                                      </span>
+                                      <div className="flex flex-col gap-1 items-start">
+                                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold border ${qColor[qVal] || 'bg-slate-100 text-slate-700 border-slate-200'}`}>
+                                          {qVal}
+                                        </span>
+                                        {isRowOverride && col.field === 'computed_time_quadrant' && (
+                                          <span
+                                            className="inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-[9px] font-bold bg-amber-50 text-amber-800 border border-amber-300 shadow-2xs"
+                                            title={interpolate(t.apm.overrideDetail, {
+                                              calculated: calcQ,
+                                              bFit: String(bFit),
+                                              tFit: String(tFit)
+                                            })}
+                                          >
+                                            <Zap className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                                            <span>{t.apm.overrideBadge}</span>
+                                            <span className="opacity-75 font-normal">({calcQ})</span>
+                                          </span>
+                                        )}
+                                      </div>
                                     ) : (
                                       <span className="text-slate-300">—</span>
                                     )}

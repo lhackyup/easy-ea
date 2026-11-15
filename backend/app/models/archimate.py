@@ -98,6 +98,13 @@ class ApplicationBusinessAttributes(Base):
     technical_fit = Column(Integer, default=3) # 1 (Poor) to 5 (Excellent)
     time_quadrant = Column(String, default="Tolerate") # Tolerate, Invest, Migrate, Eliminate
     annual_cost = Column(Float, default=0.0) # in Euros/USD
+    cost_software_licenses = Column(Float, default=0.0)
+    cost_cloud_infrastructure = Column(Float, default=0.0)
+    cost_vendor_maintenance = Column(Float, default=0.0)
+    cost_internal_labor = Column(Float, default=0.0)
+    active_users = Column(Integer, default=0)
+    capex_ratio = Column(Float, default=0.0) # 0.0 to 100.0 (% CAPEX vs OPEX)
+    cost_center = Column(String, nullable=True)
     business_criticality = Column(String, default="Business Operational") # Mission Critical, Business Critical, Business Operational, Administrative
     lifecycle_status = Column(String, default="Live") # Plan, Evaluation, Live, Phase-out, Retired
     business_owner = Column(String, nullable=True)

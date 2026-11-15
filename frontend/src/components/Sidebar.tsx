@@ -27,6 +27,7 @@ import {
   ChevronDown,
   Table as TableIcon,
   ShieldAlert,
+  Coins,
   PieChart,
   Grid,
   Settings,
@@ -38,13 +39,18 @@ import {
   BookmarkCheck,
   FolderGit2,
   Scale,
-  ScrollText
+  ScrollText,
+  TrendingUp,
+  Clock,
+  Network
 } from 'lucide-react';
 
 interface SidebarProps {
   activeHub: MainHub;
   businessTab: BusinessSubTab;
   onSelectBusinessTab: (tab: BusinessSubTab) => void;
+  apmTab?: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle';
+  onSelectApmTab?: (tab: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle') => void;
   architectureTab: ArchitectureSubTab;
   onSelectArchitectureTab: (tab: ArchitectureSubTab) => void;
   adminTab: AdminSubTab;
@@ -61,6 +67,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   activeHub,
   businessTab,
   onSelectBusinessTab,
+  apmTab = 'catalog',
+  onSelectApmTab,
   architectureTab,
   onSelectArchitectureTab,
   adminTab,
@@ -74,6 +82,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { t } = useLanguage();
   const [expandedPackages, setExpandedPackages] = useState<Record<string, boolean>>({});
+  const [isApmExpanded, setIsApmExpanded] = useState<boolean>(true);
 
   const togglePackageExpand = (pkgId: string) => {
     setExpandedPackages((prev) => ({
@@ -129,11 +138,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Layers
     },
     {
-      id: 'tech_risk' as BusinessSubTab,
-      label: t.subtabs.techRiskRadar,
-      icon: ShieldAlert
-    },
-    {
       id: 'overlap' as BusinessSubTab,
       label: t.subtabs.functionalOverlap,
       icon: GitMerge
@@ -142,6 +146,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'processes' as BusinessSubTab,
       label: t.subtabs.processLineage,
       icon: Workflow
+    }
+  ];
+
+  const apmSubItems = [
+    {
+      id: 'catalog' as const,
+      label: t.apm.tabCatalog,
+      icon: Layers
+    },
+    {
+      id: 'interfaces' as const,
+      label: t.apm.tabInterfaces,
+      icon: Network
+    },
+    {
+      id: 'portfolio' as const,
+      label: t.apm.tabGartnerTime,
+      icon: TrendingUp
+    },
+    {
+      id: 'tech_risk' as const,
+      label: t.apm.tabTechRisk,
+      icon: ShieldAlert
+    },
+    {
+      id: 'tco' as const,
+      label: t.apm.tabTcoBreakdown,
+      icon: Coins
+    },
+    {
+      id: 'lifecycle' as const,
+      label: t.apm.tabLifecycle,
+      icon: Clock
     }
   ];
 
@@ -174,9 +211,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const businessPackages = packagesWithViews
+    .filter((p) => p.id !== 'pkg-apm' && p.code !== 'APM')
     .map((p) => ({
       ...p,
-      views: (p.views || []).filter((v) => (v.target_hub || 'business') === 'business' || v.target_hub === 'both')
+      views: (p.views || []).filter(
+        (v) => (v.target_hub || 'business') === 'business' || v.target_hub === 'both'
+      )
     }))
     .filter((p) => p.views.length > 0);
 
@@ -270,6 +310,83 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {businessItems.map((item) => {
                 const Icon = item.icon;
                 const isActive = businessTab === item.id;
+
+                if (item.id === 'apm') {
+                  const isApmActive = businessTab === 'apm';
+                  return (
+                    <div key="apm" className="space-y-0.5">
+                      <div
+                        className={`w-full flex items-center justify-between rounded-xl text-xs font-bold transition-all duration-150 ${
+                          isCollapsed ? 'justify-center p-2.5' : 'px-3 py-2'
+                        } ${
+                          isApmActive
+                            ? 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/25 ring-1 ring-indigo-500/20'
+                            : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/70'
+                        }`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onSelectBusinessTab('apm');
+                            if (!isCollapsed && !isApmExpanded) {
+                              setIsApmExpanded(true);
+                            }
+                          }}
+                          title={isCollapsed ? item.label : undefined}
+                          className="flex items-center space-x-2.5 min-w-0 flex-1 text-left"
+                        >
+                          <Icon className={`shrink-0 w-4 h-4 ${isApmActive ? 'text-white' : 'text-slate-500'}`} />
+                          {!isCollapsed && <span className="truncate">{item.label}</span>}
+                        </button>
+                        {!isCollapsed && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsApmExpanded(!isApmExpanded);
+                            }}
+                            className="p-0.5 rounded hover:bg-white/20 text-current transition shrink-0 ml-1"
+                            title={isApmExpanded ? 'Comprimi' : 'Espandi'}
+                          >
+                            <ChevronDown
+                              className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                isApmExpanded ? 'rotate-180' : ''
+                              }`}
+                            />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* APM 3 Sub-tabs in Sidebar */}
+                      {!isCollapsed && isApmExpanded && (
+                        <div className="pl-3 pr-1 space-y-0.5 border-l-2 border-indigo-200 ml-3.5 my-1">
+                          {apmSubItems.map((sub) => {
+                            const SubIcon = sub.icon;
+                            const isSubActive = isApmActive && apmTab === sub.id;
+                            return (
+                              <button
+                                key={sub.id}
+                                onClick={() => {
+                                  onSelectBusinessTab('apm');
+                                  onSelectApmTab?.(sub.id);
+                                }}
+                                className={`w-full flex items-center space-x-2 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                                  isSubActive
+                                    ? 'bg-indigo-50 text-indigo-700 font-bold border border-indigo-200/80 shadow-2xs'
+                                    : 'text-slate-600 hover:text-indigo-600 hover:bg-indigo-50/50'
+                                }`}
+                              >
+                                <SubIcon className={`w-3.5 h-3.5 shrink-0 ${isSubActive ? 'text-indigo-600' : 'text-slate-400'}`} />
+                                <span className="truncate">{sub.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 return (
                   <button
                     key={item.id}

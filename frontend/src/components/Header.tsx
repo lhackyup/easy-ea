@@ -30,7 +30,6 @@ import {
   Package,
   LogOut,
   Shield,
-  ShieldAlert,
   User as UserIcon,
   KeyRound,
   Bot,
@@ -300,18 +299,6 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Layers className="w-3.5 h-3.5" />
                 <span>{t.subtabs.applicationPortfolio}</span>
-              </button>
-
-              <button
-                onClick={() => onSelectBusinessTab('tech_risk')}
-                className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
-                  businessTab === 'tech_risk'
-                    ? 'bg-indigo-600 text-white shadow-sm'
-                    : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/60'
-                }`}
-              >
-                <ShieldAlert className="w-3.5 h-3.5" />
-                <span>{t.subtabs.techRiskRadar}</span>
               </button>
 
               <button

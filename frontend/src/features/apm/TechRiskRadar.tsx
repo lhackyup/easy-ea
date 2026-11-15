@@ -30,7 +30,7 @@ interface TechRiskRadarProps {
 }
 
 export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
-  const { language } = useLanguage();
+  const { t, language, interpolate } = useLanguage();
   const [data, setData] = useState<TechRiskAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,7 +100,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
       <div className="flex items-center justify-center h-96">
         <div className="flex flex-col items-center space-y-3">
           <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          <p className="text-xs text-slate-500 font-medium">Analisi del Rischio di Obsolescenza Tecnologica in corso...</p>
+          <p className="text-xs text-slate-500 font-medium">{t.apm.techRiskLoading}</p>
         </div>
       </div>
     );
@@ -110,13 +110,13 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
     return (
       <div className="bg-rose-50 border border-rose-200 rounded-2xl p-6 text-center">
         <AlertTriangle className="w-8 h-8 text-rose-500 mx-auto mb-2" />
-        <h4 className="text-sm font-bold text-rose-800">Errore durante il caricamento dell'analisi</h4>
-        <p className="text-xs text-rose-600 mt-1">{error || 'Dati non disponibili'}</p>
+        <h4 className="text-sm font-bold text-rose-800">{t.apm.techRiskErrorLoading}</h4>
+        <p className="text-xs text-rose-600 mt-1">{error || t.apm.techRiskDataUnavailable}</p>
         <button
           onClick={loadData}
           className="mt-4 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl transition"
         >
-          Riprova
+          {t.apm.techRiskRetry}
         </button>
       </div>
     );
@@ -138,29 +138,29 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
   const getRiskBadge = (level: string) => {
     switch (level) {
       case 'Critical':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">🔴 Critical (EOL)</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-rose-100 text-rose-800 border border-rose-200">{t.apm.techRiskBadgeCriticalEol}</span>;
       case 'High':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">🟠 High Risk</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-200">{t.apm.techRiskBadgeHighRisk}</span>;
       case 'Medium':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-yellow-100 text-yellow-800 border border-yellow-200">🟡 Medium Risk</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-yellow-100 text-yellow-800 border border-yellow-200">{t.apm.techRiskBadgeMediumRisk}</span>;
       case 'Low':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">🟢 Low / Supported</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200">{t.apm.techRiskBadgeLowSupported}</span>;
       default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">⚪ Unassessed</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-slate-100 text-slate-600 border border-slate-200">{t.apm.techRiskBadgeUnassessed}</span>;
     }
   };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'End of Life / Obsolete':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">End-of-Life</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">{t.apm.techRiskBadgeEol}</span>;
       case 'Extended Support':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">Extended Support</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800">{t.apm.techRiskBadgeExtendedSupport}</span>;
       case 'Approaching EOL':
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-800">Scadenza &lt; 6 mesi</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-yellow-100 text-yellow-800">{t.apm.techRiskStatusApproaching}</span>;
       case 'Supported':
       default:
-        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">Supported</span>;
+        return <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">{t.apm.techRiskBadgeSupported}</span>;
     }
   };
 
@@ -171,7 +171,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
         {/* High/Critical Risk Percentage */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm relative overflow-hidden">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Applicazioni a Rischio EOL</span>
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.apm.techRiskAppsAtRisk}</span>
             <div className={`p-2.5 rounded-xl border ${summary.high_critical_risk_pct > 30 ? 'bg-rose-50 text-rose-600 border-rose-100' : 'bg-emerald-50 text-emerald-600 border-emerald-100'}`}>
               <ShieldAlert className="w-5 h-5" />
             </div>
@@ -179,10 +179,10 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
           <div className="mt-3 flex items-baseline space-x-2">
             <span className="text-2xl font-black text-slate-900">{summary.high_critical_risk_pct}%</span>
             <span className="text-xs font-semibold text-slate-500">
-              ({summary.risk_distribution.Critical + summary.risk_distribution.High} di {summary.assessed_applications} valutate)
+              {interpolate(t.apm.techRiskAppsAtRiskDetail, { count: summary.risk_distribution.Critical + summary.risk_distribution.High, total: summary.assessed_applications })}
             </span>
           </div>
-          <p className="text-[11px] text-slate-500 mt-1">App con almeno un componente obsoleto o fuori supporto</p>
+          <p className="text-[11px] text-slate-500 mt-1">{t.apm.techRiskAppsAtRiskDesc}</p>
         </div>
 
         {/* DORA Violations */}
@@ -193,39 +193,39 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
           }`}
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">Alert DORA / NIS2</span>
+            <span className="text-xs font-bold text-rose-700 uppercase tracking-wider">{t.apm.techRiskDoraAlerts}</span>
             <span className="px-2 py-0.5 text-xs font-black rounded-full bg-rose-100 text-rose-800 border border-rose-200">
-              {summary.dora_compliance_alerts_count} Violazioni
+              {interpolate(t.apm.techRiskDoraViolations, { count: summary.dora_compliance_alerts_count })}
             </span>
           </div>
           <div className="mt-3 text-2xl font-black text-rose-900">
-            {summary.dora_compliance_alerts_count > 0 ? `${summary.dora_compliance_alerts_count} App Critiche` : 'Nessuna'}
+            {summary.dora_compliance_alerts_count > 0 ? interpolate(t.apm.techRiskDoraCriticalApps, { count: summary.dora_compliance_alerts_count }) : t.apm.techRiskDoraNone}
           </div>
-          <p className="text-[11px] text-rose-700 mt-1">Sistemi Mission/Business Critical su software EOL</p>
+          <p className="text-[11px] text-rose-700 mt-1">{t.apm.techRiskDoraDesc}</p>
         </div>
 
         {/* Obsolete Technologies Count */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">Tecnologie EOL Attive</span>
+            <span className="text-xs font-bold text-amber-700 uppercase tracking-wider">{t.apm.techRiskEolActive}</span>
             <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200">
-              {summary.obsolete_technologies_count} su {summary.total_technologies}
+              {interpolate(t.apm.techRiskEolActiveDetail, { count: summary.obsolete_technologies_count, total: summary.total_technologies })}
             </span>
           </div>
-          <div className="mt-3 text-2xl font-black text-slate-900">{summary.obsolete_technologies_count} Prodotti EOL</div>
-          <p className="text-[11px] text-slate-500 mt-1">Componenti software/infrastruttura privi di patch</p>
+          <div className="mt-3 text-2xl font-black text-slate-900">{interpolate(t.apm.techRiskEolActiveProducts, { count: summary.obsolete_technologies_count })}</div>
+          <p className="text-[11px] text-slate-500 mt-1">{t.apm.techRiskEolActiveDesc}</p>
         </div>
 
         {/* Approaching EOL */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">Scadenza EOL &lt; 12 Mesi</span>
+            <span className="text-xs font-bold text-blue-700 uppercase tracking-wider">{t.apm.techRiskApproachingEol}</span>
             <div className="p-2.5 bg-blue-50 rounded-xl text-blue-600 border border-blue-100">
               <Clock className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-slate-900">{summary.approaching_eol_count} Prodotti</div>
-          <p className="text-[11px] text-slate-500 mt-1">Richiedono migrazione o rinnovo contrattuale</p>
+          <div className="mt-3 text-2xl font-black text-slate-900">{interpolate(t.apm.techRiskApproachingEolProducts, { count: summary.approaching_eol_count })}</div>
+          <p className="text-[11px] text-slate-500 mt-1">{t.apm.techRiskApproachingEolDesc}</p>
         </div>
       </div>
 
@@ -239,17 +239,17 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             <div className="flex-1">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <h4 className="text-sm font-extrabold text-rose-950 flex items-center gap-2">
-                  <span>Conformità DORA (Art. 7 / 8) & Sicurezza ICT: Violazioni Rilevate</span>
+                  <span>{t.apm.techRiskDoraBannerHeader}</span>
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-rose-200 text-rose-900">
-                    Azione Immediata Richiesta
+                    {t.apm.techRiskDoraActionRequired}
                   </span>
                 </h4>
                 <span className="text-xs font-semibold text-rose-700">
-                  {dora_compliance_alerts.length} Applicazioni ad Alta Criticità esposte a debito tecnologico
+                  {interpolate(t.apm.techRiskDoraCriticalAppsExposed, { count: dora_compliance_alerts.length })}
                 </span>
               </div>
               <p className="text-xs text-rose-800 mt-1">
-                Le seguenti applicazioni di livello <strong>Mission Critical</strong> o <strong>Business Critical</strong> dipendono direttamente da componenti software con supporto terminato (End-of-Life). Questo configura un rischio operativo severo e una violazione delle direttive di resilienza operativa digitale (DORA / NIS2).
+                {t.apm.techRiskDoraDetailedExplanation}
               </p>
 
               <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -262,11 +262,11 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                       </span>
                     </div>
                     <div className="mt-2 text-[11px] text-rose-700">
-                      <strong>Stack Obsoleto:</strong> {alert.obsolete_components.join(', ')}
+                      <strong>{t.apm.techRiskObsoleteStack}</strong> {alert.obsolete_components.join(', ')}
                     </div>
                     <div className="mt-2 pt-2 border-t border-rose-100 flex items-center justify-between text-[11px] text-slate-500">
-                      <span>Owner: {alert.business_owner}</span>
-                      <span className="font-semibold text-slate-700">TCO: {formatEUR(alert.annual_cost)}</span>
+                      <span>{t.apm.techRiskOwner} {alert.business_owner}</span>
+                      <span className="font-semibold text-slate-700">{t.apm.techRiskTco} {formatEUR(alert.annual_cost)}</span>
                     </div>
                   </div>
                 ))}
@@ -286,7 +286,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Matrice Criticità vs Rischio</span>
+            <span>{t.apm.techRiskSubtabMatrix}</span>
           </button>
           <button
             onClick={() => setActiveSubTab('timeline')}
@@ -295,7 +295,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
-            <span>Horizon EOL Timeline</span>
+            <span>{t.apm.techRiskSubtabTimeline}</span>
           </button>
           <button
             onClick={() => setActiveSubTab('blast_radius')}
@@ -304,7 +304,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             }`}
           >
             <Cpu className="w-3.5 h-3.5" />
-            <span>Blast Radius Tecnologie ({technology_blast_radius.length})</span>
+            <span>{interpolate(t.apm.techRiskSubtabBlastRadius, { count: technology_blast_radius.length })}</span>
           </button>
           <button
             onClick={() => setActiveSubTab('apps')}
@@ -313,7 +313,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Dettaglio Applicazioni ({applications.length})</span>
+            <span>{interpolate(t.apm.techRiskSubtabApps, { count: applications.length })}</span>
           </button>
         </div>
 
@@ -322,7 +322,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
           className="flex items-center space-x-1 text-xs font-semibold text-slate-500 hover:text-indigo-600 transition px-2.5 py-1 rounded-lg hover:bg-slate-100"
         >
           <RefreshCw className="w-3.5 h-3.5" />
-          <span>Aggiorna Dati</span>
+          <span>{t.apm.techRiskBtnRefresh}</span>
         </button>
       </div>
 
@@ -332,15 +332,15 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <span>Matrice di Esposizione: Criticità di Business vs Rischio Tecnologico</span>
+                <span>{t.apm.techRiskMatrixTitle}</span>
               </h3>
               <p className="text-xs text-slate-500">
-                Incrocio strategico tra l'impatto sul business e il livello di obsolescenza dello stack software sottostante.
+                {t.apm.techRiskMatrixSubtitle}
               </p>
             </div>
             <div className="flex items-center space-x-2 text-xs font-bold">
-              <span className="flex items-center gap-1 text-rose-700"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> Zona Rossa (DORA Violation)</span>
-              <span className="flex items-center gap-1 text-emerald-700"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Zona Sicura</span>
+              <span className="flex items-center gap-1 text-rose-700"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> {t.apm.techRiskMatrixRedZone}</span>
+              <span className="flex items-center gap-1 text-emerald-700"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> {t.apm.techRiskMatrixSafeZone}</span>
             </div>
           </div>
 
@@ -350,19 +350,19 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               <thead>
                 <tr>
                   <th className="p-3 text-left text-xs font-extrabold text-slate-400 uppercase tracking-wider bg-slate-50 border border-slate-200 rounded-tl-xl w-1/5">
-                    Criticità Business \ Rischio Tech
+                    {t.apm.techRiskMatrixAxisHeader}
                   </th>
                   <th className="p-3 text-xs font-extrabold text-rose-800 bg-rose-50 border border-slate-200 w-1/5">
-                    🔴 Critical (EOL)
+                    {t.apm.techRiskMatrixColCritical}
                   </th>
                   <th className="p-3 text-xs font-extrabold text-amber-800 bg-amber-50 border border-slate-200 w-1/5">
-                    🟠 High (Extended Support)
+                    {t.apm.techRiskMatrixColHigh}
                   </th>
                   <th className="p-3 text-xs font-extrabold text-yellow-800 bg-yellow-50 border border-slate-200 w-1/5">
-                    🟡 Medium (&lt; 6-12m)
+                    {t.apm.techRiskMatrixColMedium}
                   </th>
                   <th className="p-3 text-xs font-extrabold text-emerald-800 bg-emerald-50 border border-slate-200 rounded-tr-xl w-1/5">
-                    🟢 Low (Supported)
+                    {t.apm.techRiskMatrixColLow}
                   </th>
                 </tr>
               </thead>
@@ -384,7 +384,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                           : 'text-slate-300'
                       }`}
                     >
-                      {criticality_vs_risk_matrix[crit]['Critical']} App
+                      {interpolate(t.apm.techRiskMatrixCountApp, { count: criticality_vs_risk_matrix[crit]['Critical'] })}
                     </td>
 
                     {/* High Column */}
@@ -394,7 +394,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                         criticality_vs_risk_matrix[crit]['High'] > 0 ? 'bg-amber-100 text-amber-900' : 'text-slate-300'
                       }`}
                     >
-                      {criticality_vs_risk_matrix[crit]['High']} App
+                      {interpolate(t.apm.techRiskMatrixCountApp, { count: criticality_vs_risk_matrix[crit]['High'] })}
                     </td>
 
                     {/* Medium Column */}
@@ -404,7 +404,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                         criticality_vs_risk_matrix[crit]['Medium'] > 0 ? 'bg-yellow-100 text-yellow-900' : 'text-slate-300'
                       }`}
                     >
-                      {criticality_vs_risk_matrix[crit]['Medium']} App
+                      {interpolate(t.apm.techRiskMatrixCountApp, { count: criticality_vs_risk_matrix[crit]['Medium'] })}
                     </td>
 
                     {/* Low Column */}
@@ -414,7 +414,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                         criticality_vs_risk_matrix[crit]['Low'] > 0 ? 'bg-emerald-100 text-emerald-900' : 'text-slate-300'
                       }`}
                     >
-                      {criticality_vs_risk_matrix[crit]['Low']} App
+                      {interpolate(t.apm.techRiskMatrixCountApp, { count: criticality_vs_risk_matrix[crit]['Low'] })}
                     </td>
                   </tr>
                 ))}
@@ -427,10 +427,10 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             <Info className="w-4 h-4 text-slate-500 mt-0.5 flex-shrink-0" />
             <div className="text-xs text-slate-600 space-y-1">
               <p>
-                <strong>Come viene calcolato il rischio:</strong> EasyEA analizza il grafo ArchiMate risalendo dai nodi infrastrutturali (<code>Node</code>) e dal software di sistema (<code>SystemSoftware</code>) verso l'applicazione (<code>ApplicationComponent</code>).
+                <strong>{t.apm.techRiskHowCalculatedTitle}</strong> {t.apm.techRiskHowCalculatedP1}
               </p>
               <p>
-                Se anche un solo componente core è fuori supporto (EOL), l'applicazione eredita il livello <strong>Critical</strong>. Se l'applicazione è <em>Mission Critical</em>, scatta l'allerta di non conformità DORA.
+                {t.apm.techRiskHowCalculatedP2}
               </p>
             </div>
           </div>
@@ -442,9 +442,9 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
         <div className="space-y-6">
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Horizon EOL Timeline (Radar delle Scadenze Temporali)</h3>
+              <h3 className="text-base font-bold text-slate-900">{t.apm.techRiskTimelineTitle}</h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Proiezione temporale dei rilasci e della perdita di supporto vendor per lo stack tecnologico aziendale.
+                {t.apm.techRiskTimelineSubtitle}
               </p>
             </div>
 
@@ -452,7 +452,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               {/* Expired Column */}
               <div className="bg-rose-50/60 border border-rose-200 rounded-2xl p-4 flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-rose-200">
-                  <span className="text-xs font-black text-rose-900 uppercase tracking-wider">🔴 Già Scaduti (EOL)</span>
+                  <span className="text-xs font-black text-rose-900 uppercase tracking-wider">{t.apm.techRiskTimelineExpired}</span>
                   <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-rose-200 text-rose-900">
                     {eol_timeline_horizon.already_expired.length}
                   </span>
@@ -473,10 +473,10 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                           <Edit2 className="w-3 h-3" />
                         </button>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1">Vendor: {tech.vendor} | {tech.version}</div>
+                      <div className="text-[11px] text-slate-500 mt-1">{interpolate(t.apm.techRiskTimelineVendor, { vendor: tech.vendor, version: tech.version })}</div>
                       <div className="mt-2 text-[11px] text-rose-700 font-bold flex items-center justify-between">
-                        <span>EOL: {tech.eol_date}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-rose-100">{tech.impacted_applications_count} App</span>
+                        <span>{interpolate(t.apm.techRiskTimelineEol, { date: tech.eol_date })}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-rose-100">{interpolate(t.apm.techRiskTimelineImpactedApps, { count: tech.impacted_applications_count })}</span>
                       </div>
                     </div>
                   ))}
@@ -486,7 +486,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               {/* Expiring 6 Months */}
               <div className="bg-amber-50/60 border border-amber-200 rounded-2xl p-4 flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-amber-200">
-                  <span className="text-xs font-black text-amber-900 uppercase tracking-wider">🟡 Entro 6 Mesi</span>
+                  <span className="text-xs font-black text-amber-900 uppercase tracking-wider">{t.apm.techRiskTimeline6Months}</span>
                   <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-amber-200 text-amber-900">
                     {eol_timeline_horizon.expiring_6_months.length}
                   </span>
@@ -507,15 +507,15 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                           <Edit2 className="w-3 h-3" />
                         </button>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1">Vendor: {tech.vendor} | {tech.version}</div>
+                      <div className="text-[11px] text-slate-500 mt-1">{interpolate(t.apm.techRiskTimelineVendor, { vendor: tech.vendor, version: tech.version })}</div>
                       <div className="mt-2 text-[11px] text-amber-800 font-bold flex items-center justify-between">
-                        <span>EOL: {tech.eol_date}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-amber-100">{tech.impacted_applications_count} App</span>
+                        <span>{interpolate(t.apm.techRiskTimelineEol, { date: tech.eol_date })}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-amber-100">{interpolate(t.apm.techRiskTimelineImpactedApps, { count: tech.impacted_applications_count })}</span>
                       </div>
                     </div>
                   ))}
                   {eol_timeline_horizon.expiring_6_months.length === 0 && (
-                    <p className="text-xs text-slate-400 italic text-center py-6">Nessuna scadenza a 6 mesi</p>
+                    <p className="text-xs text-slate-400 italic text-center py-6">{t.apm.techRiskTimelineNoExpiring6}</p>
                   )}
                 </div>
               </div>
@@ -523,7 +523,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               {/* Expiring 12 Months */}
               <div className="bg-yellow-50/60 border border-yellow-200 rounded-2xl p-4 flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-yellow-200">
-                  <span className="text-xs font-black text-yellow-900 uppercase tracking-wider">🔵 Entro 12 Mesi</span>
+                  <span className="text-xs font-black text-yellow-900 uppercase tracking-wider">{t.apm.techRiskTimeline12Months}</span>
                   <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-yellow-200 text-yellow-900">
                     {eol_timeline_horizon.expiring_12_months.length}
                   </span>
@@ -544,10 +544,10 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                           <Edit2 className="w-3 h-3" />
                         </button>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1">Vendor: {tech.vendor} | {tech.version}</div>
+                      <div className="text-[11px] text-slate-500 mt-1">{interpolate(t.apm.techRiskTimelineVendor, { vendor: tech.vendor, version: tech.version })}</div>
                       <div className="mt-2 text-[11px] text-yellow-800 font-bold flex items-center justify-between">
-                        <span>EOL: {tech.eol_date}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-yellow-100">{tech.impacted_applications_count} App</span>
+                        <span>{interpolate(t.apm.techRiskTimelineEol, { date: tech.eol_date })}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-yellow-100">{interpolate(t.apm.techRiskTimelineImpactedApps, { count: tech.impacted_applications_count })}</span>
                       </div>
                     </div>
                   ))}
@@ -557,7 +557,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               {/* Supported / Beyond 24 Months */}
               <div className="bg-emerald-50/60 border border-emerald-200 rounded-2xl p-4 flex flex-col">
                 <div className="flex items-center justify-between pb-3 border-b border-emerald-200">
-                  <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">🟢 Supporto &gt; 24 Mesi</span>
+                  <span className="text-xs font-black text-emerald-900 uppercase tracking-wider">{t.apm.techRiskTimeline24Months}</span>
                   <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-emerald-200 text-emerald-900">
                     {eol_timeline_horizon.expiring_24_months_plus.length}
                   </span>
@@ -578,10 +578,10 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                           <Edit2 className="w-3 h-3" />
                         </button>
                       </div>
-                      <div className="text-[11px] text-slate-500 mt-1">Vendor: {tech.vendor} | {tech.version}</div>
+                      <div className="text-[11px] text-slate-500 mt-1">{interpolate(t.apm.techRiskTimelineVendor, { vendor: tech.vendor, version: tech.version })}</div>
                       <div className="mt-2 text-[11px] text-emerald-800 font-bold flex items-center justify-between">
-                        <span>EOL: {tech.eol_date}</span>
-                        <span className="px-1.5 py-0.2 rounded bg-emerald-100">{tech.impacted_applications_count} App</span>
+                        <span>{interpolate(t.apm.techRiskTimelineEol, { date: tech.eol_date })}</span>
+                        <span className="px-1.5 py-0.2 rounded bg-emerald-100">{interpolate(t.apm.techRiskTimelineImpactedApps, { count: tech.impacted_applications_count })}</span>
                       </div>
                     </div>
                   ))}
@@ -597,9 +597,9 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Catalogo Tecnologie &amp; Blast Radius</h3>
+              <h3 className="text-base font-bold text-slate-900">{t.apm.techRiskBlastRadiusTitle}</h3>
               <p className="text-xs text-slate-500">
-                Impatto complessivo di ciascun componente tecnologico: quante applicazioni ne dipendono e il loro valore economico a rischio.
+                {t.apm.techRiskBlastRadiusSubtitle}
               </p>
             </div>
           </div>
@@ -608,15 +608,15 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[11px] border-y border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Componente Tecnologico</th>
-                  <th className="py-3 px-4">Vendor &amp; Versione</th>
-                  <th className="py-3 px-4">Categoria</th>
-                  <th className="py-3 px-4">Stato EOL</th>
-                  <th className="py-3 px-4">Scadenza EOL</th>
-                  <th className="py-3 px-4 text-center">App Impattate</th>
-                  <th className="py-3 px-4">Criticità Max</th>
-                  <th className="py-3 px-4">Valore Economico a Rischio</th>
-                  <th className="py-3 px-4 text-right">Azioni</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColTechComponent}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColVendorVersion}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColCategory}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColEolStatus}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColEolExpiration}</th>
+                  <th className="py-3 px-4 text-center">{t.apm.techRiskColImpactedApps}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColMaxCriticality}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColEconomicValueAtRisk}</th>
+                  <th className="py-3 px-4 text-right">{t.apm.techRiskColActions}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -638,7 +638,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                       {getStatusBadge(tech.status)}
                     </td>
                     <td className="py-3 px-4 font-mono text-[11px]">
-                      {tech.eol_date || 'Non Definita'}
+                      {tech.eol_date || t.apm.techRiskEolUndefined}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className={`px-2 py-0.5 rounded-full font-bold text-xs ${
@@ -661,7 +661,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                       <button
                         onClick={(e) => handleEditTechClick(tech, e)}
                         className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-slate-100 rounded-lg transition"
-                        title="Modifica parametri ciclo di vita"
+                        title={t.apm.techRiskBtnEditLifecycle}
                       >
                         <Edit2 className="w-3.5 h-3.5" />
                       </button>
@@ -679,9 +679,9 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
         <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
             <div>
-              <h3 className="text-base font-bold text-slate-900">Inventario Rischio Tecnologico per Applicazione</h3>
+              <h3 className="text-base font-bold text-slate-900">{t.apm.techRiskAppsTitle}</h3>
               <p className="text-xs text-slate-500">
-                Punteggio di rischio calcolato e composizione dello stack per ciascuna applicazione.
+                {t.apm.techRiskAppsSubtitle}
               </p>
             </div>
 
@@ -691,7 +691,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type="text"
-                  placeholder="Cerca applicazione o tecnologia..."
+                  placeholder={t.apm.techRiskSearchPlaceholder}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 w-56"
@@ -703,7 +703,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                   onClick={() => setRiskFilter(null)}
                   className="px-2.5 py-1 text-xs font-bold bg-slate-100 text-slate-600 hover:bg-slate-200 rounded-xl flex items-center space-x-1"
                 >
-                  <span>Filtro: {riskFilter}</span>
+                  <span>{interpolate(t.apm.techRiskFilterActive, { riskFilter })}</span>
                   <XCircle className="w-3 h-3" />
                 </button>
               )}
@@ -714,14 +714,14 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
             <table className="w-full text-left text-xs text-slate-700">
               <thead className="bg-slate-50 text-slate-500 uppercase tracking-wider text-[11px] border-y border-slate-200">
                 <tr>
-                  <th className="py-3 px-4">Applicazione</th>
-                  <th className="py-3 px-4">Criticità</th>
-                  <th className="py-3 px-4">Rischio Tecnologico</th>
-                  <th className="py-3 px-4">Punteggio Rischio (0-100)</th>
-                  <th className="py-3 px-4">Componenti EOL</th>
-                  <th className="py-3 px-4">Stack Tecnologico Collegato</th>
-                  <th className="py-3 px-4">Prossima Scadenza EOL</th>
-                  <th className="py-3 px-4">Costo Annuo</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColApplication}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColCriticality}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColTechRisk}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColRiskScore}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColEolComponents}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColConnectedStack}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColNextEol}</th>
+                  <th className="py-3 px-4">{t.apm.techRiskColAnnualCost}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -785,7 +785,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                           </span>
                         ))}
                         {app.technologies.length === 0 && (
-                          <span className="text-[10px] text-slate-400 italic">Nessun componente collegato nel grafo</span>
+                          <span className="text-[10px] text-slate-400 italic">{t.apm.techRiskNoConnectedComponents}</span>
                         )}
                       </div>
                     </td>
@@ -809,7 +809,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
           <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-200">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-base font-extrabold text-slate-900">Modifica Ciclo di Vita Tecnologico</h3>
+                <h3 className="text-base font-extrabold text-slate-900">{t.apm.techRiskModalTitle}</h3>
                 <p className="text-xs text-slate-500">{editingTech.name} ({editingTech.type})</p>
               </div>
               <button
@@ -822,7 +822,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
 
             <div className="space-y-3 text-xs">
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Vendor / Fornitore</label>
+                <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelVendor}</label>
                 <input
                   type="text"
                   value={editForm.vendor || ''}
@@ -833,7 +833,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Versione / Release</label>
+                  <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelVersion}</label>
                   <input
                     type="text"
                     value={editForm.version || ''}
@@ -842,7 +842,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Categoria Architetturale</label>
+                  <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelCategory}</label>
                   <select
                     value={editForm.category || 'Database / RDBMS'}
                     onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}
@@ -862,22 +862,22 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Stato del Ciclo di Vita (Obsolescenza)</label>
+                <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelStatus}</label>
                 <select
                   value={editForm.status || 'Supported'}
                   onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
                   className="w-full px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 bg-white"
                 >
-                  <option value="Supported">Supported (Supporto Standard Attivo)</option>
-                  <option value="Approaching EOL">Approaching EOL (Scadenza entro 6-12 mesi)</option>
-                  <option value="Extended Support">Extended Support (Supporto a pagamento speciale)</option>
-                  <option value="End of Life / Obsolete">End of Life / Obsolete (Termine del Supporto)</option>
+                  <option value="Supported">{t.apm.techRiskModalStatusSupported}</option>
+                  <option value="Approaching EOL">{t.apm.techRiskModalStatusApproaching}</option>
+                  <option value="Extended Support">{t.apm.techRiskModalStatusExtended}</option>
+                  <option value="End of Life / Obsolete">{t.apm.techRiskModalStatusObsolete}</option>
                 </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Data EOL (End-of-Life)</label>
+                  <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelEol}</label>
                   <input
                     type="date"
                     value={editForm.eol_date || ''}
@@ -886,7 +886,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                   />
                 </div>
                 <div>
-                  <label className="font-bold text-slate-700 block mb-1">Data Fine Extended Support (EOES)</label>
+                  <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelEoes}</label>
                   <input
                     type="date"
                     value={editForm.eoes_date || ''}
@@ -897,7 +897,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
               </div>
 
               <div>
-                <label className="font-bold text-slate-700 block mb-1">Severità Vulnerabilità / CVE</label>
+                <label className="font-bold text-slate-700 block mb-1">{t.apm.techRiskModalLabelCve}</label>
                 <select
                   value={editForm.cve_risk || 'Low / Negligible'}
                   onChange={(e) => setEditForm({ ...editForm, cve_risk: e.target.value })}
@@ -916,7 +916,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                 onClick={() => setEditingTech(null)}
                 className="px-4 py-2 border border-slate-200 text-slate-600 hover:bg-slate-50 rounded-xl text-xs font-bold transition"
               >
-                Annulla
+                {t.apm.techRiskModalBtnCancel}
               </button>
               <button
                 onClick={handleSaveTechEdit}
@@ -928,7 +928,7 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                 ) : (
                   <Check className="w-4 h-4" />
                 )}
-                <span>Salva Modifiche</span>
+                <span>{t.apm.techRiskModalBtnSave}</span>
               </button>
             </div>
           </div>

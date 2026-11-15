@@ -17,7 +17,7 @@ import {
 
 interface ExecutiveOverviewProps {
   modelId: string;
-  onNavigateTab: (tab: 'apm' | 'tech_risk' | 'overlap' | 'processes') => void;
+  onNavigateTab: (tab: 'apm' | 'tech_risk' | 'tco' | 'overlap' | 'processes') => void;
 }
 
 export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, onNavigateTab }) => {
@@ -94,8 +94,11 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
 
       {/* Top 4 KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Cost */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+        {/* Total Cost / TCO */}
+        <div
+          onClick={() => onNavigateTab('tco')}
+          className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-indigo-400 hover:shadow-md transition"
+        >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.executive.totalItCost}</span>
             <div className="p-2.5 bg-indigo-50 rounded-xl text-indigo-600 border border-indigo-100">
@@ -103,8 +106,9 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
             </div>
           </div>
           <div className="mt-3 text-2xl font-black text-slate-900">{formatEUR(apm.total_annual_cost)}</div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {interpolate(t.executive.annualCostOnApps, { count: apm.total_applications })}
+          <p className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
+            <span>{interpolate(t.executive.annualCostOnApps, { count: apm.total_applications })}</span>
+            <ArrowUpRight className="w-3.5 h-3.5 text-indigo-600" />
           </p>
         </div>
 
