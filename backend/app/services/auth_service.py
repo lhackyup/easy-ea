@@ -398,6 +398,70 @@ def verify_password(password: str, hashed_value: str) -> bool:
         return False
 
 
+_TRIVIAL_PASSWORD_PATTERNS = {
+    "password", "password123", "admin123", "administrator", "root1234",
+    "easyea123", "welcome1", "welcome123", "letmein123", "changeme123",
+    "12345678", "123456789", "1234567890", "87654321", "qwertyui", "asdfghjk",
+    "zxcvbnm1", "iloveyou1"
+}
+
+
+def validate_password_complexity(
+    password: str,
+    username: Optional[str] = None,
+    email: Optional[str] = None
+) -> Tuple[bool, Optional[str]]:
+    """
+    Validate password complexity and entropy rules without requiring large external dictionaries.
+    Enforces OWASP ASVS 4.0 guidelines:
+    - Minimum length: 10 characters.
+    - Requires at least 1 uppercase letter (A-Z).
+    - Requires at least 1 lowercase letter (a-z).
+    - Requires at least 1 digit (0-9).
+    - Requires at least 1 special character / symbol.
+    - Requires at least 5 unique characters (entropy check).
+    - Rejects known trivial / compromised password sequences.
+    - Rejects passwords containing username or email local-part.
+    """
+    if not password:
+        return False, "Password cannot be empty."
+
+    if len(password) < 10:
+        return False, "Password must be at least 10 characters long."
+
+    if not any(c.isupper() for c in password):
+        return False, "Password must contain at least one uppercase letter (A-Z)."
+
+    if not any(c.islower() for c in password):
+        return False, "Password must contain at least one lowercase letter (a-z)."
+
+    if not any(c.isdigit() for c in password):
+        return False, "Password must contain at least one digit (0-9)."
+
+    if not any(not c.isalnum() for c in password):
+        return False, "Password must contain at least one special character or symbol."
+
+    if len(set(password)) < 5:
+        return False, "Password must contain at least 5 unique characters."
+
+    lower_pwd = password.lower()
+    for pattern in _TRIVIAL_PASSWORD_PATTERNS:
+        if pattern in lower_pwd:
+            return False, "Password contains a common, trivial, or easily guessable pattern."
+
+    if username and len(username.strip()) >= 3:
+        clean_user = username.strip().lower()
+        if clean_user in lower_pwd:
+            return False, "Password cannot contain your username."
+
+    if email and "@" in email:
+        local_part = email.split("@")[0].strip().lower()
+        if len(local_part) >= 3 and local_part in lower_pwd:
+            return False, "Password cannot contain your email username."
+
+    return True, None
+
+
 class LoginRateLimiter:
     """
     Sliding-window in-memory rate limiter for failed login attempts (CWE-307 / SAST-MED-02).

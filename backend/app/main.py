@@ -1,9 +1,12 @@
 from fastapi import FastAPI, Request
+from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
+from datetime import datetime, timezone, timedelta
 
 from app.core.config import settings
+from app.core.rate_limiter import rate_limiter, get_client_rate_limit_identity, resolve_dynamic_limit
 from app.core.database import Base, engine, SessionLocal
 from app.models.archimate import ModelWorkspace
 from app.services.sample_data import seed_sample_model
@@ -339,6 +342,57 @@ async def security_headers_middleware(request: Request, call_next):
 
     return response
 
+
+EXEMPT_RATE_LIMIT_PATHS = {
+    "/health",
+    "/.well-known/security.txt",
+    "/security.txt",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+}
+
+
+# Global Dynamic Rate Limiting Middleware (OWASP API4:2023 / RFC 6585)
+@app.middleware("http")
+async def rate_limiting_middleware(request: Request, call_next):
+    if not settings.RATE_LIMIT_ENABLED or request.method == "OPTIONS":
+        return await call_next(request)
+
+    path = request.url.path
+    if path in EXEMPT_RATE_LIMIT_PATHS or path.startswith("/assets/"):
+        return await call_next(request)
+
+    client_tier, client_key = get_client_rate_limit_identity(request)
+    limit, window = resolve_dynamic_limit(path, client_tier)
+
+    is_limited, remaining, reset_seconds, total_limit = rate_limiter.check(
+        key=client_key,
+        limit=limit,
+        window_seconds=window
+    )
+
+    if is_limited:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "detail": f"Troppe richieste (Rate limit superato). Riprova tra {reset_seconds} secondi.",
+                "retry_after": reset_seconds
+            },
+            headers={
+                "Retry-After": str(reset_seconds),
+                "RateLimit-Limit": str(total_limit),
+                "RateLimit-Remaining": "0",
+                "RateLimit-Reset": str(reset_seconds),
+            }
+        )
+
+    response = await call_next(request)
+    response.headers["RateLimit-Limit"] = str(total_limit)
+    response.headers["RateLimit-Remaining"] = str(remaining)
+    response.headers["RateLimit-Reset"] = str(reset_seconds)
+    return response
+
 # Include Routers
 app.include_router(models_router, prefix=settings.API_V1_STR)
 app.include_router(elements_router, prefix=settings.API_V1_STR)
@@ -365,6 +419,35 @@ app.include_router(auth_router)
 @app.get("/health")
 def health_check():
     return {"status": "healthy", "version": settings.VERSION}
+
+
+def _generate_security_txt() -> str:
+    """Generate RFC 9116 compliant security.txt content."""
+    expires = (datetime.now(timezone.utc) + timedelta(days=365)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    lines = [
+        "# EasyEA Vulnerability Disclosure Policy & Security Contact (RFC 9116)",
+        f"Contact: {settings.SECURITY_TXT_CONTACT}",
+        f"Expires: {expires}",
+        f"Preferred-Languages: {settings.SECURITY_TXT_LANGUAGES}",
+        f"Policy: {settings.SECURITY_TXT_POLICY}",
+    ]
+    if settings.SECURITY_TXT_CANONICAL:
+        lines.append(f"Canonical: {settings.SECURITY_TXT_CANONICAL}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+@app.get("/.well-known/security.txt", response_class=PlainTextResponse)
+def get_well_known_security_txt():
+    """RFC 9116 standard security.txt discovery endpoint."""
+    return PlainTextResponse(content=_generate_security_txt(), media_type="text/plain; charset=utf-8")
+
+
+@app.get("/security.txt", response_class=PlainTextResponse)
+def get_security_txt():
+    """RFC 9116 security.txt root fallback alias."""
+    return PlainTextResponse(content=_generate_security_txt(), media_type="text/plain; charset=utf-8")
+
 
 # Serve static frontend build if present (for single container deployment)
 frontend_dist = "/frontend/dist" if os.path.exists("/frontend/dist") else os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist"))

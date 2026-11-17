@@ -6,6 +6,13 @@ services:
     image: ghcr.io/lhackyup/easy-ea:1.0.1
     container_name: easyea-app
     restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=128m
     ports:
       - "8000:8000"
     volumes:

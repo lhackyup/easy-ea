@@ -32,10 +32,18 @@ COPY plugins ./plugins
 # Copy built frontend assets from stage 1 into the frontend dist location
 COPY --from=frontend-builder /build/dist /frontend/dist
 
+# Python runtime security & execution environment
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
 # Create non-privileged system group and user (SCA-CONTAINER-ROOT / CWE-250)
+# Ensure sticky bit on /tmp for safe ephemeral temp files
+# Assign read-only execution permissions (r-x = 555) on application directories
 RUN groupadd -g 1001 easyea \
     && useradd -u 1001 -g easyea -d /app -s /usr/sbin/nologin easyea \
-    && chown -R easyea:easyea /app /frontend
+    && chmod 1777 /tmp \
+    && chown -R root:easyea /app /frontend \
+    && chmod -R 555 /app /frontend
 
 # Expose port (Cloud Run, Railway, Render, etc. pass PORT env var)
 ENV PORT=8000

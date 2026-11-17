@@ -5,6 +5,37 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 
 ---
 
+## [1.2.0] - 2026-11-17
+
+### Added
+- **APM Interface & Flow Inventory**: Nuovo pillar e dashboard per la catalogazione e la governance delle interfacce applicative (`ApplicationInterface`) e flussi di integrazione.
+  - Tracciamento delle applicazioni sorgente e destinazione con risoluzione automatica delle Business Application coinvolte.
+  - Metadati architetturali completi: protocollo (REST, GraphQL, gRPC, Kafka/MQ, SOAP, SFTP, DB Link), pattern architetturale (Sync Request/Reply, Async Event-Driven, Batch/File ETL, Stream/CDC), data object scambiati, livello di classificazione dei dati (Public, Internal, Confidential, Restricted/PII), criticità e stato operativo.
+  - Ricerca full-text e filtri reattivi per protocollo, pattern e riservatezza dei dati, con indicatori statistici in tempo reale.
+- **Catalogo Business Application Ergonomico e Strutturato**:
+  - Filtraggio rigoroso delle sole `Business Application` all'interno dell'Application Catalog.
+  - Modale di dettaglio applicazione a dimensione ergonomica fissa con navigazione a schede per sezioni tematiche: Attributi Generici, Metriche APM, TIME Matrix, Rischio Tecnologico e Relazioni Architetturali.
+
+### Changed
+- **Allineamento Metriche APM a 6 Pilastri**:
+  - Armonizzazione coerente di tutti i moduli APM (Catalogo, TIME Matrix, Interface Inventory, TCO, Rischio Tecnologico e Lifecycle & Decommissioning Roadmap) per valutare univocamente le sole Business Application attive, depurando il conteggio da sub-componenti tecnici di basso livello.
+
+### Security & Hardening
+- **Dynamic Sliding-Window Rate Limiter**:
+  - Middleware FastAPI per la mitigazione automatica di attacchi DoS e tentativi di brute-force sugli endpoint di autenticazione (`/api/auth/login`, `/api/auth/mfa/verify`) con finestre temporali mobili.
+- **Database Connection Hardening**:
+  - Rafforzamento della configurazione dei connection pool PostgreSQL/SQLite, controlli SSL e gestione sicura delle credenziali.
+- **RFC 9116 `.well-known/security.txt`**:
+  - Pubblicazione standardizzata delle policy di Vulnerability Disclosure e contatti di sicurezza.
+- **Suite di Test di Sicurezza**:
+  - Aggiunti test automatizzati per container, database configuration, rate limiting dinamico e security.txt (`test_container_and_db_security.py`, `test_dynamic_rate_limiter.py`, `test_password_and_security_txt.py`).
+
+### Fixed
+- **Navigazione Tab Dettaglio Applicazione**: Risolto il problema di rendering che forzava il reset al tab iniziale quando si consultavano le Relazioni Architetturali.
+- **Pulizia Traduzioni i18n**: Rimozione di chiavi duplicate e allineamento bilingue simmetrico IT/EN.
+
+---
+
 ## [1.1.0] - 2026-11-13
 
 ### Added

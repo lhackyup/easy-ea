@@ -416,6 +416,7 @@ export interface InterfaceAppRef {
   layer?: string;
   app_code?: string;
   short_name?: string;
+  component_name?: string | null;
 }
 
 export interface InterfaceItem {

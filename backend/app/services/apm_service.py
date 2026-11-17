@@ -215,7 +215,8 @@ class APMService:
 
         return {
             "is_apm_package_active": is_apm_pkg_active,
-            "total_applications": total_apps,
+            "total_applications": in_scope_apps_count,
+            "total_raw_components": total_apps,
             "total_in_scope": in_scope_apps_count,
             "total_out_of_scope": out_of_scope_apps_count,
             "total_annual_cost": total_cost,
@@ -545,7 +546,10 @@ class APMService:
         - Multi-year chronological timeline dataset
         """
         portfolio = APMService.get_portfolio_summary(db, model_id)
-        apps = portfolio.get("applications", [])
+        all_apps = portfolio.get("applications", [])
+        apps = [a for a in all_apps if a.get("is_business_app")]
+        if not apps:
+            apps = all_apps
 
         all_elements = db.query(ArchimateElement).filter(ArchimateElement.model_id == model_id).all()
         elem_map = {e.id: e for e in all_elements}
@@ -743,6 +747,15 @@ class APMService:
             ArchimateElement.type == "ApplicationInterface"
         ).all()
 
+        def resolve_business_app(elem: Optional[ArchimateElement]):
+            if not elem:
+                return None
+            eprops = elem.properties if isinstance(elem.properties, dict) else {}
+            parent_id = eprops.get("parent_application_id")
+            if parent_id and parent_id in elem_map:
+                return elem_map[parent_id]
+            return elem
+
         items: List[Dict[str, Any]] = []
         protocols_count: Dict[str, int] = {}
         patterns_count: Dict[str, int] = {}
@@ -758,16 +771,21 @@ class APMService:
             if not src or not tgt:
                 continue
 
-            unique_apps.add(src.id)
-            unique_apps.add(tgt.id)
-            provider_counts[src.name] = provider_counts.get(src.name, 0) + 1
-            consumer_counts[tgt.name] = consumer_counts.get(tgt.name, 0) + 1
+            src_biz = resolve_business_app(src)
+            tgt_biz = resolve_business_app(tgt)
+            if not src_biz or not tgt_biz:
+                continue
+
+            unique_apps.add(src_biz.id)
+            unique_apps.add(tgt_biz.id)
+            provider_counts[src_biz.name] = provider_counts.get(src_biz.name, 0) + 1
+            consumer_counts[tgt_biz.name] = consumer_counts.get(tgt_biz.name, 0) + 1
 
             props = f.properties if isinstance(f.properties, dict) else {}
-            src_props = src.properties if isinstance(src.properties, dict) else {}
-            tgt_props = tgt.properties if isinstance(tgt.properties, dict) else {}
+            src_biz_props = src_biz.properties if isinstance(src_biz.properties, dict) else {}
+            tgt_biz_props = tgt_biz.properties if isinstance(tgt_biz.properties, dict) else {}
 
-            text = f"{(f.name or '')} {(f.documentation or '')} {src.name} {tgt.name}".lower()
+            text = f"{(f.name or '')} {(f.documentation or '')} {src_biz.name} {tgt_biz.name}".lower()
 
             protocol = props.get("protocol") or props.get("interface_type")
             if not protocol:
@@ -865,20 +883,22 @@ class APMService:
                 "name": f.name or "Unnamed Flow",
                 "documentation": f.documentation or "",
                 "source_app": {
-                    "id": src.id,
-                    "name": src.name,
-                    "type": src.type,
-                    "layer": src.layer,
-                    "app_code": src_props.get("apm_app_code", ""),
-                    "short_name": src_props.get("apm_short_name", "")
+                    "id": src_biz.id,
+                    "name": src_biz.name,
+                    "type": src_biz.type,
+                    "layer": src_biz.layer,
+                    "app_code": src_biz_props.get("apm_app_code", ""),
+                    "short_name": src_biz_props.get("apm_short_name", ""),
+                    "component_name": src.name if src.id != src_biz.id else None
                 },
                 "target_app": {
-                    "id": tgt.id,
-                    "name": tgt.name,
-                    "type": tgt.type,
-                    "layer": tgt.layer,
-                    "app_code": tgt_props.get("apm_app_code", ""),
-                    "short_name": tgt_props.get("apm_short_name", "")
+                    "id": tgt_biz.id,
+                    "name": tgt_biz.name,
+                    "type": tgt_biz.type,
+                    "layer": tgt_biz.layer,
+                    "app_code": tgt_biz_props.get("apm_app_code", ""),
+                    "short_name": tgt_biz_props.get("apm_short_name", ""),
+                    "component_name": tgt.name if tgt.id != tgt_biz.id else None
                 },
                 "protocol": protocol,
                 "pattern": pattern,
@@ -929,34 +949,39 @@ class APMService:
 
             schemas_used = schema_rel_map.get(iface.id, [])
 
+            provider_biz = resolve_business_app(provider) if provider else None
+            consumer_first = resolve_business_app(consumers[0]) if consumers else None
+
             items.append({
                 "id": iface.id,
                 "kind": "interface_element",
                 "name": iface.name,
                 "documentation": iface.documentation or "",
                 "source_app": {
-                    "id": provider.id,
-                    "name": provider.name,
-                    "type": provider.type,
-                    "layer": provider.layer,
-                    "app_code": (provider.properties or {}).get("apm_app_code", ""),
-                    "short_name": (provider.properties or {}).get("apm_short_name", "")
-                } if provider else None,
+                    "id": provider_biz.id,
+                    "name": provider_biz.name,
+                    "type": provider_biz.type,
+                    "layer": provider_biz.layer,
+                    "app_code": (provider_biz.properties or {}).get("apm_app_code", ""),
+                    "short_name": (provider_biz.properties or {}).get("apm_short_name", ""),
+                    "component_name": provider.name if provider and provider.id != provider_biz.id else None
+                } if provider_biz else None,
                 "target_app": {
-                    "id": consumers[0].id,
-                    "name": consumers[0].name,
-                    "type": consumers[0].type,
-                    "layer": consumers[0].layer,
-                    "app_code": (consumers[0].properties or {}).get("apm_app_code", ""),
-                    "short_name": (consumers[0].properties or {}).get("apm_short_name", "")
-                } if consumers else None,
+                    "id": consumer_first.id,
+                    "name": consumer_first.name,
+                    "type": consumer_first.type,
+                    "layer": consumer_first.layer,
+                    "app_code": (consumer_first.properties or {}).get("apm_app_code", ""),
+                    "short_name": (consumer_first.properties or {}).get("apm_short_name", ""),
+                    "component_name": consumers[0].name if consumers and consumers[0].id != consumer_first.id else None
+                } if consumer_first else None,
                 "consumer_apps": [
                     {
-                        "id": c.id,
-                        "name": c.name,
-                        "type": c.type,
-                        "app_code": (c.properties or {}).get("apm_app_code", "")
-                    } for c in consumers
+                        "id": resolve_business_app(c).id,
+                        "name": resolve_business_app(c).name,
+                        "type": resolve_business_app(c).type,
+                        "app_code": (resolve_business_app(c).properties or {}).get("apm_app_code", "")
+                    } for c in consumers if resolve_business_app(c)
                 ],
                 "protocol": protocol,
                 "pattern": pattern,

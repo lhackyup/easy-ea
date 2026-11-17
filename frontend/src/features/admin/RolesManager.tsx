@@ -77,12 +77,34 @@ export const RolesManager: React.FC<RolesManagerProps> = ({
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
 
   const generateRandomPassword = () => {
-    const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%';
-    let res = '';
+    const lowers = 'abcdefghjkmnpqrstuvwxyz';
+    const uppers = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const specials = '!@#$%^&*';
+    const all = lowers + uppers + digits + specials;
+    const getRandomChar = (charset: string) => {
+      const array = new Uint32Array(1);
+      window.crypto.getRandomValues(array);
+      return charset[array[0] % charset.length];
+    };
+    const parts = [
+      getRandomChar(lowers),
+      getRandomChar(uppers),
+      getRandomChar(digits),
+      getRandomChar(specials),
+    ];
     for (let i = 0; i < 12; i++) {
-      res += chars.charAt(Math.floor(Math.random() * chars.length));
+      parts.push(getRandomChar(all));
     }
-    return res;
+    for (let i = parts.length - 1; i > 0; i--) {
+      const array = new Uint32Array(1);
+      window.crypto.getRandomValues(array);
+      const j = array[0] % (i + 1);
+      const temp = parts[i];
+      parts[i] = parts[j];
+      parts[j] = temp;
+    }
+    return parts.join('');
   };
 
   // Assign Role Form State

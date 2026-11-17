@@ -619,12 +619,21 @@ export const InterfaceInventoryDashboard: React.FC<InterfaceInventoryDashboardPr
                     {/* Source Provider */}
                     <td className="py-3.5 px-4">
                       {item.source_app ? (
-                        <div className="flex items-center space-x-2">
-                          <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
-                          <span className="font-semibold text-slate-800 line-clamp-1">{item.source_app.name}</span>
-                          {item.source_app.app_code && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded">
-                              {item.source_app.app_code}
+                        <div className="flex flex-col">
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                            <span className="font-semibold text-slate-800 line-clamp-1">{item.source_app.name}</span>
+                            {item.source_app.app_code && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded">
+                                {item.source_app.app_code}
+                              </span>
+                            )}
+                          </div>
+                          {item.source_app.component_name && (
+                            <span className="text-[10px] text-slate-400 pl-4 font-mono truncate">
+                              {item.source_app.component_name.includes('[')
+                                ? item.source_app.component_name.split('[').pop()?.replace(']', '')
+                                : item.source_app.component_name}
                             </span>
                           )}
                         </div>
@@ -641,12 +650,21 @@ export const InterfaceInventoryDashboard: React.FC<InterfaceInventoryDashboardPr
                     {/* Target Consumer */}
                     <td className="py-3.5 px-4">
                       {item.target_app ? (
-                        <div className="flex items-center space-x-2">
-                          <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
-                          <span className="font-semibold text-slate-800 line-clamp-1">{item.target_app.name}</span>
-                          {item.target_app.app_code && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded">
-                              {item.target_app.app_code}
+                        <div className="flex flex-col">
+                          <div className="flex items-center space-x-2">
+                            <span className="w-2 h-2 rounded-full bg-indigo-500 shrink-0" />
+                            <span className="font-semibold text-slate-800 line-clamp-1">{item.target_app.name}</span>
+                            {item.target_app.app_code && (
+                              <span className="px-1.5 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-600 rounded">
+                                {item.target_app.app_code}
+                              </span>
+                            )}
+                          </div>
+                          {item.target_app.component_name && (
+                            <span className="text-[10px] text-slate-400 pl-4 font-mono truncate">
+                              {item.target_app.component_name.includes('[')
+                                ? item.target_app.component_name.split('[').pop()?.replace(']', '')
+                                : item.target_app.component_name}
                             </span>
                           )}
                         </div>
@@ -845,6 +863,11 @@ export const InterfaceInventoryDashboard: React.FC<InterfaceInventoryDashboardPr
                             {selectedInterface.source_app?.name || t.apm.interfacesUnspecified}
                           </h4>
                         </div>
+                        {selectedInterface.source_app?.component_name && (
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            {selectedInterface.source_app.component_name}
+                          </p>
+                        )}
                         {selectedInterface.source_app?.app_code && (
                           <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-md">
                             Code: {selectedInterface.source_app.app_code}
@@ -863,6 +886,11 @@ export const InterfaceInventoryDashboard: React.FC<InterfaceInventoryDashboardPr
                             {selectedInterface.target_app?.name || t.apm.interfacesUnspecified}
                           </h4>
                         </div>
+                        {selectedInterface.target_app?.component_name && (
+                          <p className="text-[11px] text-slate-400 font-mono">
+                            {selectedInterface.target_app.component_name}
+                          </p>
+                        )}
                         {selectedInterface.target_app?.app_code && (
                           <span className="inline-block px-2 py-0.5 text-[10px] font-bold bg-slate-100 text-slate-700 rounded-md">
                             Code: {selectedInterface.target_app.app_code}

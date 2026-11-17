@@ -67,7 +67,8 @@ jobs:
                                     backend/tests/test_csp_hsts.py \
                                     backend/tests/test_token_revocation.py \
                                     backend/tests/test_mfa.py \
-                                    backend/tests/test_audit_trail.py
+                                    backend/tests/test_audit_trail.py \
+                                    backend/tests/test_container_and_db_security.py
 
   # -----------------------------------------------------------
   # 3. SCA & Build Frontend (Node.js)

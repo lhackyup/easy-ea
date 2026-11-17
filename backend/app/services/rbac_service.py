@@ -92,7 +92,7 @@ ROLE_DEFINITIONS = [
     }
 ]
 
-from app.services.auth_service import hash_password
+from app.services.auth_service import hash_password, validate_password_complexity
 
 def get_roles_metadata() -> Dict[str, Any]:
     """Returns the comprehensive list of roles, their scope types, and permission matrix."""
@@ -181,11 +181,14 @@ def create_user(
         raise HTTPException(status_code=400, detail=f"Un utente con il nome utente (username) '{clean_username}' esiste già.")
     
     if password is not None and password.strip():
-        if len(password.strip()) < 8:
-            raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
-        pwd_to_hash = password.strip()
+        pwd_to_check = password.strip()
+        is_valid, err_msg = validate_password_complexity(pwd_to_check, username=clean_username, email=clean_email)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=err_msg or "Invalid password.")
+        pwd_to_hash = pwd_to_check
     else:
-        pwd_to_hash = secrets.token_urlsafe(16)
+        # Generate cryptographically secure random initial password fulfilling complexity rules
+        pwd_to_hash = f"Aa1!{secrets.token_urlsafe(14)}"
     user = User(
         id=f"usr-{uuid.uuid4().hex[:8]}",
         username=clean_username,
@@ -212,14 +215,15 @@ def reset_user_password(
     user_id: str,
     new_password: str
 ) -> Dict[str, Any]:
-    """Reset a user's password (min 8 chars)."""
+    """Reset a user's password enforcing OWASP complexity policy."""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail=f"User '{user_id}' not found.")
     
     clean_pwd = new_password.strip() if new_password else ""
-    if len(clean_pwd) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
+    is_valid, err_msg = validate_password_complexity(clean_pwd, username=user.username, email=user.email)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=err_msg or "Invalid password.")
     
     user.password_hash = hash_password(clean_pwd)
     db.commit()

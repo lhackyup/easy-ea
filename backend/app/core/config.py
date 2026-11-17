@@ -15,9 +15,47 @@ _WEAK_SECRET_KEYS = {
 }
 
 
+def _read_secret(key: str, default: Optional[str] = None) -> Optional[str]:
+    """
+    Resolves a configuration secret using multi-tier resolution:
+    1. Direct file path via {KEY}_FILE environment variable (e.g. EASYEA_SECRET_KEY_FILE=/run/secrets/key)
+    2. Convention Docker / Kubernetes secret file: /run/secrets/{key.lower()}
+    3. Direct environment variable: os.getenv(key)
+    4. Fallback default
+    """
+    # 1. Check {KEY}_FILE explicit path
+    file_path = os.getenv(f"{key}_FILE")
+    if file_path and os.path.isfile(file_path):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                val = f.read().strip()
+                if val:
+                    return val
+        except Exception as e:
+            logger.warning("Failed to read secret file '%s' for key '%s': %s", file_path, key, e)
+
+    # 2. Check conventional Docker/K8s /run/secrets/{key.lower()}
+    conventional_path = os.path.join("/run/secrets", key.lower())
+    if os.path.isfile(conventional_path):
+        try:
+            with open(conventional_path, "r", encoding="utf-8") as f:
+                val = f.read().strip()
+                if val:
+                    return val
+        except Exception as e:
+            logger.warning("Failed to read conventional secret file '%s': %s", conventional_path, e)
+
+    # 3. Environment variable fallback
+    env_val = os.getenv(key)
+    if env_val is not None:
+        return env_val.strip()
+
+    return default
+
+
 def _resolve_secret_key() -> str:
     env_mode = os.getenv("EASYEA_ENV", "development").strip().lower()
-    raw_key = (os.getenv("EASYEA_SECRET_KEY") or "").strip()
+    raw_key = (_read_secret("EASYEA_SECRET_KEY") or "").strip()
 
     if raw_key and raw_key not in _WEAK_SECRET_KEYS and len(raw_key) >= 32:
         return raw_key
@@ -25,7 +63,8 @@ def _resolve_secret_key() -> str:
     if env_mode == "production":
         raise RuntimeError(
             "CRITICAL SECURITY ERROR: EASYEA_SECRET_KEY must be set to a strong secret "
-            "(at least 32 characters) when EASYEA_ENV=production."
+            "(at least 32 characters) when EASYEA_ENV=production. You can provide it via "
+            "EASYEA_SECRET_KEY or file-based secret via EASYEA_SECRET_KEY_FILE / /run/secrets/easyea_secret_key."
         )
 
     generated = secrets.token_urlsafe(48)
@@ -62,12 +101,17 @@ def _resolve_cors_origins() -> List[str]:
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "EasyEA - Business-Oriented Enterprise Architecture"
-    VERSION: str = "1.1.0"
+    VERSION: str = "1.2.0"
     API_V1_STR: str = "/api"
     ENVIRONMENT: str = os.getenv("EASYEA_ENV", "development").strip().lower()
 
     # Database: SQLite default for local zero-config, PostgreSQL for production
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./easyea.db")
+    DATABASE_URL: str = _read_secret("DATABASE_URL", "sqlite:///./easyea.db")
+    DATABASE_SSLMODE: Optional[str] = _read_secret("EASYEA_DATABASE_SSLMODE", None)
+    DATABASE_SSL_CERT: Optional[str] = _read_secret("EASYEA_DATABASE_SSL_CERT", None)
+    DATABASE_ALLOW_INSECURE: bool = os.getenv(
+        "EASYEA_DATABASE_ALLOW_INSECURE", "false"
+    ).lower() in ("1", "true", "yes")
 
     # CORS (SAST-HIGH-05: explicit origin allowlist, never wildcard '*' with credentials)
     CORS_ORIGINS: List[str] = _resolve_cors_origins()
@@ -86,15 +130,15 @@ class Settings(BaseSettings):
         "EASYEA_SEED_DEMO_USERS",
         "false" if os.getenv("EASYEA_ENV", "development").strip().lower() == "production" else "true",
     ).lower() in ("1", "true", "yes")
-    ADMIN_INITIAL_PASSWORD: Optional[str] = os.getenv("EASYEA_ADMIN_PASSWORD") or None
-    DEMO_USER_PASSWORD: Optional[str] = os.getenv("EASYEA_DEMO_PASSWORD") or None
+    ADMIN_INITIAL_PASSWORD: Optional[str] = _read_secret("EASYEA_ADMIN_PASSWORD") or None
+    DEMO_USER_PASSWORD: Optional[str] = _read_secret("EASYEA_DEMO_PASSWORD") or None
 
     # OAuth2 / OpenID Connect (OIDC)
     OIDC_ENABLED: bool = os.getenv("OIDC_ENABLED", "true").lower() in ("1", "true", "yes")
     OIDC_PROVIDER_NAME: str = os.getenv("OIDC_PROVIDER_NAME", "Keycloak SSO")
     OIDC_ISSUER_URL: str = os.getenv("OIDC_ISSUER_URL", "http://localhost:18000/realms/dev-realm")
-    OIDC_CLIENT_ID: str = os.getenv("OIDC_CLIENT_ID", "easyea-client")
-    OIDC_CLIENT_SECRET: str = os.getenv("OIDC_CLIENT_SECRET", "")
+    OIDC_CLIENT_ID: str = _read_secret("OIDC_CLIENT_ID", "easyea-client")
+    OIDC_CLIENT_SECRET: str = _read_secret("OIDC_CLIENT_SECRET", "")
     OIDC_REDIRECT_URI: str = os.getenv("OIDC_REDIRECT_URI", "http://localhost:8000/api/auth/oidc/callback")
     OIDC_FRONTEND_REDIRECT_URL: str = os.getenv("OIDC_FRONTEND_REDIRECT_URL", "http://localhost:5173")
     OIDC_ALLOWED_RETURN_ORIGINS: str = os.getenv(
@@ -122,6 +166,20 @@ class Settings(BaseSettings):
 
     # Content Security Policy (CSP)
     CUSTOM_CSP_POLICY: Optional[str] = os.getenv("EASYEA_CSP_POLICY") or None
+
+    # Security.txt (RFC 9116)
+    SECURITY_TXT_CONTACT: str = os.getenv("EASYEA_SECURITY_CONTACT", "mailto:security@easyea.org")
+    SECURITY_TXT_POLICY: str = os.getenv("EASYEA_SECURITY_POLICY_URL", "https://github.com/lhackyup/EasyEA/security/policy")
+    SECURITY_TXT_CANONICAL: Optional[str] = os.getenv("EASYEA_SECURITY_CANONICAL_URL") or None
+    SECURITY_TXT_LANGUAGES: str = os.getenv("EASYEA_SECURITY_LANGUAGES", "it, en")
+
+    # Global Dynamic Rate Limiting (OWASP API4:2023 / CWE-770)
+    RATE_LIMIT_ENABLED: bool = os.getenv("EASYEA_RATE_LIMIT_ENABLED", "true").lower() in ("1", "true", "yes")
+    RATE_LIMIT_DEFAULT_PER_MINUTE: int = int(os.getenv("EASYEA_RATE_LIMIT_DEFAULT_PER_MINUTE", "300"))
+    RATE_LIMIT_AUTH_PER_MINUTE: int = int(os.getenv("EASYEA_RATE_LIMIT_AUTH_PER_MINUTE", "60"))
+    RATE_LIMIT_AUTHENTICATED_PER_MINUTE: int = int(os.getenv("EASYEA_RATE_LIMIT_AUTHENTICATED_PER_MINUTE", "600"))
+    RATE_LIMIT_APIKEY_PER_MINUTE: int = int(os.getenv("EASYEA_RATE_LIMIT_APIKEY_PER_MINUTE", "1200"))
+    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("EASYEA_RATE_LIMIT_WINDOW_SECONDS", "60"))
 
     model_config = SettingsConfigDict(case_sensitive=True)
 

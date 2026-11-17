@@ -37,6 +37,8 @@ from app.services.auth_service import (
     create_mfa_challenge_token,
     verify_mfa_challenge_token,
     verify_password,
+    hash_password,
+    validate_password_complexity,
     revoke_token
 )
 from app.services.audit_service import log_security_event
@@ -74,6 +76,11 @@ class MfaEnableRequest(BaseModel):
 
 class MfaDisableRequest(BaseModel):
     password: str
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
 
 
 class SystemAuthSettingsUpdateRequest(BaseModel):
@@ -772,5 +779,62 @@ def oidc_callback(
             url=f"{target_frontend}{separator}auth_error={urllib.parse.quote(str(exc))}",
             status_code=302
         )
+
+
+@router.post("/change-password")
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Allow an authenticated user to change their local password.
+    Enforces current password verification and OWASP password complexity policy.
+    """
+    if not current_user.password_hash or not verify_password(payload.current_password, current_user.password_hash):
+        log_security_event(
+            db=db,
+            action="AUTH_PASSWORD_CHANGE",
+            outcome="FAILURE",
+            actor=current_user,
+            request=request,
+            details={"reason": "Incorrect current password"}
+        )
+        raise HTTPException(
+            status_code=400,
+            detail="La password attuale non è corretta."
+        )
+
+    clean_new_pwd = payload.new_password.strip()
+    is_valid, err_msg = validate_password_complexity(
+        clean_new_pwd,
+        username=current_user.username,
+        email=current_user.email
+    )
+    if not is_valid:
+        log_security_event(
+            db=db,
+            action="AUTH_PASSWORD_CHANGE",
+            outcome="FAILURE",
+            actor=current_user,
+            request=request,
+            details={"reason": f"Password complexity rejected: {err_msg}"}
+        )
+        raise HTTPException(status_code=400, detail=err_msg or "Invalid password.")
+
+    current_user.password_hash = hash_password(clean_new_pwd)
+    db.commit()
+
+    log_security_event(
+        db=db,
+        action="AUTH_PASSWORD_CHANGE",
+        outcome="SUCCESS",
+        actor=current_user,
+        request=request,
+        details={"username": current_user.username}
+    )
+    return {"status": "success", "message": "Password aggiornata con successo."}
+
 
 
