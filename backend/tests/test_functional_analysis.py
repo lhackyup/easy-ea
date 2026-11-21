@@ -27,11 +27,11 @@ def override_get_db():
     finally:
         db.close()
 
-app.dependency_overrides[get_db] = override_get_db
 client = TestClient(app)
 
 @pytest.fixture(scope="module", autouse=True)
 def init_test_db():
+    app.dependency_overrides[get_db] = override_get_db
     Base.metadata.create_all(bind=test_engine)
     db = TestingSession()
     seed_sample_model(db)
@@ -43,6 +43,7 @@ def init_test_db():
     db.close()
     yield
     Base.metadata.drop_all(bind=test_engine)
+    app.dependency_overrides.pop(get_db, None)
 
 def test_functional_analysis_service():
     db = TestingSession()
