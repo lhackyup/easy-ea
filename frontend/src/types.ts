@@ -708,6 +708,10 @@ export interface FunctionalNodeRollup {
   coverage_rate: number;
   redundancy_rate: number;
   potential_savings: number;
+  avg_functional_fit?: number;
+  avg_technical_fit?: number;
+  avg_maturity_level?: number;
+  fit_distribution?: Record<string, number>;
 }
 
 export interface FunctionalNode {
@@ -722,6 +726,11 @@ export interface FunctionalNode {
   is_evaluation_unit?: boolean;
   has_children?: boolean;
   status: 'gap' | 'optimal' | 'overlapping' | 'branch' | 'detail_subfunction';
+  functional_fit?: number;
+  technical_fit?: number;
+  maturity_level?: number;
+  fit_category?: 'gap' | 'excellent' | 'adequate' | 'tolerable' | 'inadequate';
+  maturity_label?: string;
   recommendation?: string | null;
   direct_applications: FunctionalAppInfo[];
   effective_applications: FunctionalAppInfo[];
@@ -747,6 +756,11 @@ export interface FunctionalLeafRow {
   path: string;
   root_domain: string;
   status: 'gap' | 'optimal' | 'overlapping';
+  functional_fit: number;
+  technical_fit: number;
+  maturity_level: number;
+  fit_category: 'gap' | 'excellent' | 'adequate' | 'tolerable' | 'inadequate';
+  maturity_label: string;
   app_count: number;
   is_gap: boolean;
   is_optimal: boolean;
@@ -757,6 +771,24 @@ export interface FunctionalLeafRow {
   applications: FunctionalAppInfo[];
   recommendation?: string | null;
   has_subfunctions?: boolean;
+}
+
+export interface HeatmapL1Group {
+  id: string;
+  name: string;
+  level: number;
+  is_evaluation_unit: boolean;
+  tiles: FunctionalNode[];
+  rollup?: FunctionalNodeRollup;
+}
+
+export interface HeatmapMacroDomain {
+  id: string;
+  name: string;
+  documentation?: string;
+  level: number;
+  rollup?: FunctionalNodeRollup;
+  groups: HeatmapL1Group[];
 }
 
 export interface FunctionalRedundancyCluster {
@@ -793,9 +825,14 @@ export interface FunctionalAnalysisData {
   coverage_rate_percentage: number;
   redundancy_rate_percentage: number;
   total_potential_savings: number;
+  global_avg_functional_fit: number;
+  global_avg_technical_fit: number;
+  global_avg_maturity_level: number;
+  global_fit_distribution: Record<string, number>;
   applications_count: number;
   applications_columns: Array<{ id: string; name: string; annual_cost: number }>;
   hierarchy_trees: FunctionalNode[];
+  heatmap_domains: HeatmapMacroDomain[];
   leaf_functions: FunctionalLeafRow[];
   redundancy_clusters: FunctionalRedundancyCluster[];
   gap_clusters: FunctionalGapCluster[];

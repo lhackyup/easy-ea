@@ -9,7 +9,7 @@ class FunctionalAnalysisService:
         Analyzes the functional architecture of a model:
         - Extracts Business Functions and Capabilities arranged in a hierarchical decomposition (Composition / Aggregation)
         - Supports variable depth hierarchies (branches stopping at L1, branches at L2, or branches continuing to L3+)
-        - Architectural Rule: The evaluation of Functional Gaps and Overlaps is capped at Level 2 (L2):
+        - Architectural Rule: The evaluation of Functional Gaps, Overlaps, Functional Fit and Maturity is capped at Level 2 (L2):
             * If a branch stops at L1 (no children), L1 is the evaluation unit.
             * If a branch reaches L2, L2 is the evaluation unit (even if decomposed into L3/L4).
             * Applications mapped to L3+ sub-functions are automatically imputed (rolled up) to their parent L2 function.
@@ -17,7 +17,11 @@ class FunctionalAnalysisService:
         - Evaluates Functional Gap (evaluation units with 0 applications)
         - Evaluates Functional Overlapping / Redundancy (evaluation units with >= 2 applications)
         - Evaluates Optimal Coverage (evaluation units with exactly 1 application)
-        - Computes hierarchical Roll-up metrics (Coverage %, Redundancy %, Potential Savings) for parent/root branches
+        - Computes Functional Fit (1-5 score measuring business adequacy vs gap)
+        - Computes Technical Fit (1-5 score measuring architectural health & technical debt)
+        - Computes Digital Maturity Level (1-5: Manual, Siloed, Standardized, Integrated/Data-driven, Intelligent)
+        - Computes hierarchical Roll-up metrics (Coverage %, Redundancy %, Avg Fit, Potential Savings) for parent/root branches
+        - Generates interactive Heatmap data structures for Capability Map visualization
         """
         # 1. Fetch Functional Elements (BusinessFunction & Capability)
         functional_elements = db.query(ArchimateElement).filter(
@@ -151,28 +155,75 @@ class FunctionalAnalysisService:
             for child_id in parent_to_children.get(node_id, []):
                 child_elem = func_map.get(child_id)
                 child_name = child_elem.name if child_elem else child_id
-                # Direct apps on child
                 for a_id, rel_types in func_app_links.get(child_id, {}).items():
                     if a_id in app_map and a_id not in gathered:
                         gathered[a_id] = _get_app_info(a_id, rel_types, imputed_from=child_name)
-                # Recurse further down
                 sub_gathered = gather_descendant_direct_apps(child_id)
                 for a_id, info in sub_gathered.items():
                     if a_id not in gathered:
                         gathered[a_id] = info
             return gathered
 
-        # 6. Recursive tree construction with L2 Cap rule & Bottom-up L3+ imputation
+        # Helper to compute Functional Fit, Technical Fit & Maturity Level for a set of applications
+        def _compute_fit_metrics(effective_apps: List[Dict[str, Any]], is_gap: bool) -> Dict[str, Any]:
+            if is_gap or len(effective_apps) == 0:
+                return {
+                    "functional_fit": 0.0,
+                    "technical_fit": 0.0,
+                    "maturity_level": 1,
+                    "fit_category": "gap",
+                    "maturity_label": "Manuale / Ad-Hoc"
+                }
+
+            b_fits = [a["business_fit"] for a in effective_apps if a.get("business_fit")]
+            t_fits = [a["technical_fit"] for a in effective_apps if a.get("technical_fit")]
+
+            avg_b = round(sum(b_fits) / len(b_fits), 1) if b_fits else 3.0
+            avg_t = round(sum(t_fits) / len(t_fits), 1) if t_fits else 3.0
+
+            # Fit Category
+            if avg_b >= 4.0:
+                fit_cat = "excellent"
+            elif avg_b >= 3.0:
+                fit_cat = "adequate"
+            elif avg_b >= 2.0:
+                fit_cat = "tolerable"
+            else:
+                fit_cat = "inadequate"
+
+            # Maturity Level (1-5)
+            # Level 1: Gap
+            # Level 2: Siloed / Legacy
+            # Level 3: Standardized
+            # Level 4: Integrated / Data-driven
+            # Level 5: Intelligent / Cloud-Native Optimized
+            if avg_t >= 4.5 and avg_b >= 4.2:
+                maturity = 5
+                mat_label = "Intelligente & Ottimizzato"
+            elif avg_t >= 3.8 and avg_b >= 3.2:
+                maturity = 4
+                mat_label = "Integrato & Data-Driven"
+            elif avg_t >= 2.8:
+                maturity = 3
+                mat_label = "Standardizzato"
+            else:
+                maturity = 2
+                mat_label = "Silos Digitale / Legacy"
+
+            return {
+                "functional_fit": avg_b,
+                "technical_fit": avg_t,
+                "maturity_level": maturity,
+                "fit_category": fit_cat,
+                "maturity_label": mat_label
+            }
+
+        # 6. Recursive tree construction with L2 Cap, Imputation and Fit Calculation
         def build_node(node_id: str, current_level: int, inherited_apps: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
             element = func_map[node_id]
             child_ids = parent_to_children.get(node_id, [])
             has_children = len(child_ids) > 0
 
-            # Architectural Rule:
-            # - If current_level >= 2, this is the evaluation unit (or detail sub-node if > 2).
-            # - If current_level == 2, it is the Evaluation Unit (Analysis Unit).
-            # - If current_level < 2 and has no children, it is also an Evaluation Unit.
-            # - If current_level < 2 and has children, it is a branch for roll-up.
             is_evaluation_unit = (current_level == 2) or (not has_children and current_level <= 2)
             is_leaf = not has_children
 
@@ -190,7 +241,7 @@ class FunctionalAnalysisService:
             # Combined effective applications
             effective_apps_dict = dict(inherited_apps)
             effective_apps_dict.update(imputed_from_children_dict)
-            effective_apps_dict.update(direct_apps_dict) # Direct assignment takes highest precedence
+            effective_apps_dict.update(direct_apps_dict)
 
             # Apps to pass down to children (inherited)
             apps_for_children = {
@@ -208,7 +259,7 @@ class FunctionalAnalysisService:
             direct_apps_list = list(direct_apps_dict.values())
             app_count = len(effective_apps_list)
 
-            # Determine Status
+            # Determine Status & Fit
             is_gap = False
             is_optimal = False
             is_overlapping = False
@@ -250,7 +301,6 @@ class FunctionalAnalysisService:
                         f"({target_app['time_quadrant']}) e pianificando la dismissione o migrazione di: {decomm_names}."
                     )
             elif current_level > 2:
-                # Detail sub-function under an L2 evaluation unit
                 status = "detail_subfunction"
                 if app_count == 0:
                     recommendation = f"Sotto-funzione di dettaglio '{element.name}': nessun applicativo diretto (copertura delegata al livello L2 padre)."
@@ -258,8 +308,9 @@ class FunctionalAnalysisService:
                     assigned_names = ", ".join(a["app_name"] for a in effective_apps_list)
                     recommendation = f"Sotto-funzione di dettaglio servita da: {assigned_names} (imputata alla funzione L2 genitrice)."
             else:
-                # Macro branch at L0 or L1
                 status = "branch"
+
+            fit_metrics = _compute_fit_metrics(effective_apps_list, is_gap)
 
             # Rollup calculation: aggregate only the Evaluation Units (capped at L2)
             def collect_evaluation_units(n: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -280,6 +331,10 @@ class FunctionalAnalysisService:
                     "is_gap": is_gap,
                     "is_optimal": is_optimal,
                     "is_overlapping": is_overlapping,
+                    "functional_fit": fit_metrics["functional_fit"],
+                    "technical_fit": fit_metrics["technical_fit"],
+                    "maturity_level": fit_metrics["maturity_level"],
+                    "fit_category": fit_metrics["fit_category"],
                     "app_count": app_count,
                     "potential_savings": node_savings,
                     "target_app": target_app,
@@ -300,6 +355,20 @@ class FunctionalAnalysisService:
             coverage_rate = round((covered_units_count / total_units_count * 100), 1) if total_units_count > 0 else 0.0
             redundancy_rate = round((overlapping_units_count / total_units_count * 100), 1) if total_units_count > 0 else 0.0
 
+            # Rollup averages for Fit & Maturity
+            units_with_apps = [u for u in subtree_units if not u["is_gap"]]
+            avg_func_fit = round(sum(u["functional_fit"] for u in units_with_apps) / len(units_with_apps), 1) if units_with_apps else 0.0
+            avg_tech_fit = round(sum(u["technical_fit"] for u in units_with_apps) / len(units_with_apps), 1) if units_with_apps else 0.0
+            avg_maturity = round(sum(u["maturity_level"] for u in subtree_units) / total_units_count, 1) if total_units_count > 0 else 1.0
+
+            fit_dist = {
+                "excellent": sum(1 for u in subtree_units if u["fit_category"] == "excellent"),
+                "adequate": sum(1 for u in subtree_units if u["fit_category"] == "adequate"),
+                "tolerable": sum(1 for u in subtree_units if u["fit_category"] == "tolerable"),
+                "inadequate": sum(1 for u in subtree_units if u["fit_category"] == "inadequate"),
+                "gap": gap_units_count
+            }
+
             node_data = {
                 "id": node_id,
                 "name": element.name,
@@ -312,6 +381,11 @@ class FunctionalAnalysisService:
                 "is_evaluation_unit": is_evaluation_unit,
                 "has_children": has_children,
                 "status": status,
+                "functional_fit": fit_metrics["functional_fit"],
+                "technical_fit": fit_metrics["technical_fit"],
+                "maturity_level": fit_metrics["maturity_level"],
+                "fit_category": fit_metrics["fit_category"],
+                "maturity_label": fit_metrics["maturity_label"],
                 "recommendation": recommendation,
                 "direct_applications": direct_apps_list,
                 "effective_applications": effective_apps_list,
@@ -332,7 +406,11 @@ class FunctionalAnalysisService:
                     "overlapping_leaves": overlapping_units_count,
                     "coverage_rate": coverage_rate,
                     "redundancy_rate": redundancy_rate,
-                    "potential_savings": rollup_savings
+                    "potential_savings": rollup_savings,
+                    "avg_functional_fit": avg_func_fit,
+                    "avg_technical_fit": avg_tech_fit,
+                    "avg_maturity_level": avg_maturity,
+                    "fit_distribution": fit_dist
                 }
             }
             return node_data
@@ -356,6 +434,11 @@ class FunctionalAnalysisService:
                     "path": " > ".join(current_path),
                     "root_domain": current_path[0] if current_path else n["name"],
                     "status": n["status"],
+                    "functional_fit": n["functional_fit"],
+                    "technical_fit": n["technical_fit"],
+                    "maturity_level": n["maturity_level"],
+                    "fit_category": n["fit_category"],
+                    "maturity_label": n["maturity_label"],
                     "app_count": n["app_count"],
                     "is_gap": n["is_gap"],
                     "is_optimal": n["is_optimal"],
@@ -385,7 +468,64 @@ class FunctionalAnalysisService:
         global_redundancy_rate = round((len(overlapping_units) / total_eval_units * 100), 1) if total_eval_units > 0 else 0.0
         global_potential_savings = sum(u["potential_savings"] for u in overlapping_units)
 
-        # Rationalization clusters (from evaluation units)
+        # Global averages for Fit and Maturity
+        units_with_apps = [u for u in all_eval_units if not u["is_gap"]]
+        global_avg_func_fit = round(sum(u["functional_fit"] for u in units_with_apps) / len(units_with_apps), 1) if units_with_apps else 0.0
+        global_avg_tech_fit = round(sum(u["technical_fit"] for u in units_with_apps) / len(units_with_apps), 1) if units_with_apps else 0.0
+        global_avg_maturity = round(sum(u["maturity_level"] for u in all_eval_units) / total_eval_units, 1) if total_eval_units > 0 else 1.0
+
+        global_fit_dist = {
+            "excellent": sum(1 for u in all_eval_units if u["fit_category"] == "excellent"),
+            "adequate": sum(1 for u in all_eval_units if u["fit_category"] == "adequate"),
+            "tolerable": sum(1 for u in all_eval_units if u["fit_category"] == "tolerable"),
+            "inadequate": sum(1 for u in all_eval_units if u["fit_category"] == "inadequate"),
+            "gap": len(gap_units)
+        }
+
+        # Structure Heatmap Macro Domains (L0 with L1 groups and L2 tiles)
+        heatmap_domains = []
+        for tree in hierarchy_trees:
+            # Macro domain L0
+            l1_groups = []
+            if len(tree["children"]) > 0:
+                for l1 in tree["children"]:
+                    # L1 may either be an evaluation unit itself or contain L2 evaluation units
+                    tiles = []
+                    if l1["is_evaluation_unit"]:
+                        tiles.append(l1)
+                    else:
+                        for l2 in l1["children"]:
+                            if l2["is_evaluation_unit"]:
+                                tiles.append(l2)
+                    l1_groups.append({
+                        "id": l1["id"],
+                        "name": l1["name"],
+                        "level": l1["level"],
+                        "is_evaluation_unit": l1["is_evaluation_unit"],
+                        "tiles": tiles,
+                        "rollup": l1["rollup"]
+                    })
+            else:
+                # Tree root is atomic
+                l1_groups.append({
+                    "id": tree["id"],
+                    "name": tree["name"],
+                    "level": tree["level"],
+                    "is_evaluation_unit": True,
+                    "tiles": [tree],
+                    "rollup": tree["rollup"]
+                })
+
+            heatmap_domains.append({
+                "id": tree["id"],
+                "name": tree["name"],
+                "documentation": tree["documentation"],
+                "level": tree["level"],
+                "rollup": tree["rollup"],
+                "groups": l1_groups
+            })
+
+        # Rationalization clusters
         redundancy_clusters = [
             {
                 "leaf_id": u["id"],
@@ -437,9 +577,14 @@ class FunctionalAnalysisService:
             "coverage_rate_percentage": global_coverage_rate,
             "redundancy_rate_percentage": global_redundancy_rate,
             "total_potential_savings": global_potential_savings,
+            "global_avg_functional_fit": global_avg_func_fit,
+            "global_avg_technical_fit": global_avg_tech_fit,
+            "global_avg_maturity_level": global_avg_maturity,
+            "global_fit_distribution": global_fit_dist,
             "applications_count": len(applications),
             "applications_columns": [{"id": a.id, "name": a.name, "annual_cost": _get_cost(a)} for a in applications],
             "hierarchy_trees": hierarchy_trees,
+            "heatmap_domains": heatmap_domains,
             "leaf_functions": sorted(all_eval_units, key=lambda x: (not x["is_gap"], not x["is_overlapping"], x["name"])),
             "redundancy_clusters": redundancy_clusters,
             "gap_clusters": gap_clusters

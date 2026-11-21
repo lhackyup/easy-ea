@@ -56,6 +56,11 @@ def test_functional_analysis_service():
     assert result["coverage_rate_percentage"] > 0
     assert result["total_potential_savings"] > 0
     assert len(result["hierarchy_trees"]) > 0
+    assert "heatmap_domains" in result
+    assert len(result["heatmap_domains"]) > 0
+    assert "global_avg_functional_fit" in result
+    assert result["global_avg_functional_fit"] > 0
+    assert "global_avg_maturity_level" in result
 
     levels_found = {leaf["level"] for leaf in result["leaf_functions"]}
     assert 1 in levels_found

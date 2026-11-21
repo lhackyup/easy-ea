@@ -52,12 +52,56 @@ export function App() {
     }
   };
   
-  // 3 Hubs State
-  const [activeHub, setActiveHub] = useState<MainHub>('business');
-  const [businessTab, setBusinessTab] = useState<BusinessSubTab>('overview');
-  const [apmTab, setApmTab] = useState<'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle'>('catalog');
-  const [architectureTab, setArchitectureTab] = useState<ArchitectureSubTab>('repository');
-  const [adminTab, setAdminTab] = useState<AdminSubTab>('models');
+  // 3 Hubs State with UX persistence
+  const [activeHub, setActiveHubState] = useState<MainHub>(() => {
+    const saved = localStorage.getItem('easyea_active_hub');
+    const valid: MainHub[] = ['business', 'architecture', 'admin'];
+    return (saved && valid.includes(saved as MainHub)) ? (saved as MainHub) : 'business';
+  });
+  const setActiveHub = (hub: MainHub) => {
+    setActiveHubState(hub);
+    localStorage.setItem('easyea_active_hub', hub);
+  };
+
+  const [businessTab, setBusinessTabState] = useState<BusinessSubTab>(() => {
+    const saved = localStorage.getItem('easyea_business_tab');
+    const valid: BusinessSubTab[] = ['overview', 'apm', 'functional', 'processes', 'package_view', 'insights'];
+    return (saved && valid.includes(saved as BusinessSubTab)) ? (saved as BusinessSubTab) : 'overview';
+  });
+  const setBusinessTab = (tab: BusinessSubTab) => {
+    setBusinessTabState(tab);
+    localStorage.setItem('easyea_business_tab', tab);
+  };
+
+  const [apmTab, setApmTabState] = useState<'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle'>(() => {
+    const saved = localStorage.getItem('easyea_apm_active_tab');
+    const valid = ['catalog', 'interfaces', 'portfolio', 'tech_risk', 'tco', 'lifecycle'];
+    return (saved && valid.includes(saved)) ? (saved as any) : 'catalog';
+  });
+  const setApmTab = (tab: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle') => {
+    setApmTabState(tab);
+    localStorage.setItem('easyea_apm_active_tab', tab);
+  };
+
+  const [architectureTab, setArchitectureTabState] = useState<ArchitectureSubTab>(() => {
+    const saved = localStorage.getItem('easyea_architecture_tab');
+    const valid: ArchitectureSubTab[] = ['repository', 'schemas', 'relations', 'business-views', 'import', 'package_view'];
+    return (saved && valid.includes(saved as ArchitectureSubTab)) ? (saved as ArchitectureSubTab) : 'repository';
+  });
+  const setArchitectureTab = (tab: ArchitectureSubTab) => {
+    setArchitectureTabState(tab);
+    localStorage.setItem('easyea_architecture_tab', tab);
+  };
+
+  const [adminTab, setAdminTabState] = useState<AdminSubTab>(() => {
+    const saved = localStorage.getItem('easyea_admin_tab');
+    const valid: AdminSubTab[] = ['models', 'metamodel', 'packages', 'roles', 'auth_config', 'api_keys'];
+    return (saved && valid.includes(saved as AdminSubTab)) ? (saved as AdminSubTab) : 'models';
+  });
+  const setAdminTab = (tab: AdminSubTab) => {
+    setAdminTabState(tab);
+    localStorage.setItem('easyea_admin_tab', tab);
+  };
   const [selectedSavedView, setSelectedSavedView] = useState<any | null>(null);
   const [selectedAdrId, setSelectedAdrId] = useState<string | null>(null);
 

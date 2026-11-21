@@ -3,7 +3,9 @@ import {
   FunctionalAnalysisData,
   FunctionalNode,
   FunctionalLeafRow,
-  FunctionalAppInfo
+  FunctionalAppInfo,
+  HeatmapMacroDomain,
+  HeatmapL1Group
 } from '../../types';
 import { api } from '../../lib/api';
 import {
@@ -27,7 +29,13 @@ import {
   Zap,
   Check,
   Maximize2,
-  Minimize2
+  Minimize2,
+  LayoutGrid,
+  X,
+  Star,
+  Activity,
+  Award,
+  Info
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -41,10 +49,23 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [viewMode, setViewMode] = useState<'tree' | 'matrix' | 'remediation'>('tree');
+  const [viewMode, setViewModeState] = useState<'tree' | 'heatmap' | 'matrix' | 'remediation'>(() => {
+    const saved = localStorage.getItem('easyea_functional_view_mode');
+    const validModes = ['tree', 'heatmap', 'matrix', 'remediation'];
+    return (saved && validModes.includes(saved)) ? (saved as any) : 'tree';
+  });
+
+  const setViewMode = (mode: 'tree' | 'heatmap' | 'matrix' | 'remediation') => {
+    setViewModeState(mode);
+    localStorage.setItem('easyea_functional_view_mode', mode);
+  };
   const [statusFilter, setStatusFilter] = useState<'all' | 'gap' | 'overlap' | 'optimal'>('all');
   const [search, setSearch] = useState<string>('');
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+
+  // Heatmap specific states
+  const [heatmapColoring, setHeatmapColoring] = useState<'fit' | 'tech' | 'maturity' | 'status'>('fit');
+  const [selectedInspectNode, setSelectedInspectNode] = useState<FunctionalNode | null>(null);
 
   const loadData = async () => {
     setLoading(true);
@@ -123,6 +144,48 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
     });
   }, [data?.leaf_functions, search, statusFilter]);
 
+  // Filtered domains and tiles for the heatmap canvas view
+  const filteredHeatmapDomains = useMemo(() => {
+    if (!data?.heatmap_domains) return [];
+
+    return data.heatmap_domains
+      .map((domain) => {
+        const query = search.toLowerCase();
+        const domainMatchesText = !search || domain.name.toLowerCase().includes(query);
+
+        const filteredGroups = domain.groups
+          .map((grp) => {
+            const grpMatchesText = domainMatchesText || grp.name.toLowerCase().includes(query);
+
+            const filteredTiles = grp.tiles.filter((tile) => {
+              const tileMatchesSearch =
+                grpMatchesText ||
+                tile.name.toLowerCase().includes(query) ||
+                tile.effective_applications.some((a) => a.app_name.toLowerCase().includes(query));
+
+              let tileMatchesStatus = true;
+              if (statusFilter === 'gap') tileMatchesStatus = tile.is_gap;
+              else if (statusFilter === 'overlap') tileMatchesStatus = tile.is_overlapping;
+              else if (statusFilter === 'optimal') tileMatchesStatus = tile.is_optimal;
+
+              return tileMatchesSearch && tileMatchesStatus;
+            });
+
+            return {
+              ...grp,
+              tiles: filteredTiles
+            };
+          })
+          .filter((grp) => grp.tiles.length > 0);
+
+        return {
+          ...domain,
+          groups: filteredGroups
+        };
+      })
+      .filter((domain) => domain.groups.length > 0);
+  }, [data?.heatmap_domains, search, statusFilter]);
+
   // Check if a tree branch matches the search or filter
   const nodeMatchesFilter = (node: FunctionalNode): boolean => {
     const query = search.toLowerCase();
@@ -132,7 +195,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
       node.effective_applications.some((a) => a.app_name.toLowerCase().includes(query));
 
     let selfMatchesStatus = true;
-    if (node.is_leaf) {
+    if (node.is_evaluation_unit) {
       if (statusFilter === 'gap') selfMatchesStatus = node.is_gap;
       else if (statusFilter === 'overlap') selfMatchesStatus = node.is_overlapping;
       else if (statusFilter === 'optimal') selfMatchesStatus = node.is_optimal;
@@ -145,8 +208,73 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
 
     if (selfMatchesSearch && selfMatchesStatus) return true;
 
-    // Check if any child matches
     return node.children.some((child) => nodeMatchesFilter(child));
+  };
+
+  // Helper to get tile style based on chosen coloring mode
+  const getTileStyle = (node: FunctionalNode) => {
+    if (heatmapColoring === 'fit') {
+      if (node.is_gap || (node.functional_fit ?? 0) === 0) {
+        return 'bg-slate-100 border-rose-300 border-dashed text-slate-700 hover:bg-rose-50';
+      }
+      const fit = node.functional_fit ?? 0;
+      if (fit >= 4.0) return 'bg-emerald-500/15 border-emerald-500/30 text-emerald-950 hover:bg-emerald-500/25';
+      if (fit >= 3.0) return 'bg-teal-500/15 border-teal-500/30 text-teal-950 hover:bg-teal-500/25';
+      if (fit >= 2.0) return 'bg-amber-500/15 border-amber-500/30 text-amber-950 hover:bg-amber-500/25';
+      return 'bg-rose-500/15 border-rose-500/30 text-rose-950 hover:bg-rose-500/25';
+    }
+
+    if (heatmapColoring === 'tech') {
+      if (node.is_gap || (node.technical_fit ?? 0) === 0) {
+        return 'bg-slate-100 border-slate-300 border-dashed text-slate-700 hover:bg-slate-200';
+      }
+      const tech = node.technical_fit ?? 0;
+      if (tech >= 4.0) return 'bg-indigo-500/15 border-indigo-500/30 text-indigo-950 hover:bg-indigo-500/25';
+      if (tech >= 3.0) return 'bg-blue-500/15 border-blue-500/30 text-blue-950 hover:bg-blue-500/25';
+      if (tech >= 2.0) return 'bg-amber-500/15 border-amber-500/30 text-amber-950 hover:bg-amber-500/25';
+      return 'bg-rose-500/15 border-rose-500/30 text-rose-950 hover:bg-rose-500/25';
+    }
+
+    if (heatmapColoring === 'maturity') {
+      const mat = node.maturity_level ?? 1;
+      if (mat === 5) return 'bg-purple-500/15 border-purple-500/35 text-purple-950 hover:bg-purple-500/25';
+      if (mat === 4) return 'bg-indigo-500/15 border-indigo-500/30 text-indigo-950 hover:bg-indigo-500/25';
+      if (mat === 3) return 'bg-blue-500/15 border-blue-500/30 text-blue-950 hover:bg-blue-500/25';
+      if (mat === 2) return 'bg-amber-500/15 border-amber-500/30 text-amber-950 hover:bg-amber-500/25';
+      return 'bg-slate-100 border-rose-300 border-dashed text-slate-700 hover:bg-rose-50';
+    }
+
+    // Default: Status
+    if (node.is_gap) return 'bg-rose-50 border-rose-300 text-rose-900 hover:bg-rose-100';
+    if (node.is_overlapping) return 'bg-amber-50 border-amber-300 text-amber-900 hover:bg-amber-100';
+    return 'bg-emerald-50 border-emerald-300 text-emerald-900 hover:bg-emerald-100';
+  };
+
+  const getTilePill = (node: FunctionalNode) => {
+    if (heatmapColoring === 'fit') {
+      if (node.is_gap) return <span className="text-[10px] font-black text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">GAP</span>;
+      const fit = node.functional_fit ?? 0;
+      const color = fit >= 4.0 ? 'bg-emerald-100 text-emerald-800' : fit >= 3.0 ? 'bg-teal-100 text-teal-800' : fit >= 2.0 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800';
+      return <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${color}`}>★ {fit.toFixed(1)}</span>;
+    }
+
+    if (heatmapColoring === 'tech') {
+      if (node.is_gap) return <span className="text-[10px] font-black text-slate-600 bg-slate-200 px-1.5 py-0.5 rounded">-</span>;
+      const tech = node.technical_fit ?? 0;
+      const color = tech >= 4.0 ? 'bg-indigo-100 text-indigo-800' : tech >= 3.0 ? 'bg-blue-100 text-blue-800' : tech >= 2.0 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800';
+      return <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${color}`}>Tech {tech.toFixed(1)}</span>;
+    }
+
+    if (heatmapColoring === 'maturity') {
+      const mat = node.maturity_level ?? 1;
+      const color = mat >= 4 ? 'bg-indigo-100 text-indigo-800' : mat === 3 ? 'bg-blue-100 text-blue-800' : mat === 2 ? 'bg-amber-100 text-amber-800' : 'bg-rose-100 text-rose-800';
+      return <span className={`text-[10px] font-black px-1.5 py-0.5 rounded ${color}`}>L{mat}</span>;
+    }
+
+    // Status
+    if (node.is_gap) return <span className="text-[10px] font-black text-rose-700 bg-rose-100 px-1.5 py-0.5 rounded">GAP</span>;
+    if (node.is_overlapping) return <span className="text-[10px] font-black text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">{node.app_count} Apps</span>;
+    return <span className="text-[10px] font-black text-emerald-800 bg-emerald-100 px-1.5 py-0.5 rounded">1 App</span>;
   };
 
   if (loading) {
@@ -273,6 +401,17 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
           <div className="mt-3 md:mt-0 flex items-center flex-wrap gap-2 justify-end shrink-0">
             {node.is_evaluation_unit ? (
               <>
+                {/* Fit pill */}
+                {node.functional_fit !== undefined && !node.is_gap && (
+                  <span
+                    className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-lg text-[10px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200"
+                    title={`Fit Funzionale: ${node.functional_fit}/5 - Maturità: L${node.maturity_level}`}
+                  >
+                    <Star className="w-3 h-3 text-indigo-600" />
+                    <span>Fit {node.functional_fit}</span>
+                  </span>
+                )}
+
                 {/* Status Badge */}
                 {node.is_gap && (
                   <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl text-xs font-black bg-rose-100 text-rose-800 border border-rose-300">
@@ -303,7 +442,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                           ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
                           : 'bg-white text-slate-700 border-slate-200'
                       }`}
-                      title={`${app.app_name} (${app.time_quadrant}) - Cost: ${formatEUR(app.annual_cost)}${app.is_imputed_from_child ? ` - Imputata da: ${app.imputed_from}` : ''}`}
+                      title={`${app.app_name} (${app.time_quadrant}) - ${t.functionalAnalysis.costLabel}: ${formatEUR(app.annual_cost)}${app.is_imputed_from_child ? ` - ${interpolate(t.functionalAnalysis.imputedFromDetail, { child: app.imputed_from ?? '' })}` : ''}`}
                     >
                       <span>{app.app_name}</span>
                       {app.is_imputed_from_child && (
@@ -341,6 +480,18 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
             ) : (
               /* Branch Rollup */
               <div className="flex items-center space-x-3 text-xs">
+                {/* Fit Rollup */}
+                {(node.rollup?.avg_functional_fit ?? 0) > 0 && (
+                  <div
+                    className={`flex items-center space-x-1 px-2 py-0.5 rounded-lg text-[11px] font-bold border ${
+                      depth === 0 ? 'bg-slate-800 text-indigo-300 border-slate-700' : 'bg-indigo-50 text-indigo-700 border-indigo-100'
+                    }`}
+                  >
+                    <Star className="w-3 h-3" />
+                    <span>Fit {node.rollup?.avg_functional_fit}</span>
+                  </div>
+                )}
+
                 {/* Coverage Pill */}
                 <div
                   className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-xl font-bold border ${
@@ -428,6 +579,17 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
             <span>{t.functionalAnalysis.viewTree}</span>
           </button>
           <button
+            onClick={() => setViewMode('heatmap')}
+            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center space-x-1.5 ${
+              viewMode === 'heatmap'
+                ? 'bg-white text-indigo-700 shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span>{t.functionalAnalysis.viewHeatmap}</span>
+          </button>
+          <button
             onClick={() => setViewMode('matrix')}
             className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center space-x-1.5 ${
               viewMode === 'matrix'
@@ -476,6 +638,25 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
           </p>
         </div>
 
+        {/* Functional Fit & Quality */}
+        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              {t.functionalAnalysis.avgFunctionalFit}
+            </span>
+            <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600 border border-amber-100">
+              <Star className="w-5 h-5" />
+            </div>
+          </div>
+          <div className="mt-3 flex items-baseline space-x-2">
+            <span className="text-2xl font-black text-amber-700">{data.global_avg_functional_fit} / 5.0</span>
+            <span className="text-xs text-slate-600 font-medium">L{data.global_avg_maturity_level} Maturità</span>
+          </div>
+          <p className="text-[11px] text-slate-500 mt-1">
+            Salute Tecnica: {data.global_avg_technical_fit}/5.0
+          </p>
+        </div>
+
         {/* Functional Gaps */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -495,27 +676,6 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
           </p>
         </div>
 
-        {/* Redundancy Rate */}
-        <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
-              {t.functionalAnalysis.redundancyRate}
-            </span>
-            <div className="p-2.5 bg-amber-50 rounded-xl text-amber-600 border border-amber-100">
-              <GitMerge className="w-5 h-5" />
-            </div>
-          </div>
-          <div className="mt-3 flex items-baseline space-x-2">
-            <span className="text-2xl font-black text-amber-700">{data.redundancy_rate_percentage}%</span>
-            <span className="text-xs text-slate-600 font-medium">{t.functionalAnalysis.redundancySubtitle}</span>
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">
-            {interpolate(t.functionalAnalysis.redundancyDetail, {
-              redundant: data.overlapping_leaf_functions_count
-            })}
-          </p>
-        </div>
-
         {/* Potential Savings */}
         <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm">
           <div className="flex items-center justify-between">
@@ -530,7 +690,9 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
             {formatEUR(data.total_potential_savings)}
           </div>
           <p className="text-[11px] text-slate-500 mt-1">
-            {t.functionalAnalysis.savingsDetail}
+            {interpolate(t.functionalAnalysis.redundancyDetail, {
+              redundant: data.overlapping_leaf_functions_count
+            })}
           </p>
         </div>
       </div>
@@ -642,7 +804,189 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
         </div>
       )}
 
-      {/* 2. LEAF MATRIX VIEW */}
+      {/* 2. HEATMAP & CAPABILITY CANVAS VIEW */}
+      {viewMode === 'heatmap' && (
+        <div className="space-y-4">
+          {/* Heatmap Toolbar & Legend */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center space-x-2">
+              <span className="text-xs font-bold text-slate-700">{t.functionalAnalysis.heatmapColorBy}</span>
+              <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl">
+                <button
+                  onClick={() => setHeatmapColoring('fit')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                    heatmapColoring === 'fit'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {t.functionalAnalysis.colorByFit}
+                </button>
+                <button
+                  onClick={() => setHeatmapColoring('tech')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                    heatmapColoring === 'tech'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {t.functionalAnalysis.colorByTech}
+                </button>
+                <button
+                  onClick={() => setHeatmapColoring('maturity')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                    heatmapColoring === 'maturity'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {t.functionalAnalysis.colorByMaturity}
+                </button>
+                <button
+                  onClick={() => setHeatmapColoring('status')}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition ${
+                    heatmapColoring === 'status'
+                      ? 'bg-white text-indigo-700 shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  {t.functionalAnalysis.colorByStatus}
+                </button>
+              </div>
+            </div>
+
+            {/* Dynamic Legend */}
+            <div className="flex items-center flex-wrap gap-2 text-[11px] font-medium text-slate-600">
+              {heatmapColoring === 'fit' && (
+                <>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-emerald-500" /><span>{t.functionalAnalysis.fitLegendExcellent}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-teal-500" /><span>{t.functionalAnalysis.fitLegendAdequate}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-amber-500" /><span>{t.functionalAnalysis.fitLegendTolerable}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-rose-500" /><span>{t.functionalAnalysis.fitLegendInadequate}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-slate-200 border border-rose-400" /><span>{t.functionalAnalysis.fitLegendGap}</span></div>
+                </>
+              )}
+              {heatmapColoring === 'maturity' && (
+                <>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-purple-600" /><span>{t.functionalAnalysis.maturityLegendL5}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-indigo-600" /><span>{t.functionalAnalysis.maturityLegendL4}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-blue-600" /><span>{t.functionalAnalysis.maturityLegendL3}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-amber-500" /><span>{t.functionalAnalysis.maturityLegendL2}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-slate-200 border border-rose-400" /><span>{t.functionalAnalysis.maturityLegendL1}</span></div>
+                </>
+              )}
+              {heatmapColoring === 'status' && (
+                <>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-emerald-500" /><span>{t.functionalAnalysis.statusLegendOptimal}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-amber-500" /><span>{t.functionalAnalysis.statusLegendOverlap}</span></div>
+                  <div className="flex items-center space-x-1"><span className="w-2.5 h-2.5 rounded bg-rose-500" /><span>{t.functionalAnalysis.statusLegendGap}</span></div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Macro Domain Columns */}
+          {filteredHeatmapDomains.length === 0 ? (
+            <div className="bg-white border border-slate-200 rounded-3xl p-12 text-center shadow-sm">
+              <Search className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-slate-700">{t.functionalAnalysis.emptySearch}</p>
+              <button
+                onClick={() => {
+                  setStatusFilter('all');
+                  setSearch('');
+                }}
+                className="mt-4 px-4 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-xl text-xs font-bold transition"
+              >
+                {t.functionalAnalysis.heatmapResetFilters}
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {filteredHeatmapDomains.map((domain) => (
+                <div
+                  key={domain.id}
+                  className="bg-white border border-slate-200 rounded-3xl p-5 shadow-sm space-y-4 flex flex-col"
+                >
+                  {/* Domain Header */}
+                  <div className="pb-3 border-b border-slate-100 flex items-start justify-between">
+                    <div>
+                      <span className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded tracking-wider">
+                        {t.functionalAnalysis.heatmapMacroDomain}
+                      </span>
+                      <h3 className="text-base font-extrabold text-slate-900 mt-1">{domain.name}</h3>
+                    </div>
+                    {domain.rollup && (
+                      <div className="text-right">
+                        <div className="text-xs font-black text-slate-800">
+                          {t.functionalAnalysis.domainAverage} {domain.rollup.avg_functional_fit}/5
+                        </div>
+                        <div className="text-[10px] text-slate-500">
+                          {interpolate(t.functionalAnalysis.heatmapDomainCoverage, {
+                            covered: domain.rollup.covered_leaves,
+                            total: domain.rollup.total_leaves,
+                            rate: domain.rollup.coverage_rate
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Groups inside domain (L1) */}
+                  <div className="space-y-4 flex-1">
+                    {domain.groups.map((grp) => (
+                      <div key={grp.id} className="bg-slate-50/70 p-3.5 rounded-2xl border border-slate-200/70 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-slate-800">{grp.name}</span>
+                          {grp.rollup && (
+                            <span className="text-[10px] text-slate-500">
+                              Fit {grp.rollup.avg_functional_fit}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Tiles (L2 evaluation units) */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {grp.tiles.map((tile) => (
+                            <button
+                              key={tile.id}
+                              onClick={() => setSelectedInspectNode(tile)}
+                              className={`p-3 rounded-xl border text-left transition relative flex flex-col justify-between ${getTileStyle(
+                                tile
+                              )}`}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <span className="text-xs font-bold leading-snug line-clamp-2">
+                                  {tile.name}
+                                </span>
+                                <div className="shrink-0">{getTilePill(tile)}</div>
+                              </div>
+
+                              <div className="mt-2.5 pt-2 border-t border-black/5 flex items-center justify-between text-[10px]">
+                                <span className="truncate max-w-[120px] text-slate-600 font-medium">
+                                  {tile.effective_applications.length === 0
+                                    ? t.functionalAnalysis.heatmapNoApps
+                                    : tile.effective_applications.map((a) => a.app_name).join(', ')}
+                                </span>
+                                {tile.has_children && (
+                                  <span className="text-indigo-600 font-semibold" title={t.functionalAnalysis.hasSubfunctionsBadge}>
+                                    L3+
+                                  </span>
+                                )}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. LEAF MATRIX VIEW */}
       {viewMode === 'matrix' && (
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
           <div className="p-4 border-b border-slate-100 flex items-center justify-between">
@@ -651,7 +995,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
               <span>{t.functionalAnalysis.viewMatrix}</span>
             </h3>
             <span className="text-xs text-slate-500">
-              {filteredLeaves.length} / {data.total_leaf_functions} {t.functionalAnalysis.leafLevelBadge}
+              {filteredLeaves.length} / {data.total_leaf_functions} {t.functionalAnalysis.evaluationUnitBadge}
             </span>
           </div>
 
@@ -663,6 +1007,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                   <th className="py-3 px-3">{t.functionalAnalysis.colLevel}</th>
                   <th className="py-3 px-4">{t.functionalAnalysis.colPath}</th>
                   <th className="py-3 px-3">{t.functionalAnalysis.colStatus}</th>
+                  <th className="py-3 px-3">Fit / Tech</th>
                   <th className="py-3 px-4">{t.functionalAnalysis.colApps}</th>
                   <th className="py-3 px-4 text-right">{t.functionalAnalysis.colSavings}</th>
                 </tr>
@@ -710,6 +1055,22 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                       )}
                     </td>
 
+                    {/* Fit & Tech */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      {leaf.is_gap ? (
+                        <span className="text-slate-400 font-mono text-[11px]">-</span>
+                      ) : (
+                        <div className="flex items-center space-x-1.5 font-bold">
+                          <span className="text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200">
+                            ★ {leaf.functional_fit}
+                          </span>
+                          <span className="text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 text-[10px]">
+                            L{leaf.maturity_level}
+                          </span>
+                        </div>
+                      )}
+                    </td>
+
                     {/* Applications */}
                     <td className="py-3.5 px-4">
                       {leaf.applications.length === 0 ? (
@@ -724,8 +1085,10 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                                   ? 'bg-emerald-100 text-emerald-900 border-emerald-300 font-bold'
                                   : 'bg-slate-100 text-slate-700 border-slate-200'
                               }`}
+                              title={app.is_imputed_from_child ? interpolate(t.functionalAnalysis.imputedFromDetail, { child: app.imputed_from ?? '' }) : undefined}
                             >
                               {app.app_name}
+                              {app.is_imputed_from_child && <span className="ml-1 text-[9px] text-indigo-600 font-bold">L3+</span>}
                             </span>
                           ))}
                         </div>
@@ -744,7 +1107,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                 ))}
                 {filteredLeaves.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="py-8 text-center text-slate-500">
+                    <td colSpan={7} className="py-8 text-center text-slate-500">
                       {t.functionalAnalysis.emptySearch}
                     </td>
                   </tr>
@@ -755,7 +1118,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
         </div>
       )}
 
-      {/* 3. REMEDIATION & ACTION PLANS VIEW */}
+      {/* 4. REMEDIATION & ACTION PLANS VIEW */}
       {viewMode === 'remediation' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Overlapping Rationalization Plans */}
@@ -865,6 +1228,96 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* NODE DETAIL MODAL (INSPECTOR) */}
+      {selectedInspectNode && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl border border-slate-200 space-y-5 animate-scale-up max-h-[90vh] overflow-y-auto">
+            <div className="flex items-start justify-between">
+              <div>
+                <span className="text-[10px] font-black uppercase text-indigo-700 bg-indigo-50 px-2.5 py-1 rounded-md">
+                  {selectedInspectNode.level_label} • {selectedInspectNode.type}
+                </span>
+                <h3 className="text-xl font-extrabold text-slate-900 mt-1.5">{selectedInspectNode.name}</h3>
+              </div>
+              <button
+                onClick={() => setSelectedInspectNode(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {selectedInspectNode.documentation && (
+              <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                {selectedInspectNode.documentation}
+              </p>
+            )}
+
+            {/* Scorecard row */}
+            <div className="grid grid-cols-3 gap-3">
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">Functional Fit</span>
+                <div className="text-lg font-black text-slate-900 mt-1">
+                  {selectedInspectNode.is_gap ? t.functionalAnalysis.statusGapShort : `${selectedInspectNode.functional_fit}/5`}
+                </div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">{t.functionalAnalysis.modalTechnicalFit}</span>
+                <div className="text-lg font-black text-slate-900 mt-1">
+                  {selectedInspectNode.is_gap ? '-' : `${selectedInspectNode.technical_fit}/5`}
+                </div>
+              </div>
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center">
+                <span className="text-[10px] font-bold text-slate-500 uppercase">{t.functionalAnalysis.modalMaturity}</span>
+                <div className="text-lg font-black text-indigo-700 mt-1">
+                  L{selectedInspectNode.maturity_level}
+                </div>
+              </div>
+            </div>
+
+            {/* Applications List */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wider">{t.functionalAnalysis.modalSupportingApps}</h4>
+              {selectedInspectNode.effective_applications.length === 0 ? (
+                <div className="p-3 bg-rose-50 text-rose-800 text-xs rounded-xl border border-rose-200">
+                  {t.functionalAnalysis.gapWarning}
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {selectedInspectNode.effective_applications.map((app) => (
+                    <div
+                      key={app.app_id}
+                      className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs"
+                    >
+                      <div>
+                        <div className="font-bold text-slate-900">{app.app_name}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5">
+                          {t.functionalAnalysis.modalQuadrant}: <span className="font-semibold text-slate-700">{app.time_quadrant}</span> | {t.functionalAnalysis.modalFit}: {app.business_fit}/5
+                          {app.is_imputed_from_child && (
+                            <span className="text-indigo-600 font-semibold ml-2">
+                              ({interpolate(t.functionalAnalysis.modalImputedFrom, { child: app.imputed_from ?? '' })})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="font-black text-slate-800">{formatEUR(app.annual_cost)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Recommendation */}
+            {selectedInspectNode.recommendation && (
+              <div className="p-3.5 bg-indigo-50/70 border border-indigo-200/70 rounded-2xl text-xs text-indigo-900 flex items-start space-x-2">
+                <Info className="w-4 h-4 shrink-0 text-indigo-600 mt-0.5" />
+                <span>{selectedInspectNode.recommendation}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
