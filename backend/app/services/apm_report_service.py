@@ -1,6 +1,7 @@
 import os
 import sys
 import io
+import math
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -52,10 +53,10 @@ REPORT_I18N = {
         "sec2_title": "2. Strategia di Portafoglio: Matrice Gartner TIME",
         "sec2_desc": (
             "La matrice Gartner TIME posiziona le applicazioni su due assi fondamentali: Idoneità Funzionale (Business Fit) "
-            "e Idoneità Tecnica (Technical Fit). La classificazione nei 4 quadranti guida le decisioni di investimento, "
-            "modernizzazione o dismissione del software aziendale."
+            "e Idoneità Tecnica (Technical Fit). La dimensione di ogni bolla è proporzionale al TCO Annuo sostenuto. "
+            "La classificazione nei 4 quadranti guida le decisioni strategiche di investimento, modernizzazione o dismissione del portafoglio."
         ),
-        "time_image_caption": "Figura 1: Matrice Strategica Gartner TIME — Distribuzione del Valore di Business e Idoneità Tecnica (EasyEA Engine)",
+        "time_image_caption": "Figura 1: Matrice Strategica Gartner TIME a Bolle — Distribuzione delle Applicazioni per Valore di Business e Idoneità Tecnica (Dimensione Bolla = TCO Annuo)",
         "time_col_quadrant": "Quadrante TIME",
         "time_col_strategy": "Orientamento Strategico",
         "time_col_count": "Numero App",
@@ -194,10 +195,10 @@ REPORT_I18N = {
         "sec2_title": "2. Portfolio Strategy: Gartner TIME Matrix",
         "sec2_desc": (
             "The Gartner TIME matrix plots applications across two critical dimensions: Business / Functional Fit "
-            "and Technical Condition / Fit. Categorization into the four quadrants directs strategic investment, "
-            "modernization, maintenance, or software decommissioning."
+            "and Technical Condition / Fit. Each application is represented as a bubble whose size is proportional to its annual TCO. "
+            "Categorization into the four quadrants directs strategic investment, modernization, maintenance, or software decommissioning."
         ),
-        "time_image_caption": "Figure 1: Gartner TIME Strategy Matrix — Business Value and Technical Condition Distribution (EasyEA Engine)",
+        "time_image_caption": "Figure 1: Gartner TIME Strategy Bubble Matrix — Portfolio Distribution by Business Value and Technical Condition (Bubble Size = Annual TCO)",
         "time_col_quadrant": "TIME Quadrant",
         "time_col_strategy": "Strategic Focus",
         "time_col_count": "App Count",
@@ -378,8 +379,9 @@ class APMReportService:
     @classmethod
     def render_time_matrix_diagram(cls, portfolio_data: Dict[str, Any], lang: str = "it") -> Optional[io.BytesIO]:
         """
-        Generates a high-resolution 2x2 Gartner TIME Strategy Matrix diagram (PNG)
-        directly at backend using Pillow, optimized for full-page horizontal landscape A4 presentation.
+        Generates a high-resolution 2x2 Gartner TIME Strategy Bubble Matrix diagram (PNG)
+        directly at backend using Pillow, matching the interactive 'Gartner TIME & Portfolio'
+        bubble view, optimized for full-page horizontal landscape A4 presentation.
         """
         if not HAS_PIL:
             return None
@@ -387,18 +389,6 @@ class APMReportService:
         apps = portfolio_data.get("applications", [])
         time_counts = portfolio_data.get("time_distribution", {})
         time_costs = portfolio_data.get("time_cost_distribution", {})
-
-        # Group apps by quadrant and sort by cost descending
-        def get_sorted_quad_apps(q_name: str) -> List[Dict[str, Any]]:
-            items = [a for a in apps if a.get("time_quadrant") == q_name]
-            return sorted(items, key=lambda x: (x.get("total_annual_cost") or x.get("annual_cost") or 0.0), reverse=True)
-
-        quad_apps = {
-            "Invest": get_sorted_quad_apps("Invest"),
-            "Tolerate": get_sorted_quad_apps("Tolerate"),
-            "Migrate": get_sorted_quad_apps("Migrate"),
-            "Eliminate": get_sorted_quad_apps("Eliminate"),
-        }
 
         total_w = 1540
         total_h = 960
@@ -408,144 +398,321 @@ class APMReportService:
         # Fonts
         font_banner = ImageFont.load_default(size=20)
         font_banner_sub = ImageFont.load_default(size=12)
-        font_q_title = ImageFont.load_default(size=16)
-        font_q_sub = ImageFont.load_default(size=11)
-        font_q_stat = ImageFont.load_default(size=13)
-        font_app_name = ImageFont.load_default(size=11)
-        font_app_cost = ImageFont.load_default(size=10)
+        font_badge_title = ImageFont.load_default(size=14)
+        font_badge_stat = ImageFont.load_default(size=12)
+        font_badge_sub = ImageFont.load_default(size=10)
         font_axis = ImageFont.load_default(size=11)
+        font_axis_bold = ImageFont.load_default(size=12)
+        font_bubble_title = ImageFont.load_default(size=11)
+        font_bubble_cost = ImageFont.load_default(size=10)
+        font_bubble_sm = ImageFont.load_default(size=9)
 
-        # 1. Top Banner
-        draw.rectangle([0, 0, total_w, 75], fill=(15, 23, 42))
+        # 1. Top Header Banner (Corporate Slate-900)
+        draw.rectangle([0, 0, total_w, 74], fill=(15, 23, 42))
         banner_title = (
-            "EASYEA • GARTNER TIME STRATEGY MATRIX (APPLICATION RATIONALIZATION)"
+            "EASYEA • MATRICE STRATEGICA GARTNER TIME (GRAFICO A BOLLE APM)"
             if lang == "it"
-            else "EASYEA • GARTNER TIME STRATEGY MATRIX (PORTFOLIO RATIONALIZATION)"
+            else "EASYEA • GARTNER TIME STRATEGY MATRIX (APM BUBBLE CHART)"
         )
         banner_sub = (
-            "Classificazione 2x2: Valore di Business (Asse Y) vs Idoneità Tecnica (Asse X) • EasyEA Architecture Engine"
+            "Dimensione Cerchio = TCO Annuo  •  Posizione = Idoneità Funzionale (Asse Y) vs Idoneità Tecnica (Asse X)  •  EasyEA Architecture Engine"
             if lang == "it"
-            else "2x2 Portfolio Classification: Business Value (Y Axis) vs Technical Fit (X Axis) • EasyEA Architecture Engine"
+            else "Bubble Size = Annual TCO  •  Position = Business / Functional Fit (Y Axis) vs Technical Fit (X Axis)  •  EasyEA Architecture Engine"
         )
         draw.text((40, 16), banner_title, fill=(255, 255, 255), font=font_banner)
         draw.text((40, 46), banner_sub, fill=(148, 163, 184), font=font_banner_sub)
 
-        # Geometry Coordinates
-        left_x = 75
-        col_w = 665
-        right_x = 800
-        top_y = 105
-        row_h = 375
-        bot_y = 525
+        # 2. Geometry coordinates of the Plot Area
+        x1, y1 = 100, 95
+        x2, y2 = 1495, 880
+        plot_w = x2 - x1
+        plot_h = y2 - y1
+        mid_x = (x1 + x2) // 2
+        mid_y = (y1 + y2) // 2
 
-        # Quadrant specs:
-        # (name, x1, y1, x2, y2, bg_col, border_col, header_bg, title_col, sub_it, sub_en)
-        specs = [
-            ("Tolerate", left_x, top_y, left_x + col_w, top_y + row_h,
-             (239, 246, 255), (59, 130, 246), (30, 64, 175), (255, 255, 255),
-             "Valore Business Elevato (>= 3) • Debito / Legacy Tecnico (< 3)",
-             "High Business Value (>= 3) • Legacy / Complex Tech (< 3)"),
+        # 3. Quadrant Background Tints
+        # Top-Left: TOLERATE (Soft Blue)
+        draw.rectangle([x1, y1, mid_x, mid_y], fill=(239, 246, 255))
+        # Top-Right: INVEST (Soft Emerald)
+        draw.rectangle([mid_x, y1, x2, mid_y], fill=(236, 253, 245))
+        # Bottom-Left: ELIMINATE (Soft Rose)
+        draw.rectangle([x1, mid_y, mid_x, y2], fill=(255, 241, 242))
+        # Bottom-Right: MIGRATE (Soft Amber)
+        draw.rectangle([mid_x, mid_y, x2, y2], fill=(254, 243, 199))
 
-            ("Invest", right_x, top_y, right_x + col_w, top_y + row_h,
-             (236, 253, 245), (16, 185, 129), (6, 95, 70), (255, 255, 255),
-             "Valore Business Elevato (>= 3) • Tecnologia Moderna (>= 3)",
-             "High Business Value (>= 3) • Modern Technology (>= 3)"),
+        # Outer Plot Border
+        draw.rectangle([x1, y1, x2, y2], outline=(203, 213, 225), width=2)
 
-            ("Eliminate", left_x, bot_y, left_x + col_w, bot_y + row_h,
-             (254, 242, 242), (239, 68, 68), (153, 27, 27), (255, 255, 255),
-             "Basso Valore Business (< 3) • Debito Tecnico Elevato (< 3)",
-             "Low Business Value (< 3) • High Technical Debt (< 3)"),
+        # Dashed Crosshair Lines helper
+        def draw_dashed_line(d, sx, sy, ex, ey, col, dash=8, gap=6, width=2):
+            length = math.hypot(ex - sx, ey - sy)
+            steps = int(length // (dash + gap))
+            dx = (ex - sx) / length if length > 0 else 0
+            dy = (ey - sy) / length if length > 0 else 0
+            for s in range(steps):
+                p1_x = sx + dx * (s * (dash + gap))
+                p1_y = sy + dy * (s * (dash + gap))
+                p2_x = sx + dx * (s * (dash + gap) + dash)
+                p2_y = sy + dy * (s * (dash + gap) + dash)
+                d.line([(p1_x, p1_y), (p2_x, p2_y)], fill=col, width=width)
 
-            ("Migrate", right_x, bot_y, right_x + col_w, bot_y + row_h,
-             (255, 251, 235), (245, 158, 11), (146, 64, 14), (255, 255, 255),
-             "Basso Valore Business (< 3) • Tecnologia Moderna (>= 3)",
-             "Low Business Value (< 3) • Modern Technology (>= 3)"),
+        # Draw Crosshair
+        crosshair_col = (148, 163, 184)
+        draw_dashed_line(draw, mid_x, y1, mid_x, y2, crosshair_col, dash=8, gap=6, width=2)
+        draw_dashed_line(draw, x1, mid_y, x2, mid_y, crosshair_col, dash=8, gap=6, width=2)
+
+        # 4. Corner Quadrant Badges
+        quad_badges = [
+            ("Tolerate", x1 + 16, y1 + 14, x1 + 350, y1 + 72,
+             (30, 64, 175), (255, 255, 255), (59, 130, 246),
+             "Fit Funzionale >= 2.5 • Fit Tecnico < 2.5", "Business Fit >= 2.5 • Tech Fit < 2.5"),
+            ("Invest", x2 - 350, y1 + 14, x2 - 16, y1 + 72,
+             (6, 95, 70), (255, 255, 255), (16, 185, 129),
+             "Fit Funzionale >= 2.5 • Fit Tecnico >= 2.5", "Business Fit >= 2.5 • Tech Fit >= 2.5"),
+            ("Eliminate", x1 + 16, y2 - 72, x1 + 350, y2 - 14,
+             (153, 27, 27), (255, 255, 255), (239, 68, 68),
+             "Fit Funzionale < 2.5 • Fit Tecnico < 2.5", "Business Fit < 2.5 • Tech Fit < 2.5"),
+            ("Migrate", x2 - 350, y2 - 72, x2 - 16, y2 - 14,
+             (180, 83, 9), (255, 255, 255), (245, 158, 11),
+             "Fit Funzionale < 2.5 • Fit Tecnico >= 2.5", "Business Fit < 2.5 • Tech Fit >= 2.5"),
         ]
 
-        for q_name, x1, y1, x2, y2, bg_col, border_col, hdr_bg, hdr_fg, sub_it, sub_en in specs:
-            # 1. Card Container
-            draw.rounded_rectangle([x1, y1, x2, y2], radius=10, fill=bg_col, outline=border_col, width=2)
+        for q_name, bx1, by1, bx2, by2, hdr_bg, hdr_fg, border_col, sub_it, sub_en in quad_badges:
+            draw.rounded_rectangle([bx1, by1, bx2, by2], radius=8, fill=(255, 255, 255), outline=border_col, width=1)
+            # Pill badge for quadrant name
+            pill_w = 95
+            draw.rounded_rectangle([bx1 + 8, by1 + 8, bx1 + 8 + pill_w, by1 + 30], radius=6, fill=hdr_bg)
+            draw.text((bx1 + 16, by1 + 11), q_name.upper(), fill=hdr_fg, font=font_badge_title)
 
-            # 2. Header Bar
-            hdr_h = 44
-            draw.rounded_rectangle([x1, y1, x2, y1 + hdr_h], radius=10, fill=hdr_bg)
-            draw.rectangle([x1, y1 + hdr_h - 12, x2, y1 + hdr_h], fill=hdr_bg)
+            # Count & TCO stats
+            q_cnt = time_counts.get(q_name, 0)
+            q_cst = time_costs.get(q_name, 0.0)
+            stats_str = f"{q_cnt} App • {_format_eur(q_cst, lang)}" if lang == "it" else f"{q_cnt} Apps • {_format_eur(q_cst, lang)}"
+            draw.text((bx1 + 8 + pill_w + 10, by1 + 12), stats_str, fill=(15, 23, 42), font=font_badge_stat)
 
-            # Quadrant Title
-            draw.text((x1 + 16, y1 + 12), q_name.upper(), fill=hdr_fg, font=font_q_title)
+            # Subtitle
+            sub_lbl = sub_it if lang == "it" else sub_en
+            draw.text((bx1 + 10, by1 + 36), sub_lbl, fill=(100, 116, 139), font=font_badge_sub)
 
-            # Stats (Count & Spend)
-            q_cnt = time_counts.get(q_name, len(quad_apps[q_name]))
-            q_cst = time_costs.get(q_name, sum((a.get("total_annual_cost") or a.get("annual_cost") or 0.0) for a in quad_apps[q_name]))
-            stats_str = f"{q_cnt} App  •  {_format_eur(q_cst, lang)}/anno" if lang == "it" else f"{q_cnt} Apps  •  {_format_eur(q_cst, lang)}/yr"
-            draw.text((x2 - 16 - len(stats_str) * 8, y1 + 14), stats_str, fill=(241, 245, 249), font=font_q_stat)
-
-            # 3. Subline / Strategy definition
-            sub_text = sub_it if lang == "it" else sub_en
-            draw.text((x1 + 16, y1 + hdr_h + 8), sub_text, fill=(71, 85, 105), font=font_q_sub)
-
-            # 4. App Chips Grid (2 Columns x 6 Rows = max 12 slots)
-            app_list = quad_apps[q_name]
-            chip_start_y = y1 + hdr_h + 30
-            chip_w = (col_w - 42) // 2
-            chip_h = 36
-            chip_gap_x = 10
-            chip_gap_y = 8
-
-            max_chips = 12
-            visible_apps = app_list[:max_chips]
-
-            for a_idx, app in enumerate(visible_apps):
-                col_i = a_idx % 2
-                row_i = a_idx // 2
-
-                cx1 = x1 + 16 + col_i * (chip_w + chip_gap_x)
-                cy1 = chip_start_y + row_i * (chip_h + chip_gap_y)
-                cx2 = cx1 + chip_w
-                cy2 = cy1 + chip_h
-
-                if a_idx == (max_chips - 1) and len(app_list) > max_chips:
-                    # Show "+ N more" pill
-                    draw.rounded_rectangle([cx1, cy1, cx2, cy2], radius=6, fill=(241, 245, 249), outline=border_col, width=1)
-                    rem_cnt = len(app_list) - (max_chips - 1)
-                    rem_lbl = f"+ {rem_cnt} altre app nel catalogo..." if lang == "it" else f"+ {rem_cnt} more apps in catalog..."
-                    draw.text((cx1 + 12, cy1 + 10), rem_lbl, fill=(71, 85, 105), font=font_app_name)
-                else:
-                    # Application Pill
-                    draw.rounded_rectangle([cx1, cy1, cx2, cy2], radius=6, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
-                    # Color indicator dot
-                    draw.ellipse([cx1 + 10, cy1 + 13, cx1 + 18, cy1 + 21], fill=border_col)
-
-                    # Truncate app name if too long
-                    raw_name = app.get("name", "N/A")
-                    name_clean = raw_name[:18] + ".." if len(raw_name) > 20 else raw_name
-                    draw.text((cx1 + 24, cy1 + 10), name_clean, fill=(15, 23, 42), font=font_app_name)
-
-                    # Cost on the right
-                    c_val = app.get("total_annual_cost") or app.get("annual_cost") or 0.0
-                    if c_val > 0:
-                        c_str = f"€{c_val/1000:.0f}k" if c_val >= 1000 else f"€{c_val:.0f}"
-                        draw.text((cx2 - 55, cy1 + 11), c_str, fill=(100, 116, 139), font=font_app_cost)
-
-        # 5. Axes & Central Labels
-        axis_col = (100, 116, 139)
-        # Horizontal Axis Text
-        h_axis_lbl = (
-            "◄─── BASSA IDONEITÀ TECNICA (< 3.0) ──────── IDONEITÀ TECNICA ──────── ELEVATA IDONEITÀ TECNICA (>= 3.0) ───►"
-            if lang == "it"
-            else "◄─── LOW TECHNICAL FIT (< 3.0) ──────── TECHNICAL CONDITION ──────── HIGH TECHNICAL FIT (>= 3.0) ───►"
+        # 5. Center Threshold Badge at (mid_x, mid_y)
+        center_lbl = "Soglia Fit 2.5" if lang == "it" else "Fit Threshold 2.5"
+        c_w, c_h = 130, 26
+        draw.rounded_rectangle(
+            [mid_x - c_w // 2, mid_y - c_h // 2, mid_x + c_w // 2, mid_y + c_h // 2],
+            radius=13, fill=(30, 41, 59), outline=(100, 116, 139), width=1
         )
-        draw.text((left_x + 360, 492), h_axis_lbl, fill=axis_col, font=font_axis)
+        draw.text((mid_x - 48, mid_y - 7), center_lbl, fill=(255, 255, 255), font=font_badge_sub)
 
-        # Bottom Sub-footer Summary
+        # 6. Prepare Bubbles Data & Spatial Positioning
+        costs = [float(a.get("annual_cost") or a.get("total_annual_cost") or 0.0) for a in apps]
+        min_cost = min(costs) if costs else 0.0
+        max_cost = max(costs) if costs else 0.0
+        cost_spread = max(1.0, max_cost - min_cost)
+
+        # Groups by integer/rounded fits to apply initial sunflower distribution
+        groups: Dict[str, List[Dict[str, Any]]] = {}
+        for a in apps:
+            b = round(float(a.get("business_fit") or 3.0), 1)
+            t = round(float(a.get("technical_fit") or 3.0), 1)
+            k = f"{b}_{t}"
+            groups.setdefault(k, []).append(a)
+
+        quad_colors = {
+            "Invest": ((16, 185, 129, 215), (5, 150, 105, 255)),
+            "Tolerate": ((37, 99, 235, 215), (29, 78, 216, 255)),
+            "Migrate": ((245, 158, 11, 225), (217, 119, 6, 255)),
+            "Eliminate": ((225, 29, 72, 215), (190, 18, 60, 255)),
+        }
+
+        bubble_items = []
+        for a in apps:
+            b_fit = max(1.0, min(4.0, float(a.get("business_fit") or 3.0)))
+            t_fit = max(1.0, min(4.0, float(a.get("technical_fit") or 3.0)))
+            cost = float(a.get("annual_cost") or a.get("total_annual_cost") or 0.0)
+
+            # Square root cost scaling for proportional bubble area
+            cost_ratio = math.sqrt(max(0.0, cost - min_cost) / cost_spread)
+            radius = 16.0 + cost_ratio * 30.0  # radius between 16px and 46px
+
+            margin_x = 70.0
+            margin_y = 60.0
+            base_x = x1 + margin_x + ((t_fit - 1.0) / 3.0) * (plot_w - 2.0 * margin_x)
+            base_y = y2 - margin_y - ((b_fit - 1.0) / 3.0) * (plot_h - 2.0 * margin_y)
+
+            # Initial golden ratio spiral offset for co-located points
+            k = f"{round(b_fit, 1)}_{round(t_fit, 1)}"
+            grp = groups.get(k, [])
+            idx = grp.index(a) if a in grp else 0
+            ox, oy = 0.0, 0.0
+            if len(grp) > 1:
+                angle = idx * 2.399963
+                dist = (radius + 4.0) * (0.8 + 0.55 * math.sqrt(idx))
+                ox = math.cos(angle) * dist
+                oy = math.sin(angle) * dist
+
+            # Quadrant boundary constraints
+            if t_fit >= 2.5:
+                min_px = mid_x + radius + 4.0
+                max_px = x2 - radius - 8.0
+            else:
+                min_px = x1 + radius + 8.0
+                max_px = mid_x - radius - 4.0
+
+            if b_fit >= 2.5:
+                min_py = y1 + radius + 8.0
+                max_py = mid_y - radius - 4.0
+            else:
+                min_py = mid_y + radius + 4.0
+                max_py = y2 - radius - 8.0
+
+            px = max(min_px, min(max_px, base_x + ox))
+            py = max(min_py, min(max_py, base_y + oy))
+
+            calc_quad = ("Invest" if t_fit >= 2.5 else "Tolerate") if b_fit >= 2.5 else ("Migrate" if t_fit >= 2.5 else "Eliminate")
+            quad = a.get("time_quadrant_override") or a.get("time_quadrant") or calc_quad
+            has_override = bool(a.get("time_quadrant_override") and a.get("time_quadrant_override") != calc_quad)
+
+            bubble_items.append({
+                "app": a,
+                "px": px,
+                "py": py,
+                "radius": radius,
+                "quadrant": quad,
+                "has_override": has_override,
+                "cost": cost,
+                "name": a.get("short_name") or a.get("name") or "App",
+                "min_px": min_px, "max_px": max_px,
+                "min_py": min_py, "max_py": max_py,
+            })
+
+        # 7. Collision Relaxation: 6 Iterations to spread overlapping bubbles
+        for _ in range(6):
+            for i in range(len(bubble_items)):
+                b1 = bubble_items[i]
+                for j in range(i + 1, len(bubble_items)):
+                    b2 = bubble_items[j]
+                    dx = b2["px"] - b1["px"]
+                    dy = b2["py"] - b1["py"]
+                    dist = math.hypot(dx, dy)
+                    min_dist = b1["radius"] + b2["radius"] + 2.0
+                    if 0.001 < dist < min_dist:
+                        overlap = (min_dist - dist) / dist * 0.35
+                        push_x = dx * overlap
+                        push_y = dy * overlap
+                        b1["px"] -= push_x
+                        b1["py"] -= push_y
+                        b2["px"] += push_x
+                        b2["py"] += push_y
+                b1["px"] = max(b1["min_px"], min(b1["max_px"], b1["px"]))
+                b1["py"] = max(b1["min_py"], min(b1["max_py"], b1["py"]))
+
+        # 8. Render Bubbles onto RGBA Overlay (Larger Bubbles First)
+        overlay = Image.new("RGBA", (total_w, total_h), (0, 0, 0, 0))
+        draw_ov = ImageDraw.Draw(overlay)
+
+        bubble_items.sort(key=lambda item: item["radius"], reverse=True)
+
+        for b in bubble_items:
+            fill_col, out_col = quad_colors.get(b["quadrant"], quad_colors["Invest"])
+            r = b["radius"]
+            bx, by = b["px"], b["py"]
+            draw_ov.ellipse([bx - r, by - r, bx + r, by + r], fill=fill_col, outline=out_col, width=2)
+
+            # Gold indicator badge if override is present
+            if b["has_override"]:
+                draw_ov.ellipse([bx + r - 8, by - r, bx + r + 4, by - r + 12], fill=(245, 158, 11, 255), outline=(255, 255, 255, 255), width=2)
+
+        # Alpha Composite Bubbles onto Image
+        img = Image.alpha_composite(img.convert("RGBA"), overlay).convert("RGB")
+        draw = ImageDraw.Draw(img)
+
+        # 9. Draw Crisp Text Labels Inside Bubbles
+        for b in bubble_items:
+            bx, by = b["px"], b["py"]
+            r = b["radius"]
+            name_raw = b["name"]
+
+            # Text color: dark slate on amber, crisp white on others
+            is_amber = (b["quadrant"] == "Migrate")
+            txt_color = (15, 23, 42) if is_amber else (255, 255, 255)
+
+            # Determine label and cost format based on bubble radius
+            if r >= 32:
+                name_disp = name_raw[:15] + ".." if len(name_raw) > 17 else name_raw
+                cost_val = b["cost"]
+                cost_disp = f"€{cost_val/1000000:.1f}M" if cost_val >= 1000000 else (f"€{cost_val/1000:.0f}k" if cost_val >= 1000 else f"€{cost_val:.0f}")
+                font_name = font_bubble_title
+                font_cost = font_bubble_cost
+                draw.text((bx - len(name_disp) * 3.2, by - 12), name_disp, fill=txt_color, font=font_name)
+                draw.text((bx - len(cost_disp) * 3.0, by + 2), cost_disp, fill=txt_color, font=font_cost)
+            elif r >= 22:
+                name_disp = name_raw[:11] + ".." if len(name_raw) > 13 else name_raw
+                cost_val = b["cost"]
+                cost_disp = f"€{cost_val/1000000:.1f}M" if cost_val >= 1000000 else (f"€{cost_val/1000:.0f}k" if cost_val >= 1000 else f"€{cost_val:.0f}")
+                font_name = font_bubble_title
+                font_cost = font_bubble_sm
+                draw.text((bx - len(name_disp) * 3.0, by - 10), name_disp, fill=txt_color, font=font_name)
+                draw.text((bx - len(cost_disp) * 2.8, by + 3), cost_disp, fill=txt_color, font=font_cost)
+            else:
+                name_disp = name_raw[:8] + ".." if len(name_raw) > 10 else name_raw
+                draw.text((bx - len(name_disp) * 2.8, by - 6), name_disp, fill=txt_color, font=font_bubble_sm)
+
+        # 10. Axis Ticks & Scale Markings
+        # Y-Axis (Left)
+        y_ticks = [
+            (4.0, y1 + 10, "4.0"),
+            (3.0, y1 + plot_h * 0.33, "3.0"),
+            (2.5, mid_y, "2.5"),
+            (2.0, y1 + plot_h * 0.67, "2.0"),
+            (1.0, y2 - 10, "1.0"),
+        ]
+        for val, ty, lbl in y_ticks:
+            draw.line([(x1 - 6, ty), (x1, ty)], fill=(100, 116, 139), width=2)
+            draw.text((x1 - 32, ty - 6), lbl, fill=(71, 85, 105), font=font_axis)
+
+        # Rotated Y-Axis Label
+        y_axis_text = "▲ IDONEITÀ FUNZIONALE & BUSINESS FIT (1.0 → 4.0)" if lang == "it" else "▲ BUSINESS & FUNCTIONAL FIT (1.0 → 4.0)"
+        txt_img = Image.new("RGBA", (450, 26), (255, 255, 255, 0))
+        d_txt = ImageDraw.Draw(txt_img)
+        d_txt.text((0, 4), y_axis_text, fill=(51, 65, 85), font=font_axis_bold)
+        rot_img = txt_img.rotate(90, expand=True)
+        img.paste(rot_img, (20, mid_y - 225), rot_img)
+
+        # X-Axis (Bottom)
+        x_ticks = [
+            (1.0, x1 + 10, "1.0"),
+            (2.0, x1 + plot_w * 0.33, "2.0"),
+            (2.5, mid_x, "2.5"),
+            (3.0, x1 + plot_w * 0.67, "3.0"),
+            (4.0, x2 - 10, "4.0"),
+        ]
+        for val, tx, lbl in x_ticks:
+            draw.line([(tx, y2), (tx, y2 + 6)], fill=(100, 116, 139), width=2)
+            draw.text((tx - 8, y2 + 8), lbl, fill=(71, 85, 105), font=font_axis)
+
+        x_axis_text = "► IDONEITÀ TECNICA & ARCHITETTURALE (1.0 → 4.0)" if lang == "it" else "► TECHNICAL CONDITION & FIT (1.0 → 4.0)"
+        draw.text((mid_x - 170, y2 + 26), x_axis_text, fill=(51, 65, 85), font=font_axis_bold)
+
+        # 11. Footer Summary & Bubble Size Legend
         tot_apps_cnt = portfolio_data.get("total_applications", len(apps))
         tot_tco_val = portfolio_data.get("total_annual_cost", sum(time_costs.values()))
         footer_summary = (
-            f"Totale Portafoglio APM: {tot_apps_cnt} Business Applications  •  TCO Complessivo Annuo: {_format_eur(tot_tco_val, lang)}"
+            f"Totale Portafoglio APM: {tot_apps_cnt} Business Applications  •  TCO Annuo Totale: {_format_eur(tot_tco_val, lang)}"
             if lang == "it"
             else f"Total APM Portfolio: {tot_apps_cnt} Business Applications  •  Total Annual TCO: {_format_eur(tot_tco_val, lang)}"
         )
-        draw.text((left_x + 400, 920), footer_summary, fill=(51, 65, 85), font=font_axis)
+        draw.text((x1 + 10, 930), footer_summary, fill=(30, 41, 59), font=font_axis_bold)
+
+        # Legend on Bottom-Right
+        leg_x = x2 - 340
+        leg_y = 926
+        draw.text((leg_x - 160, leg_y + 4), "Dimensione Bolla (TCO):" if lang == "it" else "Bubble Size (TCO):", fill=(71, 85, 105), font=font_axis)
+        # Small circle
+        draw.ellipse([leg_x, leg_y + 4, leg_x + 14, leg_y + 18], fill=(203, 213, 225), outline=(100, 116, 139), width=1)
+        draw.text((leg_x + 18, leg_y + 4), _format_eur(min_cost, lang), fill=(100, 116, 139), font=font_bubble_sm)
+        # Large circle
+        draw.ellipse([leg_x + 95, leg_y - 2, leg_x + 121, leg_y + 24], fill=(203, 213, 225), outline=(100, 116, 139), width=1)
+        draw.text((leg_x + 126, leg_y + 4), _format_eur(max_cost, lang), fill=(100, 116, 139), font=font_bubble_sm)
 
         buf = io.BytesIO()
         img.save(buf, format="PNG")
