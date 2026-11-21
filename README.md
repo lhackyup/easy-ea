@@ -1,5 +1,14 @@
 # EasyEA - Business-Oriented Enterprise Architecture Platform
 
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
+[![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=black)](https://react.dev)
+
+<p align="center">
+  <img src="docs/assets/easyea-demo.gif" alt="EasyEA Platform Interactive Demo - Executive Overview, APM TIME Matrix, Functional Analysis, What-If Simulator, ArchiMate Diagram" width="100%" />
+</p>
+
 **EasyEA** è una piattaforma web-based di Enterprise Architecture progettata con due anime distinte:
 1. **🏛️ Architect Hub (ArchiMate Core)**: Metamodello standard ArchiMate 3.x, parser compatibile al 100% con **Archi Tool** (`.archimate` e *Open Group Model Exchange XML*), navigatore di elementi e relazioni con layer filtering, e visualizzatore di viste grafiche interattive basato su React Flow.
 2. **💼 Business & Executive Hub**: 
@@ -94,4 +103,10 @@ EasyEA si integra direttamente con i client desktop degli architetti e degli ana
 - **Google Cloud Run**:
   1. Esegui la build dell'immagine Docker su Artifact Registry: `gcloud builds submit --tag gcr.io/YOUR_PROJECT/easyea .`
   2. Deploya con scaling a zero: `gcloud run deploy easyea --image gcr.io/YOUR_PROJECT/easyea --platform managed --allow-unauthenticated`
+
+---
+
+## 📄 Licenza
+
+Questo progetto è rilasciato sotto licenza **GNU Affero General Public License v3.0 (AGPL-3.0)**. Consulta il file [LICENSE](LICENSE) per i dettagli completi.
 

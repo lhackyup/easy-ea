@@ -23,7 +23,10 @@ import {
   Package,
   ArrowRight,
   Layers,
-  Network
+  Network,
+  FileDown,
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 import { TechRiskRadar } from './TechRiskRadar';
@@ -76,6 +79,20 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
   const [editingApp, setEditingApp] = useState<ApplicationInfo | null>(null);
   const [editForm, setEditForm] = useState<Partial<ApplicationInfo>>({});
   const [saving, setSaving] = useState(false);
+  const [isExportingDocx, setIsExportingDocx] = useState(false);
+
+  const handleExportDocx = async () => {
+    if (!modelId) return;
+    try {
+      setIsExportingDocx(true);
+      await api.exportAPMDocxReport(modelId, language);
+    } catch (err: any) {
+      console.error('Error exporting APM DOCX report:', err);
+      alert(t.apm.exportError);
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -379,6 +396,23 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
           <p className="text-xs text-slate-600 mt-1">
             {t.apm.subtitle}
           </p>
+        </div>
+        {/* Global Actions */}
+        <div className="flex items-center space-x-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleExportDocx}
+            disabled={isExportingDocx || !data}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+            title={t.apm.btnExportDocx}
+          >
+            {isExportingDocx ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+            ) : (
+              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            )}
+            <span>{isExportingDocx ? t.apm.btnExportingDocx : t.apm.btnExportDocx}</span>
+          </button>
         </div>
       </div>
 

@@ -203,6 +203,10 @@ export const en = {
     tabBadgeNew: 'New',
     btnExportCsvFull: 'Export Full CSV',
     btnExportCsvFullTitle: 'Export all application attributes in complete CSV',
+    btnExportDocx: 'Export Word Report (.docx)',
+    btnExportingDocx: 'Generating Report...',
+    exportSuccess: 'Word report successfully generated!',
+    exportError: 'Error generating APM Word report',
     removeFilter: 'Clear Filter ({quadrant})',
     appsCountScope: '{count} Business Applications registered in APM portfolio',
 

@@ -1,13 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, Response
 from sqlalchemy.orm import Session
 from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
-from app.models.archimate import ArchimateElement, ArchimateRelationship, User
+from app.models.archimate import ArchimateElement, ArchimateRelationship, User, ModelWorkspace
 from app.api.deps import get_current_user, require_library_permission
 from app.services.apm_service import APMService
 from app.services.tech_risk_service import TechRiskService
+from app.services.apm_report_service import APMReportService
 
 router = APIRouter(prefix="/apm", tags=["Application Portfolio Management"])
 
@@ -232,4 +233,51 @@ def create_interface(
         return APMService.create_interface(db, model_id, payload.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.get("/export/docx/{model_id}")
+def export_apm_docx_report(
+    model_id: str,
+    lang: str = Query("it", description="Report language: 'it' or 'en'"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> Response:
+    """
+    Generates and downloads a comprehensive Word (.docx) APM assessment document:
+    - Executive summary and KPI scorecards
+    - Gartner TIME matrix & rationalization priorities
+    - Technological risk & DORA / NIS2 compliance
+    - Financial analysis & TCO breakdown
+    - Interface & flow inventory
+    - Lifecycle roadmap & decommissioning plan
+    - Full Master Inventory Table (Landscape)
+    """
+    require_library_permission(db, current_user, "view_models", model_id)
+    model = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
+    model_name = model.name if model else model_id
+
+    portfolio = APMService.get_portfolio_summary(db, model_id)
+    tco = APMService.get_tco_breakdown(db, model_id)
+    lifecycle = APMService.get_lifecycle_analysis(db, model_id)
+    interfaces = APMService.get_interface_inventory(db, model_id)
+    tech_risk = TechRiskService.analyze_tech_risk(db, model_id)
+
+    clean_lang = "en" if lang.lower().startswith("en") else "it"
+    docx_stream = APMReportService.generate_docx_report(
+        portfolio, tco, lifecycle, interfaces, tech_risk,
+        model_name=model_name,
+        lang=clean_lang
+    )
+
+    safe_name = "".join(c for c in model_name if c.isalnum() or c in (" ", "-", "_")).strip().replace(" ", "_")
+    filename = f"APM_Strategic_Assessment_{safe_name}.docx"
+
+    return Response(
+        content=docx_stream.getvalue(),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 

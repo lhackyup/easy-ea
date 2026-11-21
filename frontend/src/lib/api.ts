@@ -197,6 +197,32 @@ export const api = {
     return res.json();
   },
 
+  exportAPMDocxReport: async (modelId: string, lang: string = 'it'): Promise<void> => {
+    const res = await fetch(`${API_BASE}/apm/export/docx/${encodeURIComponent(modelId)}?lang=${encodeURIComponent(lang)}`, {
+      method: 'GET',
+      headers: { ...getAuthHeaders() },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to export APM assessment report' }));
+      throw new Error(err.detail || 'Failed to export APM assessment report');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition');
+    let outName = 'APM_Strategic_Assessment_Report.docx';
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) outName = match[1];
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = outName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   // Functional Analysis
   getFunctionalAnalysis: async (modelId: string): Promise<FunctionalAnalysisData> => {
     const res = await fetch(`${API_BASE}/functional/analysis/${modelId}`, { headers: { ...getAuthHeaders() } });

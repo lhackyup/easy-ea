@@ -24,6 +24,7 @@ from docx import Document
 from docx.shared import Inches, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.enum.table import WD_TABLE_ALIGNMENT, WD_ALIGN_VERTICAL
+from docx.enum.section import WD_SECTION_START, WD_ORIENTATION
 from docx.oxml import parse_xml
 from docx.oxml.ns import nsdecls
 
@@ -226,6 +227,7 @@ class FunctionalReportService:
         """
         Generates a high-resolution, multi-column visual Heatmap diagram (PNG)
         directly at backend using Pillow, eliminating any fragile browser dependencies.
+        Optimized for full-page horizontal landscape A4 presentation.
         """
         if not HAS_PIL:
             return None
@@ -233,21 +235,21 @@ class FunctionalReportService:
         domains = data.get("heatmap_domains", [])
         leaf_map = {lf.get("id"): lf for lf in data.get("leaf_functions", [])}
 
-        col_width = 360
-        col_gap = 25
-        margin_x = 35
+        col_width = 460
+        col_gap = 35
+        margin_x = 40
         start_y = 95
         col_x = [margin_x + i * (col_width + col_gap) for i in range(3)]
         col_y = [start_y, start_y, start_y]
 
-        font_title = ImageFont.load_default(size=17)
-        font_sub = ImageFont.load_default(size=11)
-        font_dom = ImageFont.load_default(size=12)
-        font_dom_sub = ImageFont.load_default(size=10)
-        font_grp = ImageFont.load_default(size=11)
-        font_tile = ImageFont.load_default(size=11)
-        font_pill = ImageFont.load_default(size=10)
-        font_apps = ImageFont.load_default(size=9)
+        font_title = ImageFont.load_default(size=18)
+        font_sub = ImageFont.load_default(size=12)
+        font_dom = ImageFont.load_default(size=13)
+        font_dom_sub = ImageFont.load_default(size=11)
+        font_grp = ImageFont.load_default(size=12)
+        font_tile = ImageFont.load_default(size=12)
+        font_pill = ImageFont.load_default(size=11)
+        font_apps = ImageFont.load_default(size=10)
 
         # 1. Precalculate card heights
         card_layouts = []
@@ -266,32 +268,32 @@ class FunctionalReportService:
                         }]
                     }]
 
-            card_h = 42
+            card_h = 44
             for grp in groups:
                 if len(groups) > 1 or grp.get("name") != dom.get("name"):
-                    card_h += 22
+                    card_h += 24
                 tiles = grp.get("tiles", [])
-                card_h += len(tiles) * 50 + 6
+                card_h += len(tiles) * 52 + 8
             card_layouts.append((dom, groups, card_h))
 
         for dom, groups, card_h in card_layouts:
             min_c = col_y.index(min(col_y))
             col_y[min_c] += card_h + 20
 
-        total_h = max(col_y) + 30
-        total_w = 1200
+        total_h = max(col_y) + 35
+        total_w = 1540
         img = Image.new("RGB", (total_w, total_h), color=(248, 250, 252))
         draw = ImageDraw.Draw(img)
 
         # Header banner
         draw.rectangle([0, 0, total_w, 75], fill=(15, 23, 42))
-        draw.text((35, 16), "EASYEA • BUSINESS CAPABILITY & FUNCTIONAL FIT HEATMAP", fill=(255, 255, 255), font=font_title)
+        draw.text((40, 16), "EASYEA • BUSINESS CAPABILITY & FUNCTIONAL FIT HEATMAP", fill=(255, 255, 255), font=font_title)
         legend_text = (
             "Legenda Fit:  [Eccellente ≥ 4.0]  |  [Adeguato 3.0-3.9]  |  [Tollerabile 2.0-2.9]  |  [GAP / Carente < 2.0]"
             if lang == "it"
             else "Fit Legend:  [Excellent ≥ 4.0]  |  [Adequate 3.0-3.9]  |  [Tolerable 2.0-2.9]  |  [GAP / Inadequate < 2.0]"
         )
-        draw.text((35, 46), legend_text, fill=(148, 163, 184), font=font_sub)
+        draw.text((40, 46), legend_text, fill=(148, 163, 184), font=font_sub)
 
         # Draw Cards
         col_y = [start_y, start_y, start_y]
@@ -303,27 +305,27 @@ class FunctionalReportService:
             # Card container
             draw.rounded_rectangle([cx, cy, cx + col_width, cy + card_h], radius=8, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
             # Header
-            draw.rounded_rectangle([cx, cy, cx + col_width, cy + 36], radius=8, fill=(30, 41, 59))
-            draw.rectangle([cx, cy + 24, cx + col_width, cy + 36], fill=(30, 41, 59))
+            draw.rounded_rectangle([cx, cy, cx + col_width, cy + 38], radius=8, fill=(30, 41, 59))
+            draw.rectangle([cx, cy + 26, cx + col_width, cy + 38], fill=(30, 41, 59))
 
             dom_name = dom.get("name", "")
-            if len(dom_name) > 28:
-                dom_name = dom_name[:26] + "..."
-            draw.text((cx + 12, cy + 10), dom_name, fill=(255, 255, 255), font=font_dom)
+            if len(dom_name) > 36:
+                dom_name = dom_name[:34] + "..."
+            draw.text((cx + 14, cy + 11), dom_name, fill=(255, 255, 255), font=font_dom)
 
             rollup = dom.get("rollup", {})
             sub_info = f"Fit {rollup.get('avg_functional_fit', 0.0):.1f} ({rollup.get('covered_leaves', 0)}/{rollup.get('total_leaves', 0)})"
-            draw.text((cx + col_width - 95, cy + 12), sub_info, fill=(148, 163, 184), font=font_dom_sub)
+            draw.text((cx + col_width - 125, cy + 12), sub_info, fill=(148, 163, 184), font=font_dom_sub)
 
             # Groups and Tiles
-            cur_y = cy + 44
+            cur_y = cy + 46
             for grp in groups:
                 if len(groups) > 1 or grp.get("name") != dom.get("name"):
                     grp_name = grp.get("name", "")
-                    if len(grp_name) > 34:
-                        grp_name = grp_name[:32] + "..."
-                    draw.text((cx + 12, cur_y), f"• {grp_name}", fill=(71, 85, 105), font=font_grp)
-                    cur_y += 20
+                    if len(grp_name) > 42:
+                        grp_name = grp_name[:40] + "..."
+                    draw.text((cx + 14, cur_y), f"• {grp_name}", fill=(71, 85, 105), font=font_grp)
+                    cur_y += 22
 
                 for tile in grp.get("tiles", []):
                     fit = tile.get("functional_fit", 0.0)
@@ -355,32 +357,32 @@ class FunctionalReportService:
                         pill_bg = (225, 29, 72)
                         pill_txt = f"★ {fit:.1f}"
 
-                    tx = cx + 10
-                    tw = col_width - 20
-                    draw.rounded_rectangle([tx, cur_y, tx + tw, cur_y + 44], radius=6, fill=bg_col, outline=border_col, width=1)
+                    tx = cx + 12
+                    tw = col_width - 24
+                    draw.rounded_rectangle([tx, cur_y, tx + tw, cur_y + 46], radius=6, fill=bg_col, outline=border_col, width=1)
 
                     t_name = tile.get("name", "")
-                    if len(t_name) > 30:
-                        t_name = t_name[:28] + "..."
-                    draw.text((tx + 8, cur_y + 6), t_name, fill=(15, 23, 42), font=font_tile)
+                    if len(t_name) > 38:
+                        t_name = t_name[:36] + "..."
+                    draw.text((tx + 10, cur_y + 6), t_name, fill=(15, 23, 42), font=font_tile)
 
                     # Pill on right
-                    pw = 46
-                    draw.rounded_rectangle([tx + tw - pw - 6, cur_y + 6, tx + tw - 6, cur_y + 22], radius=4, fill=pill_bg)
-                    draw.text((tx + tw - pw, cur_y + 8), pill_txt, fill=(255, 255, 255), font=font_pill)
+                    pw = 50
+                    draw.rounded_rectangle([tx + tw - pw - 8, cur_y + 6, tx + tw - 8, cur_y + 24], radius=4, fill=pill_bg)
+                    draw.text((tx + tw - pw - 2, cur_y + 8), pill_txt, fill=(255, 255, 255), font=font_pill)
 
                     # Apps text
                     apps = tile.get("effective_applications", tile.get("applications", []))
                     if apps:
                         app_names = [a.get("app_name", "") for a in apps]
                         apps_txt = ", ".join(app_names)
-                        if len(apps_txt) > 38:
-                            apps_txt = apps_txt[:36] + "..."
+                        if len(apps_txt) > 52:
+                            apps_txt = apps_txt[:50] + "..."
                     else:
                         apps_txt = "Nessun applicativo IT (GAP)" if lang == "it" else "No IT applications (GAP)"
-                    draw.text((tx + 8, cur_y + 25), apps_txt, fill=(100, 116, 139), font=font_apps)
+                    draw.text((tx + 10, cur_y + 27), apps_txt, fill=(100, 116, 139), font=font_apps)
 
-                    cur_y += 50
+                    cur_y += 52
                 cur_y += 4
 
             col_y[min_c] += card_h + 20
@@ -410,8 +412,9 @@ class FunctionalReportService:
         t = REPORT_I18N.get(lang, REPORT_I18N["it"])
         doc = Document()
 
-        # Page Setup: Standard A4 with 1-inch margins
+        # Page Setup: Standard A4 Portrait with 0.8-inch margins
         for section in doc.sections:
+            section.orientation = WD_ORIENTATION.PORTRAIT
             section.page_width = Inches(8.27)
             section.page_height = Inches(11.69)
             section.top_margin = Inches(0.8)
@@ -605,191 +608,70 @@ class FunctionalReportService:
         doc.add_paragraph().paragraph_format.space_after = Pt(12)
 
         # =====================================================================
-        # 2. CAPABILITY FIT & MATURITY HEATMAP (NATIVE DOCX GRID)
+        # 2. CAPABILITY FIT & MATURITY HEATMAP (DEDICATED FULL-PAGE LANDSCAPE)
         # =====================================================================
+        sec_landscape = doc.add_section(WD_SECTION_START.NEW_PAGE)
+        sec_landscape.orientation = WD_ORIENTATION.LANDSCAPE
+        sec_landscape.page_width = Inches(11.69)
+        sec_landscape.page_height = Inches(8.27)
+        sec_landscape.top_margin = Inches(0.5)
+        sec_landscape.bottom_margin = Inches(0.5)
+        sec_landscape.left_margin = Inches(0.6)
+        sec_landscape.right_margin = Inches(0.6)
+
         h2 = doc.add_heading(level=1)
-        h2.paragraph_format.space_before = Pt(16)
-        h2.paragraph_format.space_after = Pt(6)
+        h2.paragraph_format.space_before = Pt(4)
+        h2.paragraph_format.space_after = Pt(4)
         r_h2 = h2.add_run(t["heatmap_title"])
         r_h2.font.color.rgb = RGBColor(0x1E, 0x29, 0x3B)
         r_h2.font.size = Pt(14)
 
         p_desc2 = doc.add_paragraph(t["heatmap_desc"])
         p_desc2.paragraph_format.space_after = Pt(4)
+        p_desc2.runs[0].font.size = Pt(9.5)
 
-        p_legend = doc.add_paragraph(t["heatmap_legend"])
-        p_legend.paragraph_format.space_after = Pt(12)
-        p_legend.runs[0].font.size = Pt(8.5)
-        p_legend.runs[0].font.italic = True
-        p_legend.runs[0].font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
-
-        # 2.A Visual Heatmap Diagram Image (Autonomously generated at backend via Pillow)
+        # Visual Heatmap Diagram Image (Autonomously generated at backend via Pillow or base64 fallback)
         try:
-            diag_stream = cls.render_heatmap_diagram(data, lang=lang)
+            diag_stream = None
+            if heatmap_image_base64 and "," in heatmap_image_base64:
+                try:
+                    raw_b64 = heatmap_image_base64.split(",", 1)[1]
+                    diag_stream = io.BytesIO(base64.b64decode(raw_b64))
+                except Exception:
+                    diag_stream = None
+            if not diag_stream or len(diag_stream.getvalue()) < 500:
+                diag_stream = cls.render_heatmap_diagram(data, lang=lang)
+
             if diag_stream and len(diag_stream.getvalue()) > 500:
                 p_img = doc.add_paragraph()
                 p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p_img.paragraph_format.space_before = Pt(8)
+                p_img.paragraph_format.space_before = Pt(4)
                 p_img.paragraph_format.space_after = Pt(4)
-                doc.add_picture(diag_stream, width=Inches(6.67))
+                p_img_run = p_img.add_run()
+                p_img_run.add_picture(diag_stream, width=Inches(10.3))
+
                 p_cap = doc.add_paragraph(t["heatmap_image_caption"])
                 p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p_cap.paragraph_format.space_after = Pt(14)
+                p_cap.paragraph_format.space_before = Pt(2)
+                p_cap.paragraph_format.space_after = Pt(4)
                 p_cap.runs[0].font.size = Pt(8.5)
                 p_cap.runs[0].font.italic = True
                 p_cap.runs[0].font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
         except Exception:
             pass
 
-        # 2.B Structured Native Grid of Domains, Groups and Tiles
-        heatmap_domains = data.get("heatmap_domains", [])
-        for domain in heatmap_domains:
-            # Macro Domain Header Bar
-            dom_table = doc.add_table(rows=1, cols=1)
-            dom_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-            dom_table.autofit = False
-            dom_cell = dom_table.cell(0, 0)
-            dom_cell.width = Inches(6.67)
-            _set_cell_background(dom_cell, "1E293B")  # Slate-800 dark bar
-            _set_cell_padding(dom_cell, top=100, bottom=100, left=140, right=140)
-
-            p_dom = dom_cell.paragraphs[0]
-            p_dom.paragraph_format.space_after = Pt(2)
-            r_dom_title = p_dom.add_run(t["macro_domain_header"].format(name=domain.get("name")))
-            r_dom_title.bold = True
-            r_dom_title.font.size = Pt(11)
-            r_dom_title.font.color.rgb = RGBColor(0xFF, 0xFF, 0xFF)
-
-            # Rollup stats on domain
-            rollup = domain.get("rollup", {})
-            p_dom_sub = dom_cell.add_paragraph()
-            p_dom_sub.paragraph_format.space_after = Pt(0)
-            r_dom_sub = p_dom_sub.add_run(t["domain_rollup_stats"].format(
-                fit=rollup.get("avg_functional_fit", 0.0),
-                covered=rollup.get("covered_leaves", 0),
-                total=rollup.get("total_leaves", 0),
-                rate=rollup.get("coverage_rate", 0),
-                overlaps=rollup.get("overlapping_leaves", 0),
-                gaps=rollup.get("gap_leaves", 0),
-            ))
-            r_dom_sub.font.size = Pt(8.5)
-            r_dom_sub.font.color.rgb = RGBColor(0x94, 0xA3, 0xB8)  # Slate-400
-
-            # L1 Groups and L2 Tiles inside domain
-            groups = domain.get("groups", [])
-            if not groups:
-                # Isolated root capability: find matching leaf and treat as tile
-                matching_leaf = next((lf for lf in data.get("leaf_functions", []) if lf.get("id") == domain.get("id")), None)
-                if matching_leaf:
-                    groups = [{
-                        "id": f"{domain.get('id')}-single",
-                        "name": domain.get("name"),
-                        "tiles": [{
-                            "name": matching_leaf.get("name"),
-                            "functional_fit": matching_leaf.get("functional_fit", 0.0),
-                            "maturity_level": matching_leaf.get("maturity_level", 1),
-                            "is_gap": matching_leaf.get("is_gap", False),
-                            "is_overlapping": matching_leaf.get("is_overlapping", False),
-                            "effective_applications": [
-                                {"app_name": a.get("app_name")} for a in matching_leaf.get("applications", [])
-                            ]
-                        }]
-                    }]
-
-            for grp in groups:
-                p_grp = doc.add_paragraph()
-                p_grp.paragraph_format.space_before = Pt(8)
-                p_grp.paragraph_format.space_after = Pt(4)
-                r_grp = p_grp.add_run(f"• {grp.get('name')}")
-                r_grp.bold = True
-                r_grp.font.size = Pt(10)
-                r_grp.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
-
-                tiles = grp.get("tiles", [])
-                if not tiles:
-                    continue
-
-                # Grid of tiles: 2 tiles per row
-                row_count = (len(tiles) + 1) // 2
-                tile_table = doc.add_table(rows=row_count, cols=2)
-                tile_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-                tile_table.autofit = False
-
-                for r_idx in range(row_count):
-                    for c_idx in range(2):
-                        t_idx = r_idx * 2 + c_idx
-                        cell = tile_table.cell(r_idx, c_idx)
-                        cell.width = Inches(3.33)
-                        _set_cell_padding(cell, top=100, bottom=100, left=120, right=120)
-
-                        if t_idx < len(tiles):
-                            tile = tiles[t_idx]
-                            fit = tile.get("functional_fit", 0.0)
-                            is_gap = tile.get("is_gap", False)
-                            is_overlap = tile.get("is_overlapping", False)
-
-                            # Determine tile color
-                            if is_gap or fit == 0.0:
-                                bg_hex = "FFE4E6"  # Rose-100
-                                border_hex = "F43F5E"
-                                status_text = "GAP"
-                            elif fit >= 4.0:
-                                bg_hex = "D1FAE5"  # Emerald-100
-                                border_hex = "10B981"
-                                status_text = f"Fit {fit:.1f}"
-                            elif fit >= 3.0:
-                                bg_hex = "CCFBF1"  # Teal-100
-                                border_hex = "14B8A6"
-                                status_text = f"Fit {fit:.1f}"
-                            elif fit >= 2.0:
-                                bg_hex = "FEF3C7"  # Amber-100
-                                border_hex = "F59E0B"
-                                status_text = f"Fit {fit:.1f}"
-                            else:
-                                bg_hex = "FFE4E6"  # Rose-100
-                                border_hex = "F43F5E"
-                                status_text = f"Fit {fit:.1f}"
-
-                            _set_cell_background(cell, bg_hex)
-                            _set_cell_left_border(cell, hex_color=border_hex, size="24")
-
-                            p_t1 = cell.paragraphs[0]
-                            p_t1.paragraph_format.space_after = Pt(2)
-                            r_t_name = p_t1.add_run(tile.get("name", ""))
-                            r_t_name.bold = True
-                            r_t_name.font.size = Pt(9.5)
-
-                            # Subline: Fit & Maturity
-                            p_t2 = cell.add_paragraph()
-                            p_t2.paragraph_format.space_after = Pt(2)
-                            r_t_pill = p_t2.add_run(f"[{status_text}] • Mat. L{tile.get('maturity_level', 1)}")
-                            r_t_pill.bold = True
-                            r_t_pill.font.size = Pt(8)
-                            r_t_pill.font.color.rgb = RGBColor(0x47, 0x55, 0x69)
-
-                            # Applications summary
-                            eff_apps = tile.get("effective_applications", [])
-                            p_t3 = cell.add_paragraph()
-                            p_t3.paragraph_format.space_after = Pt(0)
-                            if not eff_apps:
-                                r_t_apps = p_t3.add_run(t["no_apps"])
-                                r_t_apps.font.italic = True
-                                r_t_apps.font.size = Pt(8)
-                                r_t_apps.font.color.rgb = RGBColor(0xBE, 0x12, 0x3C)
-                            else:
-                                app_names = [a.get("app_name") for a in eff_apps]
-                                r_t_apps = p_t3.add_run(", ".join(app_names))
-                                r_t_apps.font.size = Pt(8)
-                                r_t_apps.font.color.rgb = RGBColor(0x33, 0x41, 0x55)
-                        else:
-                            # Empty balancing cell
-                            _set_cell_background(cell, "FFFFFF")
-
-                doc.add_paragraph().paragraph_format.space_after = Pt(6)
-
         # =====================================================================
-        # 3. FUNCTIONAL GAPS REGISTER (BUCHE FUNZIONALI)
+        # 3. FUNCTIONAL GAPS REGISTER (RETURN TO PORTRAIT)
         # =====================================================================
+        sec_portrait = doc.add_section(WD_SECTION_START.NEW_PAGE)
+        sec_portrait.orientation = WD_ORIENTATION.PORTRAIT
+        sec_portrait.page_width = Inches(8.27)
+        sec_portrait.page_height = Inches(11.69)
+        sec_portrait.top_margin = Inches(0.8)
+        sec_portrait.bottom_margin = Inches(0.8)
+        sec_portrait.left_margin = Inches(0.8)
+        sec_portrait.right_margin = Inches(0.8)
+
         h3 = doc.add_heading(level=1)
         h3.paragraph_format.space_before = Pt(16)
         h3.paragraph_format.space_after = Pt(6)
