@@ -138,9 +138,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Layers
     },
     {
-      id: 'overlap' as BusinessSubTab,
-      label: t.subtabs.functionalOverlap,
-      icon: GitMerge
+      id: 'functional' as BusinessSubTab,
+      label: t.subtabs.functionalAnalysis,
+      icon: Network
     },
     {
       id: 'processes' as BusinessSubTab,

@@ -17,7 +17,7 @@ import {
 
 interface ExecutiveOverviewProps {
   modelId: string;
-  onNavigateTab: (tab: 'apm' | 'tech_risk' | 'tco' | 'overlap' | 'processes') => void;
+  onNavigateTab: (tab: 'apm' | 'tech_risk' | 'tco' | 'functional' | 'overlap' | 'processes') => void;
 }
 
 export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, onNavigateTab }) => {
@@ -131,7 +131,7 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
 
         {/* Rationalization Opportunity */}
         <div
-          onClick={() => onNavigateTab('overlap')}
+          onClick={() => onNavigateTab('functional')}
           className="bg-white border border-amber-200 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-amber-400 hover:shadow-md transition"
         >
           <div className="flex items-center justify-between">
@@ -353,7 +353,7 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
               {t.executive.goToProcesses}
             </button>
             <button
-              onClick={() => onNavigateTab('overlap')}
+              onClick={() => onNavigateTab('functional')}
               className="p-2.5 bg-amber-50 text-amber-800 font-bold rounded-xl border border-amber-200 hover:bg-amber-100 transition text-center"
             >
               {t.executive.goToOverlap}

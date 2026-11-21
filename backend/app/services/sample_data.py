@@ -48,6 +48,38 @@ def seed_sample_model(db: Session) -> str:
         ("cap-doc", "Document & Archive Management", "Capability", "Strategy", "Regulatory digital archiving, electronic signatures, and contract management.")
     ]
 
+    # 1b. Functional Hierarchy: Business Functions with variable depth (L0 -> L1 -> L2, or stopping at L1)
+    business_functions = [
+        # L0 Root Macro-Functions
+        ("fn-distribution", "Operations & Distribution", "BusinessFunction", "Business", "Macro-domain overseeing distribution channels, branch networks, customer support, and customer deliveries."),
+        ("fn-production", "Credit & Core Banking Production", "BusinessFunction", "Business", "Macro-domain delivering core banking accounting, loan origination, and credit risk evaluation."),
+        ("fn-governance", "Corporate Governance & Human Capital", "BusinessFunction", "Business", "Macro-domain covering organizational human capital, corporate stewardship, and regulatory compliance."),
+
+        # L1 Intermediate / Leaves for Distribution
+        ("fn-channels", "Branch & Digital Channels", "BusinessFunction", "Business", "Management of physical branches, ATMs, and digital service channels."),
+        ("fn-cash-ops", "Cash & Branch Operations", "BusinessFunction", "Business", "Branch cash desk transactions, teller operations, and counter customer deposits."),
+        ("fn-self-service", "Self-Service & Terminal Fleet", "BusinessFunction", "Business", "Operation of ATM terminals, smart POS acquiring, and automated cash dispensers."),
+
+        ("fn-cust-care", "Omnichannel Care & Contact Center", "BusinessFunction", "Business", "Omnichannel support, phone helpdesk, and dispute assistance."),
+        ("fn-crm-mgmt", "Helpdesk Support & Interaction History", "BusinessFunction", "Business", "Inquiry tracking, 360-degree customer view, and complaint escalation."),
+        ("fn-claim-handling", "Dispute Resolution & Chargebacks", "BusinessFunction", "Business", "Management of contested transactions, fraud affidavits, and chargeback claims."),
+
+        # Branch stopping at Level 1 (Leaf) -> GAP FUNCTIONAL
+        ("fn-logistics", "Reverse Logistics & Physical Delivery", "BusinessFunction", "Business", "Dispatch and physical courier management for credit cards, tokens, and certified mail."),
+
+        # L1 Intermediate / Leaves for Production
+        ("fn-lending-prod", "Retail Lending & Origination", "BusinessFunction", "Business", "Consumer credit evaluation, mortgage underwriting, and balance sheet posting."),
+        ("fn-scoring", "Automated Credit & Fraud Scoring", "BusinessFunction", "Business", "Algorithmic decisioning for credit granting and real-time fraud checks."),
+        ("fn-ledger-posting", "Core Account Posting & Reconciliation", "BusinessFunction", "Business", "Real-time debit/credit posting and ledger reconciliation."),
+
+        # Branch stopping at Level 1 (Leaf) -> GAP FUNCTIONAL
+        ("fn-collateral-mgmt", "Real Estate & Collateral Appraisal", "BusinessFunction", "Business", "Property inspection, notary registry checks, and mortgage guarantee valuation."),
+
+        # L1 Branches for Governance (both stopping at Level 1!)
+        ("fn-hr-payroll", "Payroll & Workforce Management", "BusinessFunction", "Business", "Monthly salary disbursement, tax withholdings, and labor compliance."),
+        ("fn-esg-sustainability", "ESG Rating & Sustainability Disclosure", "BusinessFunction", "Business", "Corporate CSRD reporting, carbon footprint calculation, and green banking taxonomy.")
+    ]
+
     # 2. Business Processes & Actors
     business_elements = [
         ("actor-branch-mgr", "Branch & Customer Agent", "BusinessActor", "Business", "Branch operators, relationship managers, and customer service advisors."),
@@ -81,7 +113,7 @@ def seed_sample_model(db: Session) -> str:
     ]
 
     # Insert Elements
-    for elem_id, name, elem_type, layer, doc in capabilities + business_elements + tech_elements:
+    for elem_id, name, elem_type, layer, doc in capabilities + business_functions + business_elements + tech_elements:
         el = ArchimateElement(
             id=elem_id,
             model_id=workspace.id,
@@ -169,7 +201,45 @@ def seed_sample_model(db: Session) -> str:
         ("rel-21", "tech-rds-postgres", "app-cloud-core", "ServingRelationship", "Relational Database"),
         ("rel-22", "tech-aws-cluster", "app-feedzai-fraud", "ServingRelationship", "Real-time Worker"),
         ("rel-23", "tech-ibm-z15", "app-legacy-ledger", "ServingRelationship", "CICS/COBOL Host"),
-        ("rel-24", "tech-vmware-dc", "app-legacy-crm", "ServingRelationship", "Virtual Machine")
+        ("rel-24", "tech-vmware-dc", "app-legacy-crm", "ServingRelationship", "Virtual Machine"),
+
+        # -------------------------------------------------------------
+        # Functional Hierarchy (Composition) & Application Serving links
+        # -------------------------------------------------------------
+        # Operations & Distribution Hierarchy
+        ("rel-fn-comp-1", "fn-distribution", "fn-channels", "CompositionRelationship", "Comprises Channels"),
+        ("rel-fn-comp-2", "fn-channels", "fn-cash-ops", "CompositionRelationship", "Comprises Branch Cash Desk"),
+        ("rel-fn-comp-3", "fn-channels", "fn-self-service", "CompositionRelationship", "Comprises Self-Service ATM/POS"),
+        ("rel-fn-comp-4", "fn-distribution", "fn-cust-care", "CompositionRelationship", "Comprises Customer Care"),
+        ("rel-fn-comp-5", "fn-cust-care", "fn-crm-mgmt", "CompositionRelationship", "Comprises 360 CRM"),
+        ("rel-fn-comp-6", "fn-cust-care", "fn-claim-handling", "CompositionRelationship", "Comprises Claims Management"),
+        ("rel-fn-comp-7", "fn-distribution", "fn-logistics", "CompositionRelationship", "Comprises Courier & Reverse Logistics"),
+
+        # Production Hierarchy
+        ("rel-fn-comp-8", "fn-production", "fn-lending-prod", "CompositionRelationship", "Comprises Retail Lending"),
+        ("rel-fn-comp-9", "fn-lending-prod", "fn-scoring", "CompositionRelationship", "Comprises Decision Scoring"),
+        ("rel-fn-comp-10", "fn-lending-prod", "fn-ledger-posting", "CompositionRelationship", "Comprises Account Posting"),
+        ("rel-fn-comp-11", "fn-production", "fn-collateral-mgmt", "CompositionRelationship", "Comprises Collateral Valuations"),
+
+        # Governance Hierarchy (L1 leaves)
+        ("rel-fn-comp-12", "fn-governance", "fn-hr-payroll", "CompositionRelationship", "Comprises Payroll & HCM"),
+        ("rel-fn-comp-13", "fn-governance", "fn-esg-sustainability", "CompositionRelationship", "Comprises ESG Disclosure"),
+
+        # Applications Serving Business Functions
+        # 1. Optimal Coverage (1 app)
+        ("rel-fn-srv-1", "app-cloud-core", "fn-cash-ops", "ServingRelationship", "Real-time teller deposit posting"),
+        ("rel-fn-srv-2", "app-alfresco-doc", "fn-claim-handling", "ServingRelationship", "Claim dossier digital archiving"),
+        ("rel-fn-srv-3", "app-feedzai-fraud", "fn-scoring", "ServingRelationship", "Real-time automated risk evaluation"),
+        ("rel-fn-srv-4", "app-workday", "fn-hr-payroll", "ServingRelationship", "Workforce payroll computation"),
+
+        # 2. Overlapping / Redundancies (>=2 apps)
+        ("rel-fn-srv-5", "app-stripe-engine", "fn-self-service", "ServingRelationship", "Modern omnichannel acquiring"),
+        ("rel-fn-srv-6", "app-legacy-pay", "fn-self-service", "ServingRelationship", "Legacy terminal switch"),
+        ("rel-fn-srv-7", "app-salesforce", "fn-crm-mgmt", "ServingRelationship", "Global salesforce support console"),
+        ("rel-fn-srv-8", "app-legacy-crm", "fn-crm-mgmt", "ServingRelationship", "Legacy customer record lookup"),
+        ("rel-fn-srv-9", "app-cloud-core", "fn-ledger-posting", "ServingRelationship", "Vault real-time ledger entries"),
+        ("rel-fn-srv-10", "app-legacy-ledger", "fn-ledger-posting", "ServingRelationship", "AS400 overnight batch posting")
+        # 3. Gaps: fn-logistics, fn-collateral-mgmt, fn-esg-sustainability have ZERO serving relationships.
     ]
 
     for rel_id, src, tgt, r_type, r_name in relations:

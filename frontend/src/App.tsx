@@ -18,6 +18,7 @@ import { FrameworkInsights } from './features/business/FrameworkInsights';
 import { APMDashboard } from './features/apm/APMDashboard';
 import { TechRiskRadar } from './features/apm/TechRiskRadar';
 import { OverlapMatrix } from './features/overlap/OverlapMatrix';
+import { FunctionalAnalysisView } from './features/functional/FunctionalAnalysisView';
 import { ProcessNavigator } from './features/processes/ProcessNavigator';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
@@ -38,7 +39,18 @@ export function App() {
   const { t } = useLanguage();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [models, setModels] = useState<ModelWorkspace[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [selectedModelId, setSelectedModelId] = useState<string>(() => {
+    return localStorage.getItem('easyea_selected_model_id') || '';
+  });
+
+  const handleSelectModel = (id: string) => {
+    setSelectedModelId(id);
+    if (id) {
+      localStorage.setItem('easyea_selected_model_id', id);
+    } else {
+      localStorage.removeItem('easyea_selected_model_id');
+    }
+  };
   
   // 3 Hubs State
   const [activeHub, setActiveHub] = useState<MainHub>('business');
@@ -116,11 +128,15 @@ export function App() {
       const list = await api.getModels();
       setModels(list);
       if (list.length > 0) {
-        if (selectId && list.some((m) => m.id === selectId)) {
-          setSelectedModelId(selectId);
-        } else if (!selectedModelId || !list.some((m) => m.id === selectedModelId)) {
-          setSelectedModelId(list[0].id);
+        const storedModelId = localStorage.getItem('easyea_selected_model_id');
+        const candidateId = selectId || storedModelId || selectedModelId;
+        if (candidateId && list.some((m) => m.id === candidateId)) {
+          handleSelectModel(candidateId);
+        } else {
+          handleSelectModel(list[0].id);
         }
+      } else {
+        handleSelectModel('');
       }
     } catch (err) {
       console.error(err);
@@ -187,7 +203,7 @@ export function App() {
         onSelectHub={(hub) => setActiveHub(hub)}
         models={models}
         selectedModelId={selectedModelId}
-        onSelectModel={(id) => setSelectedModelId(id)}
+        onSelectModel={handleSelectModel}
         onSeedSample={handleSeedSample}
         isSeeding={isSeeding}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
@@ -317,6 +333,7 @@ export function App() {
                         onTabChange={setApmTab}
                       />
                     )}
+                    {businessTab === 'functional' && <FunctionalAnalysisView modelId={selectedModelId} />}
                     {businessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
                     {businessTab === 'processes' && <ProcessNavigator modelId={selectedModelId} />}
                   </>
@@ -386,7 +403,7 @@ export function App() {
                     models={models}
                     selectedModelId={selectedModelId}
                     onRefreshModels={() => loadModels()}
-                    onSelectModel={(id) => setSelectedModelId(id)}
+                    onSelectModel={handleSelectModel}
                     onPackageUpdated={() => selectedModelId && loadPackageViews(selectedModelId)}
                     subTab={adminTab}
                     onSelectSubTab={(tab) => setAdminTab(tab)}

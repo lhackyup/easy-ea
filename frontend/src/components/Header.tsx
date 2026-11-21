@@ -26,6 +26,7 @@ import {
   Settings,
   Workflow,
   Globe,
+  Network,
   Boxes,
   Package,
   LogOut,
@@ -302,15 +303,15 @@ export const Header: React.FC<HeaderProps> = ({
               </button>
 
               <button
-                onClick={() => onSelectBusinessTab('overlap')}
+                onClick={() => onSelectBusinessTab('functional')}
                 className={`px-3 py-1.5 text-xs font-bold rounded-xl transition flex items-center space-x-1.5 ${
-                  businessTab === 'overlap'
+                  businessTab === 'functional' || businessTab === 'overlap'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-slate-600 hover:text-indigo-700 hover:bg-indigo-50/60'
                 }`}
               >
-                <GitMerge className="w-3.5 h-3.5" />
-                <span>{t.subtabs.functionalOverlap}</span>
+                <Network className="w-3.5 h-3.5" />
+                <span>{t.subtabs.functionalAnalysis}</span>
               </button>
 
               <button

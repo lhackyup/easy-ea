@@ -72,6 +72,7 @@ ROLE_DEFINITIONS = [
             {"domain": "Executive", "action": "view_executive_overview", "description": "High-level summary of total applications, TCO and TIME distribution"},
             {"domain": "APM", "action": "view_time_portfolio", "description": "Gartner TIME matrix and application portfolio analytics"},
             {"domain": "Overlap", "action": "view_overlap_matrix", "description": "Heatmap of redundant applications serving identical capabilities"},
+            {"domain": "Functional", "action": "view_functional_analysis", "description": "Hierarchical functional architecture, gap and overlap analysis"},
             {"domain": "Processes", "action": "view_process_lineage", "description": "Consult business process end-to-end lineage"},
             {"domain": "Security", "action": "write_operations", "allowed": False, "description": "Strictly read-only access to preserve data integrity"}
         ]
@@ -333,7 +334,7 @@ def check_user_permission(
     if any(a.role == "viewer" for a in assignments):
         read_actions = {
             "read_repository", "view_executive_overview", "view_time_portfolio",
-            "view_overlap_matrix", "view_process_lineage", "view_reports",
+            "view_overlap_matrix", "view_functional_analysis", "view_process_lineage", "view_reports",
             "read_all_libraries", "browse_all_hubs", "view_repository", "view_admin_hub",
             "view_schemas", "read_element", "read_model"
         }
@@ -410,7 +411,7 @@ def check_user_permission(
     # Read-only actions
     read_actions = {
         "read_repository", "view_executive_overview", "view_time_portfolio",
-        "view_overlap_matrix", "view_process_lineage", "view_reports"
+        "view_overlap_matrix", "view_functional_analysis", "view_process_lineage", "view_reports"
     }
     if action in read_actions:
         return {

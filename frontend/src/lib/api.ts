@@ -6,6 +6,7 @@ import {
   TCOBreakdownData,
   LifecycleAnalysisData,
   OverlapMatrixData,
+  FunctionalAnalysisData,
   BusinessProcessItem,
   ImpactSimulationResult,
   ArchitecturalRisksReport,
@@ -193,6 +194,13 @@ export const api = {
       body: JSON.stringify(data),
     });
     if (!res.ok) throw new Error('Failed to create interface');
+    return res.json();
+  },
+
+  // Functional Analysis
+  getFunctionalAnalysis: async (modelId: string): Promise<FunctionalAnalysisData> => {
+    const res = await fetch(`${API_BASE}/functional/analysis/${modelId}`, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch Functional Analysis');
     return res.json();
   },
 

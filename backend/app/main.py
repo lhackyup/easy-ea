@@ -19,6 +19,7 @@ from app.api.relationships import router as relationships_router
 from app.api.views import router as views_router
 from app.api.apm import router as apm_router
 from app.api.overlap import router as overlap_router
+from app.api.functional import router as functional_router
 from app.api.processes import router as processes_router
 from app.api.metamodel import router as metamodel_router
 from app.api.rbac import router as rbac_router
@@ -400,6 +401,7 @@ app.include_router(relationships_router, prefix=settings.API_V1_STR)
 app.include_router(views_router, prefix=settings.API_V1_STR)
 app.include_router(apm_router, prefix=settings.API_V1_STR)
 app.include_router(overlap_router, prefix=settings.API_V1_STR)
+app.include_router(functional_router, prefix=settings.API_V1_STR)
 app.include_router(processes_router, prefix=settings.API_V1_STR)
 app.include_router(metamodel_router, prefix=settings.API_V1_STR)
 app.include_router(rbac_router, prefix=settings.API_V1_STR)

@@ -1,6 +1,6 @@
 export type MainHub = 'business' | 'architecture' | 'admin';
 
-export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'tech_risk' | 'tco' | 'overlap' | 'processes';
+export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'tech_risk' | 'tco' | 'functional' | 'overlap' | 'processes';
 
 export interface ActivePackageViewSelection {
   packageId: string;
@@ -683,6 +683,122 @@ export interface OverlapMatrixData {
     }>;
     recommendation: string;
   }>;
+}
+
+export interface FunctionalAppInfo {
+  app_id: string;
+  app_name: string;
+  annual_cost: number;
+  time_quadrant: string;
+  business_fit: number;
+  technical_fit: number;
+  relation_types: string[];
+  is_inherited?: boolean;
+  inherited_from?: string | null;
+  is_imputed_from_child?: boolean;
+  imputed_from?: string | null;
+}
+
+export interface FunctionalNodeRollup {
+  total_leaves: number;
+  covered_leaves: number;
+  gap_leaves: number;
+  optimal_leaves: number;
+  overlapping_leaves: number;
+  coverage_rate: number;
+  redundancy_rate: number;
+  potential_savings: number;
+}
+
+export interface FunctionalNode {
+  id: string;
+  name: string;
+  type: string;
+  layer: string;
+  documentation?: string;
+  level: number;
+  level_label: string;
+  is_leaf: boolean;
+  is_evaluation_unit?: boolean;
+  has_children?: boolean;
+  status: 'gap' | 'optimal' | 'overlapping' | 'branch' | 'detail_subfunction';
+  recommendation?: string | null;
+  direct_applications: FunctionalAppInfo[];
+  effective_applications: FunctionalAppInfo[];
+  app_count: number;
+  is_gap: boolean;
+  is_optimal: boolean;
+  is_overlapping: boolean;
+  target_app?: FunctionalAppInfo | null;
+  candidate_decommissions?: FunctionalAppInfo[];
+  potential_savings: number;
+  children: FunctionalNode[];
+  rollup?: FunctionalNodeRollup;
+}
+
+export interface FunctionalLeafRow {
+  id: string;
+  name: string;
+  type: string;
+  layer: string;
+  documentation?: string;
+  level: number;
+  level_label: string;
+  path: string;
+  root_domain: string;
+  status: 'gap' | 'optimal' | 'overlapping';
+  app_count: number;
+  is_gap: boolean;
+  is_optimal: boolean;
+  is_overlapping: boolean;
+  target_app?: FunctionalAppInfo | null;
+  candidate_decommissions?: FunctionalAppInfo[];
+  potential_savings: number;
+  applications: FunctionalAppInfo[];
+  recommendation?: string | null;
+  has_subfunctions?: boolean;
+}
+
+export interface FunctionalRedundancyCluster {
+  leaf_id: string;
+  leaf_name: string;
+  path: string;
+  app_count: number;
+  target_app?: FunctionalAppInfo | null;
+  candidate_decommissions?: FunctionalAppInfo[];
+  potential_savings: number;
+  applications: FunctionalAppInfo[];
+  recommendation: string;
+}
+
+export interface FunctionalGapCluster {
+  leaf_id: string;
+  leaf_name: string;
+  path: string;
+  level_label: string;
+  root_domain: string;
+  documentation?: string;
+  recommendation: string;
+}
+
+export interface FunctionalAnalysisData {
+  model_id: string;
+  total_functional_elements: number;
+  total_root_functions: number;
+  total_leaf_functions: number;
+  covered_leaf_functions: number;
+  gap_leaf_functions_count: number;
+  optimal_leaf_functions_count: number;
+  overlapping_leaf_functions_count: number;
+  coverage_rate_percentage: number;
+  redundancy_rate_percentage: number;
+  total_potential_savings: number;
+  applications_count: number;
+  applications_columns: Array<{ id: string; name: string; annual_cost: number }>;
+  hierarchy_trees: FunctionalNode[];
+  leaf_functions: FunctionalLeafRow[];
+  redundancy_clusters: FunctionalRedundancyCluster[];
+  gap_clusters: FunctionalGapCluster[];
 }
 
 export interface BusinessProcessItem {
