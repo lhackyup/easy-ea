@@ -132,14 +132,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       icon: Sparkles
     },
     {
-      id: 'functional' as BusinessSubTab,
-      label: t.subtabs.functionalAnalysis,
-      icon: Network
-    },
-    {
       id: 'processes' as BusinessSubTab,
       label: t.subtabs.processLineage,
       icon: Workflow
+    },
+    {
+      id: 'functional' as BusinessSubTab,
+      label: t.subtabs.functionalAnalysis,
+      icon: Network
     },
     {
       id: 'apm' as BusinessSubTab,
