@@ -33,6 +33,7 @@ psycopg2-binary==2.9.10
 # Data Processing, Spreadsheets & Graph Analysis
 openpyxl==3.1.5
 python-docx==1.2.0
+pillow==13.0.0
 et_xmlfile==2.0.0
 networkx==3.6.1
 

@@ -1,10 +1,24 @@
 import os
 import sys
 
+# Ensure vendor directory is in sys.path if vendored
+vendor_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vendor")
+if vendor_dir not in sys.path and os.path.isdir(vendor_dir):
+    sys.path.insert(0, vendor_dir)
+
 import io
 import base64
 from typing import Dict, Any, List, Optional
 from datetime import datetime
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+    HAS_PIL = True
+except ImportError:
+    HAS_PIL = False
+    Image = None
+    ImageDraw = None
+    ImageFont = None
 
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor
@@ -207,6 +221,175 @@ def _set_table_borders(table, border_color="E2E8F0"):
 
 
 class FunctionalReportService:
+    @classmethod
+    def render_heatmap_diagram(cls, data: Dict[str, Any], lang: str = "it") -> io.BytesIO:
+        """
+        Generates a high-resolution, multi-column visual Heatmap diagram (PNG)
+        directly at backend using Pillow, eliminating any fragile browser dependencies.
+        """
+        if not HAS_PIL:
+            return None
+
+        domains = data.get("heatmap_domains", [])
+        leaf_map = {lf.get("id"): lf for lf in data.get("leaf_functions", [])}
+
+        col_width = 360
+        col_gap = 25
+        margin_x = 35
+        start_y = 95
+        col_x = [margin_x + i * (col_width + col_gap) for i in range(3)]
+        col_y = [start_y, start_y, start_y]
+
+        font_title = ImageFont.load_default(size=17)
+        font_sub = ImageFont.load_default(size=11)
+        font_dom = ImageFont.load_default(size=12)
+        font_dom_sub = ImageFont.load_default(size=10)
+        font_grp = ImageFont.load_default(size=11)
+        font_tile = ImageFont.load_default(size=11)
+        font_pill = ImageFont.load_default(size=10)
+        font_apps = ImageFont.load_default(size=9)
+
+        # 1. Precalculate card heights
+        card_layouts = []
+        for dom in domains:
+            groups = dom.get("groups", [])
+            if not groups:
+                matching = leaf_map.get(dom.get("id"))
+                if matching:
+                    groups = [{
+                        "name": dom.get("name"),
+                        "tiles": [{
+                            "name": matching.get("name"),
+                            "functional_fit": matching.get("functional_fit", 0.0),
+                            "is_gap": matching.get("is_gap", False),
+                            "applications": matching.get("applications", [])
+                        }]
+                    }]
+
+            card_h = 42
+            for grp in groups:
+                if len(groups) > 1 or grp.get("name") != dom.get("name"):
+                    card_h += 22
+                tiles = grp.get("tiles", [])
+                card_h += len(tiles) * 50 + 6
+            card_layouts.append((dom, groups, card_h))
+
+        for dom, groups, card_h in card_layouts:
+            min_c = col_y.index(min(col_y))
+            col_y[min_c] += card_h + 20
+
+        total_h = max(col_y) + 30
+        total_w = 1200
+        img = Image.new("RGB", (total_w, total_h), color=(248, 250, 252))
+        draw = ImageDraw.Draw(img)
+
+        # Header banner
+        draw.rectangle([0, 0, total_w, 75], fill=(15, 23, 42))
+        draw.text((35, 16), "EASYEA • BUSINESS CAPABILITY & FUNCTIONAL FIT HEATMAP", fill=(255, 255, 255), font=font_title)
+        legend_text = (
+            "Legenda Fit:  [Eccellente ≥ 4.0]  |  [Adeguato 3.0-3.9]  |  [Tollerabile 2.0-2.9]  |  [GAP / Carente < 2.0]"
+            if lang == "it"
+            else "Fit Legend:  [Excellent ≥ 4.0]  |  [Adequate 3.0-3.9]  |  [Tolerable 2.0-2.9]  |  [GAP / Inadequate < 2.0]"
+        )
+        draw.text((35, 46), legend_text, fill=(148, 163, 184), font=font_sub)
+
+        # Draw Cards
+        col_y = [start_y, start_y, start_y]
+        for dom, groups, card_h in card_layouts:
+            min_c = col_y.index(min(col_y))
+            cx = col_x[min_c]
+            cy = col_y[min_c]
+
+            # Card container
+            draw.rounded_rectangle([cx, cy, cx + col_width, cy + card_h], radius=8, fill=(255, 255, 255), outline=(226, 232, 240), width=1)
+            # Header
+            draw.rounded_rectangle([cx, cy, cx + col_width, cy + 36], radius=8, fill=(30, 41, 59))
+            draw.rectangle([cx, cy + 24, cx + col_width, cy + 36], fill=(30, 41, 59))
+
+            dom_name = dom.get("name", "")
+            if len(dom_name) > 28:
+                dom_name = dom_name[:26] + "..."
+            draw.text((cx + 12, cy + 10), dom_name, fill=(255, 255, 255), font=font_dom)
+
+            rollup = dom.get("rollup", {})
+            sub_info = f"Fit {rollup.get('avg_functional_fit', 0.0):.1f} ({rollup.get('covered_leaves', 0)}/{rollup.get('total_leaves', 0)})"
+            draw.text((cx + col_width - 95, cy + 12), sub_info, fill=(148, 163, 184), font=font_dom_sub)
+
+            # Groups and Tiles
+            cur_y = cy + 44
+            for grp in groups:
+                if len(groups) > 1 or grp.get("name") != dom.get("name"):
+                    grp_name = grp.get("name", "")
+                    if len(grp_name) > 34:
+                        grp_name = grp_name[:32] + "..."
+                    draw.text((cx + 12, cur_y), f"• {grp_name}", fill=(71, 85, 105), font=font_grp)
+                    cur_y += 20
+
+                for tile in grp.get("tiles", []):
+                    fit = tile.get("functional_fit", 0.0)
+                    is_gap = tile.get("is_gap", False)
+
+                    if is_gap or fit == 0.0:
+                        bg_col = (255, 241, 242)
+                        border_col = (244, 63, 94)
+                        pill_bg = (225, 29, 72)
+                        pill_txt = "GAP"
+                    elif fit >= 4.0:
+                        bg_col = (236, 253, 245)
+                        border_col = (16, 185, 129)
+                        pill_bg = (5, 150, 105)
+                        pill_txt = f"★ {fit:.1f}"
+                    elif fit >= 3.0:
+                        bg_col = (240, 253, 250)
+                        border_col = (20, 184, 166)
+                        pill_bg = (13, 148, 136)
+                        pill_txt = f"★ {fit:.1f}"
+                    elif fit >= 2.0:
+                        bg_col = (255, 251, 235)
+                        border_col = (245, 158, 11)
+                        pill_bg = (217, 119, 6)
+                        pill_txt = f"★ {fit:.1f}"
+                    else:
+                        bg_col = (255, 241, 242)
+                        border_col = (244, 63, 94)
+                        pill_bg = (225, 29, 72)
+                        pill_txt = f"★ {fit:.1f}"
+
+                    tx = cx + 10
+                    tw = col_width - 20
+                    draw.rounded_rectangle([tx, cur_y, tx + tw, cur_y + 44], radius=6, fill=bg_col, outline=border_col, width=1)
+
+                    t_name = tile.get("name", "")
+                    if len(t_name) > 30:
+                        t_name = t_name[:28] + "..."
+                    draw.text((tx + 8, cur_y + 6), t_name, fill=(15, 23, 42), font=font_tile)
+
+                    # Pill on right
+                    pw = 46
+                    draw.rounded_rectangle([tx + tw - pw - 6, cur_y + 6, tx + tw - 6, cur_y + 22], radius=4, fill=pill_bg)
+                    draw.text((tx + tw - pw, cur_y + 8), pill_txt, fill=(255, 255, 255), font=font_pill)
+
+                    # Apps text
+                    apps = tile.get("effective_applications", tile.get("applications", []))
+                    if apps:
+                        app_names = [a.get("app_name", "") for a in apps]
+                        apps_txt = ", ".join(app_names)
+                        if len(apps_txt) > 38:
+                            apps_txt = apps_txt[:36] + "..."
+                    else:
+                        apps_txt = "Nessun applicativo IT (GAP)" if lang == "it" else "No IT applications (GAP)"
+                    draw.text((tx + 8, cur_y + 25), apps_txt, fill=(100, 116, 139), font=font_apps)
+
+                    cur_y += 50
+                cur_y += 4
+
+            col_y[min_c] += card_h + 20
+
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+        buf.seek(0)
+        return buf
+
     @classmethod
     def generate_docx_report(
         cls,
@@ -440,27 +623,23 @@ class FunctionalReportService:
         p_legend.runs[0].font.italic = True
         p_legend.runs[0].font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
 
-        # 2.A Visual Heatmap Snapshot Image (if supplied from frontend canvas)
-        if heatmap_image_base64:
-            try:
-                clean_b64 = heatmap_image_base64
-                if "," in clean_b64:
-                    clean_b64 = clean_b64.split(",", 1)[1]
-                img_bytes = base64.b64decode(clean_b64)
-                if len(img_bytes) > 200:
-                    p_img = doc.add_paragraph()
-                    p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    p_img.paragraph_format.space_before = Pt(8)
-                    p_img.paragraph_format.space_after = Pt(4)
-                    doc.add_picture(io.BytesIO(img_bytes), width=Inches(6.67))
-                    p_cap = doc.add_paragraph(t["heatmap_image_caption"])
-                    p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                    p_cap.paragraph_format.space_after = Pt(14)
-                    p_cap.runs[0].font.size = Pt(8.5)
-                    p_cap.runs[0].font.italic = True
-                    p_cap.runs[0].font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
-            except Exception:
-                pass
+        # 2.A Visual Heatmap Diagram Image (Autonomously generated at backend via Pillow)
+        try:
+            diag_stream = cls.render_heatmap_diagram(data, lang=lang)
+            if diag_stream and len(diag_stream.getvalue()) > 500:
+                p_img = doc.add_paragraph()
+                p_img.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_img.paragraph_format.space_before = Pt(8)
+                p_img.paragraph_format.space_after = Pt(4)
+                doc.add_picture(diag_stream, width=Inches(6.67))
+                p_cap = doc.add_paragraph(t["heatmap_image_caption"])
+                p_cap.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_cap.paragraph_format.space_after = Pt(14)
+                p_cap.runs[0].font.size = Pt(8.5)
+                p_cap.runs[0].font.italic = True
+                p_cap.runs[0].font.color.rgb = RGBColor(0x64, 0x74, 0x8B)
+        except Exception:
+            pass
 
         # 2.B Structured Native Grid of Domains, Groups and Tiles
         heatmap_domains = data.get("heatmap_domains", [])

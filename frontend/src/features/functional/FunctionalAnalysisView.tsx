@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { toPng } from 'html-to-image';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   FunctionalAnalysisData,
   FunctionalNode,
@@ -70,26 +69,12 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
   const [heatmapColoring, setHeatmapColoring] = useState<'fit' | 'tech' | 'maturity' | 'status'>('fit');
   const [selectedInspectNode, setSelectedInspectNode] = useState<FunctionalNode | null>(null);
   const [isExportingDocx, setIsExportingDocx] = useState<boolean>(false);
-  const heatmapContainerRef = useRef<HTMLDivElement>(null);
 
   const handleExportDocx = async () => {
     if (!modelId) return;
     try {
       setIsExportingDocx(true);
-      let heatmapPngBase64: string | undefined = undefined;
-      const heatmapEl = heatmapContainerRef.current || document.getElementById('functional-heatmap-container');
-      if (heatmapEl) {
-        try {
-          heatmapPngBase64 = await toPng(heatmapEl, {
-            backgroundColor: '#ffffff',
-            pixelRatio: 2,
-            cacheBust: true,
-          });
-        } catch (imgErr) {
-          console.warn('Could not capture visual heatmap screenshot:', imgErr);
-        }
-      }
-      await api.exportFunctionalDocxReport(modelId, language, heatmapPngBase64);
+      await api.exportFunctionalDocxReport(modelId, language);
     } catch (err: any) {
       console.error('Error exporting DOCX report:', err);
       alert(t.functionalAnalysis.exportError);
@@ -857,12 +842,9 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
       )}
 
       {/* 2. HEATMAP & CAPABILITY CANVAS VIEW */}
-      <div
-        id="functional-heatmap-container"
-        ref={heatmapContainerRef}
-        className={viewMode === 'heatmap' ? 'space-y-4' : 'fixed -left-[9999px] top-0 w-[1200px] pointer-events-none opacity-0'}
-      >
-        {/* Heatmap Toolbar & Legend */}
+      {viewMode === 'heatmap' && (
+        <div className="space-y-4">
+          {/* Heatmap Toolbar & Legend */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-bold text-slate-700">{t.functionalAnalysis.heatmapColorBy}</span>
@@ -1039,6 +1021,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
             </div>
           )}
         </div>
+      )}
 
       {/* 3. LEAF MATRIX VIEW */}
       {viewMode === 'matrix' && (
