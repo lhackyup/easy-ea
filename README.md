@@ -9,40 +9,41 @@
   <img src="docs/assets/easyea-demo.gif" alt="EasyEA Platform Interactive Demo - Executive Overview, APM TIME Matrix, Functional Analysis, What-If Simulator, ArchiMate Diagram" width="100%" />
 </p>
 
-**EasyEA** è una piattaforma web-based di Enterprise Architecture progettata con due anime distinte:
-1. **🏛️ Architect Hub (ArchiMate Core)**: Metamodello standard ArchiMate 3.x, parser compatibile al 100% con **Archi Tool** (`.archimate` e *Open Group Model Exchange XML*), navigatore di elementi e relazioni con layer filtering, e visualizzatore di viste grafiche interattive basato su React Flow.
+**EasyEA** is a web-based Enterprise Architecture platform designed with two distinct souls:
+
+1. **🏛️ Architect Hub (ArchiMate Core)**: Standard ArchiMate 3.x metamodel, 100% compatible parser with **Archi Tool** (`.archimate` and *Open Group Model Exchange XML*), element and relationship explorer with layer filtering, and interactive graphical diagram viewer powered by React Flow.
 2. **💼 Business & Executive Hub**: 
-   - **Application Portfolio Management (APM)**: Calcolo automatico della **TIME Matrix** di Gartner (*Tolerate, Invest, Migrate, Eliminate*), tracciamento TCO / costi annui, ownership, SLA e lifecycle status.
-   - **Analisi dell'Overlapping Funzionale**: Matrice dinamica *Capability / Funzione vs Applicazioni*, calcolo dell'indice di ridondanza e stima delle opportunità di risparmio per razionalizzare le licenze.
-   - **Catalogo Processi & What-If Impact Simulator**: Mappa di lineage (*Stakeholder ➔ Processo ➔ Applicazioni ➔ Infrastruttura Cloud*) e simulatore in tempo reale delle conseguenze di dismissioni o disservizi applicativi.
+   - **Application Portfolio Management (APM)**: Automated calculation of the Gartner **TIME Matrix** (*Tolerate, Invest, Migrate, Eliminate*), TCO / annual cost tracking, ownership, SLAs, and technology lifecycle status.
+   - **Functional Overlap & Gap Analysis**: Dynamic *Capability / Function vs Applications* matrix, redundancy index computation, and estimated cost-saving opportunities to streamline software licensing.
+   - **Process Catalog & What-If Impact Simulator**: Lineage mapping (*Stakeholder ➔ Process ➔ Applications ➔ Cloud Infrastructure*) and real-time simulator to assess the cascading impacts of application decommissioning or system outages.
 
 ---
 
-## 🏗️ Architettura & Stack Cloud-Native
+## 🏗️ Architecture & Cloud-Native Stack
 
-- **Backend**: Python 3.12 + FastAPI (Asincrono, Pydantic v2, SQLAlchemy)
+- **Backend**: Python 3.12 + FastAPI (Async, Pydantic v2, SQLAlchemy)
 - **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS + `@xyflow/react` (React Flow) + Lucide Icons
-- **Database**: PostgreSQL (con supporto SQLite per sviluppo locale zero-config)
-- **Deployment**: Docker Multi-stage compatto (< 100MB RAM), pronto per **Render**, **Railway**, **GCP Cloud Run**, **AWS App Runner / ECS**, **Azure Container Apps**.
+- **Database**: PostgreSQL (with SQLite support for zero-config local development)
+- **Deployment**: Compact multi-stage Docker (< 100MB RAM), ready for **Render**, **Railway**, **GCP Cloud Run**, **AWS App Runner / ECS**, and **Azure Container Apps**.
 
 ---
 
-## 🚀 Avvio Rapido
+## 🚀 Quick Start
 
-### Opzione A: Con Docker Compose (Consigliato)
-Avvia backend, frontend e PostgreSQL con un singolo comando:
+### Option A: With Docker Compose (Recommended)
+Start backend, frontend, and PostgreSQL with a single command:
 
 ```bash
 docker compose up --build -d
 ```
-L'applicazione web sarà accessibile all'indirizzo: `http://localhost:8000`  
-*(PostgreSQL è esposto sull'host alla porta **`5433`** per non entrare in conflitto con un'eventuale istanza Postgres locale sulla 5432).*
+The web application will be accessible at: `http://localhost:8000`  
+*(PostgreSQL is exposed on host port **`5433`** to avoid conflicts with any existing local Postgres instance on port 5432).*
 
 ---
 
-### Opzione B: Sviluppo Locale (Senza Docker)
+### Option B: Local Development (Without Docker)
 
-#### 1. Avvia il Backend:
+#### 1. Start the Backend:
 ```bash
 cd backend
 python3 -m venv venv
@@ -50,19 +51,19 @@ source venv/bin/activate
 pip install -r requirements.txt
 python -m uvicorn app.main:app --reload --port 8000
 ```
-*Il backend crea automaticamente il DB SQLite `easyea.db` e popola il modello demo "EasyBank" al primo avvio.*
+*The backend automatically creates the SQLite database `easyea.db` and seeds the demo "EasyBank" model on first launch.*
 
-#### 2. Avvia il Frontend:
+#### 2. Start the Frontend:
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Apri il browser su: `http://localhost:3000`
+Open your browser at: `http://localhost:3000`
 
 ---
 
-## 🧪 Esecuzione dei Test Automatizzati
+## 🧪 Running Automated Tests
 
 ```bash
 cd backend
@@ -72,41 +73,39 @@ PYTHONPATH=. pytest tests/test_all.py
 
 ---
 
-## 🔌 Plugin Desktop per Strumenti di Modellazione
+## 🔌 Desktop Plugins for Modeling Tools
 
-EasyEA si integra direttamente con i client desktop degli architetti e degli analisti di processo:
+EasyEA integrates directly with desktop clients used by architects and process analysts:
 
-- **Archi Tool (jArchi Plugin)**: [`plugins/archi-easyea`](plugins/archi-easyea/README.md) - Check-out/in, Diff visivo e riutilizzo catalogo direttamente dall'editor Archi 5.x.
-- **Draw.io Desktop (JavaScript Plugin)**: [`plugins/drawio-easyea`](plugins/drawio-easyea/README.md) - Menu integrato in Draw.io per Check-out/in con Diff, forme ArchiMate 3.x e sincronizzazione con il catalogo centrale.
-- **Camunda Modeler Desktop (BPMN 2.0 Plugin)**: [`plugins/camunda-easyea`](plugins/camunda-easyea/README.md) - Modellazione processi BPMN 2.0 con Check-out/in, Diff semantico, catalog search e sincronizzazione automatica con il metamodello ArchiMate 3.x.
-
+- **Archi Tool (jArchi Plugin)**: [`plugins/archi-easyea`](plugins/archi-easyea/README.md) - Check-out/in, visual diff, and catalog reuse directly from the Archi 5.x editor.
+- **Draw.io Desktop (JavaScript Plugin)**: [`plugins/drawio-easyea`](plugins/drawio-easyea/README.md) - Integrated Draw.io menu for Check-out/in with diff, ArchiMate 3.x shapes, and synchronization with the central repository.
+- **Camunda Modeler Desktop (BPMN 2.0 Plugin)**: [`plugins/camunda-easyea`](plugins/camunda-easyea/README.md) - BPMN 2.0 process modeling with Check-out/in, semantic diff, catalog search, and automatic synchronization with the ArchiMate 3.x metamodel.
 
 ---
 
-## ☁️ Deployment sul Cloud a Basso Costo
+## ☁️ Low-Cost Cloud Deployment
 
 - **Render.com (Infrastructure-as-Code via Blueprint)**:
-  EasyEA include blueprint pronti all'uso per il deployment automatico su Render:
-  - **`render.yaml` (Turnkey All-in-One)**: Deploy automatico di App + Draw.io + Database PostgreSQL gestito su Render (ottimale per provare subito la piattaforma).
-  - **`render.external-db.yaml` (Database Esterno)**: Deploy di App + Draw.io collegando un database esterno permanente (es. [Neon.tech](https://neon.tech), Supabase, AWS RDS).
-  - **`render.demo.yaml`**: Configurazione ottimizzata per istanze dimostrative pubbliche (con utenti demo pre-popolati).
-  - **`render.dev.yaml`**: Configurazione per l'ambiente di preview/sviluppo continuo collegato al branch `develop`.
+  EasyEA includes turnkey blueprints for automated deployment on Render:
+  - **`render.yaml` (Turnkey All-in-One)**: Automated deployment of App + Draw.io + Managed PostgreSQL database on Render (optimal for trying out the platform immediately).
+  - **`render.external-db.yaml` (External Database)**: Deploy App + Draw.io connecting a permanent external database (e.g., [Neon.tech](https://neon.tech), Supabase, AWS RDS).
+  - **`render.demo.yaml`**: Optimized configuration for public demo instances (with pre-seeded demo users).
+  - **`render.dev.yaml`**: Configuration for preview/continuous development connected to the `develop` branch.
 
-  *Procedura:* Crea un nuovo **Blueprint** nella console di Render, collega questo repository e specifica il file desiderato (default: `render.yaml`).
+  *Procedure:* Create a new **Blueprint** in the Render console, connect this repository, and select the desired file (default: `render.yaml`).
 
 - **Railway**:
-  1. Connetti il repository Git.
-  2. Aggiungi un Database PostgreSQL gestito (Free / Starter Tier).
-  3. Deploya il servizio Web selezionando il `Dockerfile` nella root del repository.
-  4. Imposta la variabile d'ambiente `DATABASE_URL` fornita da Railway.
+  1. Connect your Git repository.
+  2. Add a managed PostgreSQL database (Free / Starter Tier).
+  3. Deploy the Web service selecting the root `Dockerfile`.
+  4. Configure the `DATABASE_URL` environment variable provided by Railway.
 
 - **Google Cloud Run**:
-  1. Esegui la build dell'immagine Docker su Artifact Registry: `gcloud builds submit --tag gcr.io/YOUR_PROJECT/easyea .`
-  2. Deploya con scaling a zero: `gcloud run deploy easyea --image gcr.io/YOUR_PROJECT/easyea --platform managed --allow-unauthenticated`
+  1. Build the Docker image on Artifact Registry: `gcloud builds submit --tag gcr.io/YOUR_PROJECT/easyea .`
+  2. Deploy with scale-to-zero: `gcloud run deploy easyea --image gcr.io/YOUR_PROJECT/easyea --platform managed --allow-unauthenticated`
 
 ---
 
-## 📄 Licenza
+## 📄 License
 
-Questo progetto è rilasciato sotto licenza **GNU Affero General Public License v3.0 (AGPL-3.0)**. Consulta il file [LICENSE](LICENSE) per i dettagli completi.
-
+This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**. See the [LICENSE](LICENSE) file for complete details.
