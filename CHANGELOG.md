@@ -5,6 +5,33 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 
 ---
 
+## [1.3.0] - 2026-11-21
+
+### Added
+- **Esportazione Report Strategico APM in Word (.docx)**:
+  - Generatore esecutivo `APMReportService` che produce un documento Word (.docx) completo di 7 sezioni strategiche: Executive Summary con KPI Cards, Matrice Gartner TIME, Priorità di Razionalizzazione (Eliminate & Migrate), Rischio Tecnologico e Alert DORA/NIS2, Analisi Finanziaria TCO, Registro Interfacce & Flussi di Integrazione, e Appendice Master Catalog tabellare orizzontale.
+  - Supporto bilingue simmetrico (Italiano e Inglese) selezionabile con un clic, con formattazione numerica e monetaria localizzata.
+  - Endpoint API dedicato `GET /api/apm/export/docx/{model_id}?lang=it|en`.
+- **Matrice Strategica Gartner TIME a Bolle (Bubble Chart) ad Alta Risoluzione**:
+  - Rendering grafico nativo backend a 1540×960 pixel tramite Pillow, inserito nel documento Word su una **sezione a piena pagina orizzontale dedicata (Landscape A4)** con ritorno automatico a Portrait.
+  - Rappresentazione a bolle (Bubble Chart) perfettamente coincidente con la vista web interattiva di EasyEA: diametro delle bolle proporzionale al **TCO annuo** (in scala radice quadrata), etichette con nome e costo formattato, assi cartesiani continui (Business Fit Y vs Technical Fit X), e algoritmo di *physics collision relaxation* per distribuire uniformemente i punti nei rispettivi quadranti.
+  - Codifica cromatica ufficiale: Invest (Smeraldo), Tolerate (Blu), Migrate (Ambra con testo a contrasto), Eliminate (Rosso), con badge di riepilogo per quadrante (conteggio app, spesa aggregata €/anno, soglie e raccomandazione d'azione).
+- **Esportazione Report Analisi Funzionale in Word (.docx)**:
+  - Generazione di report Word dedicato con Heatmap delle Capability e adeguatezza funzionale a 3 colonne, impaginata in orizzontale (Landscape A4) con legenda cromatica e registro tabellare delle buche funzionali (GAP).
+- **Navigazione & UX Semplificata nel Business Hub**:
+  - Riorganizzazione della barra laterale a singoli moduli esecutivi: *Executive Overview*, *Functional Analysis*, *Processes & Lineage*, *APM*.
+  - Switcher a schede a riga intera con persistenza automatica della scheda selezionata e della libreria/workspace attivo su `localStorage` attraverso i refresh del browser (F5 / Ctrl+F5).
+
+### Changed
+- **Libreria Grafica Server-Side**:
+  - Inclusione di `pillow==13.0.0` nel file `requirements.txt` e nell'immagine Docker per abilitare la generazione headless e deterministica dei diagrammi senza dipendenze browser o dipendenze esterne.
+
+### Fixed
+- **Isolamento Test Suite Pytest**: Corretto il ripristino di `app.dependency_overrides` tra moduli nei test di esportazione reportistica Word e analisi funzionale.
+- **Filtraggio Coerente Business Applications**: Standardizzato il calcolo delle metriche di Lifecycle e Decommissioning per considerare rigorosamente le sole Business Application censite.
+
+---
+
 ## [1.2.0] - 2026-11-17
 
 ### Added
