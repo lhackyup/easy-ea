@@ -204,6 +204,39 @@ export const api = {
     return res.json();
   },
 
+  exportFunctionalDocxReport: async (modelId: string, lang: string = 'it', heatmapImageBase64?: string): Promise<void> => {
+    const res = await fetch(`${API_BASE}/functional/export/docx/${encodeURIComponent(modelId)}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...getAuthHeaders(),
+      },
+      body: JSON.stringify({
+        lang,
+        heatmap_image_base64: heatmapImageBase64 || null,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to export functional assessment report' }));
+      throw new Error(err.detail || 'Failed to export functional assessment report');
+    }
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition');
+    let outName = 'Functional_Assessment_Report.docx';
+    if (disposition && disposition.includes('filename=')) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) outName = match[1];
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = outName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
+
   // Overlap
   getOverlapMatrix: async (modelId: string): Promise<OverlapMatrixData> => {
     const res = await fetch(`${API_BASE}/overlap/matrix/${modelId}`, { headers: { ...getAuthHeaders() } });

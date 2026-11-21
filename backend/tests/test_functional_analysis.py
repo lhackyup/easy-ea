@@ -134,3 +134,24 @@ def test_functional_analysis_api():
     assert data["model_id"] == "sample-easybank-ea"
     assert data["total_leaf_functions"] > 0
     assert len(data["hierarchy_trees"]) > 0
+
+def test_functional_export_docx_api():
+    res = client.get("/api/functional/export/docx/sample-easybank-ea?lang=it")
+    assert res.status_code == 200
+    assert res.headers["content-type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    assert "attachment; filename=" in res.headers["content-disposition"]
+    assert len(res.content) > 10000
+
+    # Also test English
+    res_en = client.get("/api/functional/export/docx/sample-easybank-ea?lang=en")
+    assert res_en.status_code == 200
+    assert len(res_en.content) > 10000
+
+    # Test POST with base64 heatmap image
+    fake_png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="
+    res_post = client.post("/api/functional/export/docx/sample-easybank-ea", json={
+        "lang": "it",
+        "heatmap_image_base64": fake_png
+    })
+    assert res_post.status_code == 200
+    assert len(res_post.content) > 10000

@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { toPng } from 'html-to-image';
 import {
   FunctionalAnalysisData,
   FunctionalNode,
@@ -35,7 +36,9 @@ import {
   Star,
   Activity,
   Award,
-  Info
+  Info,
+  FileText,
+  Loader2
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
 
@@ -66,6 +69,34 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
   // Heatmap specific states
   const [heatmapColoring, setHeatmapColoring] = useState<'fit' | 'tech' | 'maturity' | 'status'>('fit');
   const [selectedInspectNode, setSelectedInspectNode] = useState<FunctionalNode | null>(null);
+  const [isExportingDocx, setIsExportingDocx] = useState<boolean>(false);
+  const heatmapContainerRef = useRef<HTMLDivElement>(null);
+
+  const handleExportDocx = async () => {
+    if (!modelId) return;
+    try {
+      setIsExportingDocx(true);
+      let heatmapPngBase64: string | undefined = undefined;
+      const heatmapEl = heatmapContainerRef.current || document.getElementById('functional-heatmap-container');
+      if (heatmapEl) {
+        try {
+          heatmapPngBase64 = await toPng(heatmapEl, {
+            backgroundColor: '#ffffff',
+            pixelRatio: 2,
+            cacheBust: true,
+          });
+        } catch (imgErr) {
+          console.warn('Could not capture visual heatmap screenshot:', imgErr);
+        }
+      }
+      await api.exportFunctionalDocxReport(modelId, language, heatmapPngBase64);
+    } catch (err: any) {
+      console.error('Error exporting DOCX report:', err);
+      alert(t.functionalAnalysis.exportError);
+    } finally {
+      setIsExportingDocx(false);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -565,53 +596,74 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
           </p>
         </div>
 
-        {/* View mode toggle */}
-        <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
+        {/* Global Actions */}
+        <div className="flex items-center space-x-2 shrink-0">
+          {/* Export Word Report Button */}
           <button
-            onClick={() => setViewMode('tree')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center space-x-1.5 ${
-              viewMode === 'tree'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
+            onClick={handleExportDocx}
+            disabled={isExportingDocx || !data}
+            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+            title={t.functionalAnalysis.btnExportDocx}
           >
-            <FolderTree className="w-3.5 h-3.5" />
-            <span>{t.functionalAnalysis.viewTree}</span>
-          </button>
-          <button
-            onClick={() => setViewMode('heatmap')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center space-x-1.5 ${
-              viewMode === 'heatmap'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span>{t.functionalAnalysis.viewHeatmap}</span>
-          </button>
-          <button
-            onClick={() => setViewMode('matrix')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center space-x-1.5 ${
-              viewMode === 'matrix'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <TableIcon className="w-3.5 h-3.5" />
-            <span>{t.functionalAnalysis.viewMatrix}</span>
-          </button>
-          <button
-            onClick={() => setViewMode('remediation')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg transition flex items-center space-x-1.5 ${
-              viewMode === 'remediation'
-                ? 'bg-white text-indigo-700 shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5" />
-            <span>{t.functionalAnalysis.viewRemediation}</span>
+            {isExportingDocx ? (
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+            ) : (
+              <FileText className="w-3.5 h-3.5 text-indigo-600" />
+            )}
+            <span>{isExportingDocx ? t.functionalAnalysis.exportingDocx : t.functionalAnalysis.btnExportDocx}</span>
           </button>
         </div>
+      </div>
+
+      {/* Top Module Switcher Bar (Dedicated Row like Application Management) */}
+      <div className="flex items-center space-x-2 border-b border-slate-200 pb-3 overflow-x-auto">
+        <button
+          onClick={() => setViewMode('tree')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 cursor-pointer ${
+            viewMode === 'tree'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <FolderTree className={`w-4 h-4 ${viewMode === 'tree' ? 'text-white' : 'text-indigo-500'}`} />
+          <span>{t.functionalAnalysis.viewTree}</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('heatmap')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 cursor-pointer ${
+            viewMode === 'heatmap'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <LayoutGrid className={`w-4 h-4 ${viewMode === 'heatmap' ? 'text-white' : 'text-purple-500'}`} />
+          <span>{t.functionalAnalysis.viewHeatmap}</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('matrix')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 cursor-pointer ${
+            viewMode === 'matrix'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <TableIcon className={`w-4 h-4 ${viewMode === 'matrix' ? 'text-white' : 'text-cyan-500'}`} />
+          <span>{t.functionalAnalysis.viewMatrix}</span>
+        </button>
+
+        <button
+          onClick={() => setViewMode('remediation')}
+          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition shrink-0 cursor-pointer ${
+            viewMode === 'remediation'
+              ? 'bg-indigo-600 text-white shadow-sm'
+              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+          }`}
+        >
+          <Zap className={`w-4 h-4 ${viewMode === 'remediation' ? 'text-white' : 'text-amber-500'}`} />
+          <span>{t.functionalAnalysis.viewRemediation}</span>
+        </button>
       </div>
 
       {/* KPI Cards */}
@@ -805,9 +857,12 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
       )}
 
       {/* 2. HEATMAP & CAPABILITY CANVAS VIEW */}
-      {viewMode === 'heatmap' && (
-        <div className="space-y-4">
-          {/* Heatmap Toolbar & Legend */}
+      <div
+        id="functional-heatmap-container"
+        ref={heatmapContainerRef}
+        className={viewMode === 'heatmap' ? 'space-y-4' : 'fixed -left-[9999px] top-0 w-[1200px] pointer-events-none opacity-0'}
+      >
+        {/* Heatmap Toolbar & Legend */}
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center space-x-2">
               <span className="text-xs font-bold text-slate-700">{t.functionalAnalysis.heatmapColorBy}</span>
@@ -984,7 +1039,6 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
             </div>
           )}
         </div>
-      )}
 
       {/* 3. LEAF MATRIX VIEW */}
       {viewMode === 'matrix' && (
