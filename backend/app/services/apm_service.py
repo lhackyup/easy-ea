@@ -913,10 +913,26 @@ class APMService:
                 "schemas_count": len(schemas_used)
             })
 
+        # Batch fetch all relationships connected to app_interfaces to eliminate N+1 queries
+        iface_ids = {iface.id for iface in app_interfaces}
+        iface_out_rels: Dict[str, List[ArchimateRelationship]] = {}
+        iface_in_rels: Dict[str, List[ArchimateRelationship]] = {}
+
+        if iface_ids:
+            all_iface_rels = db.query(ArchimateRelationship).filter(
+                ArchimateRelationship.model_id == model_id,
+                (ArchimateRelationship.source_id.in_(iface_ids)) | (ArchimateRelationship.target_id.in_(iface_ids))
+            ).all()
+            for r in all_iface_rels:
+                if r.source_id in iface_ids:
+                    iface_out_rels.setdefault(r.source_id, []).append(r)
+                if r.target_id in iface_ids:
+                    iface_in_rels.setdefault(r.target_id, []).append(r)
+
         for iface in app_interfaces:
             props = iface.properties if isinstance(iface.properties, dict) else {}
-            out_rels = [r for r in db.query(ArchimateRelationship).filter(ArchimateRelationship.source_id == iface.id).all()]
-            in_rels = [r for r in db.query(ArchimateRelationship).filter(ArchimateRelationship.target_id == iface.id).all()]
+            out_rels = iface_out_rels.get(iface.id, [])
+            in_rels = iface_in_rels.get(iface.id, [])
 
             provider = None
             consumers = []

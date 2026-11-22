@@ -793,8 +793,9 @@ class APMReportService:
         meta_table = doc.add_table(rows=1, cols=2)
         meta_table.alignment = WD_TABLE_ALIGNMENT.CENTER
         meta_table.autofit = False
-        meta_left = meta_table.cell(0, 0)
-        meta_right = meta_table.cell(0, 1)
+        meta_row = meta_table.rows[0]
+        meta_left = meta_row.cells[0]
+        meta_right = meta_row.cells[1]
         meta_left.width = Inches(3.8)
         meta_right.width = Inches(2.8)
 
@@ -867,7 +868,7 @@ class APMReportService:
         ]
 
         for r_idx, c_idx, border_col, bg_col, label, val_str, sub_str in cards_config:
-            cell = kpi_table.cell(r_idx, c_idx)
+            cell = kpi_table.rows[r_idx].cells[c_idx]
             cell.width = Inches(3.3)
             _set_cell_background(cell, bg_col)
             _set_cell_left_border(cell, hex_color=border_col, size="36")
@@ -979,8 +980,9 @@ class APMReportService:
         ]
 
         # Header Row
+        hdr_row_s2 = time_table.rows[0]
         for idx, text in enumerate(headers_s2):
-            cell = time_table.cell(0, idx)
+            cell = hdr_row_s2.cells[idx]
             cell.width = col_widths_s2[idx]
             _set_cell_background(cell, "1E293B")
             _set_cell_padding(cell, top=100, bottom=100, left=100, right=100)
@@ -1012,8 +1014,9 @@ class APMReportService:
                 q_action
             ]
 
+            row = time_table.rows[row_idx]
             for c_idx, val in enumerate(row_data):
-                cell = time_table.cell(row_idx, c_idx)
+                cell = row.cells[c_idx]
                 cell.width = col_widths_s2[c_idx]
                 if row_idx % 2 == 1:
                     _set_cell_background(cell, "F8FAFC")
@@ -1059,8 +1062,9 @@ class APMReportService:
                 t["col_b_fit"], t["col_t_fit"], t["col_cost"], t["col_priority_action"]
             ]
 
+            hdr_row_em = em_table.rows[0]
             for idx, text in enumerate(headers_em):
-                cell = em_table.cell(0, idx)
+                cell = hdr_row_em.cells[idx]
                 cell.width = col_widths_em[idx]
                 _set_cell_background(cell, "334155")
                 _set_cell_padding(cell, top=80, bottom=80, left=80, right=80)
@@ -1091,8 +1095,9 @@ class APMReportService:
                     action_text
                 ]
 
+                row = em_table.rows[r_idx]
                 for c_idx, val in enumerate(row_vals):
-                    cell = em_table.cell(r_idx, c_idx)
+                    cell = row.cells[c_idx]
                     cell.width = col_widths_em[c_idx]
                     if r_idx % 2 == 1:
                         _set_cell_background(cell, "F8FAFC")
@@ -1161,8 +1166,9 @@ class APMReportService:
                 t["col_dora_obsolete"], t["col_dora_reason"]
             ]
 
+            hdr_row_dora = dora_table.rows[0]
             for idx, text in enumerate(headers_dora):
-                cell = dora_table.cell(0, idx)
+                cell = hdr_row_dora.cells[idx]
                 cell.width = col_widths_dora[idx]
                 _set_cell_background(cell, "7F1D1D")  # Dark Red
                 _set_cell_padding(cell, top=80, bottom=80, left=80, right=80)
@@ -1183,8 +1189,9 @@ class APMReportService:
                     alert.get("reason", "")
                 ]
 
+                row = dora_table.rows[r_idx]
                 for c_idx, val in enumerate(row_vals):
-                    cell = dora_table.cell(r_idx, c_idx)
+                    cell = row.cells[c_idx]
                     cell.width = col_widths_dora[c_idx]
                     if r_idx % 2 == 1:
                         _set_cell_background(cell, "FEF2F2")
@@ -1222,8 +1229,9 @@ class APMReportService:
                 t["col_risk_next_eol"], t["col_risk_details"]
             ]
 
+            hdr_row_tra = tra_table.rows[0]
             for idx, text in enumerate(headers_tra):
-                cell = tra_table.cell(0, idx)
+                cell = hdr_row_tra.cells[idx]
                 cell.width = col_widths_tra[idx]
                 _set_cell_background(cell, "334155")
                 _set_cell_padding(cell, top=80, bottom=80, left=80, right=80)
@@ -1247,8 +1255,9 @@ class APMReportService:
                     ", ".join(obs_names) if obs_names else "-"
                 ]
 
+                row = tra_table.rows[r_idx]
                 for c_idx, val in enumerate(row_vals):
-                    cell = tra_table.cell(r_idx, c_idx)
+                    cell = row.cells[c_idx]
                     cell.width = col_widths_tra[c_idx]
                     if r_idx % 2 == 1:
                         _set_cell_background(cell, "F8FAFC")
@@ -1297,8 +1306,9 @@ class APMReportService:
         col_widths_tco = [Inches(3.2), Inches(1.8), Inches(1.6)]
         headers_tco = [t["tco_cost_category"], t["tco_amount"], t["tco_pct"]]
 
+        hdr_row_tco = tco_table.rows[0]
         for idx, text in enumerate(headers_tco):
-            cell = tco_table.cell(0, idx)
+            cell = hdr_row_tco.cells[idx]
             cell.width = col_widths_tco[idx]
             _set_cell_background(cell, "1E293B")
             _set_cell_padding(cell, top=80, bottom=80, left=90, right=90)
@@ -1320,8 +1330,9 @@ class APMReportService:
 
         for r_idx, (cat_label, amount, pct_str) in enumerate(tco_rows, start=1):
             row_vals = [cat_label, _format_eur(amount, lang), pct_str]
+            row = tco_table.rows[r_idx]
             for c_idx, val in enumerate(row_vals):
-                cell = tco_table.cell(r_idx, c_idx)
+                cell = row.cells[c_idx]
                 cell.width = col_widths_tco[c_idx]
                 if r_idx % 2 == 1:
                     _set_cell_background(cell, "F8FAFC")
@@ -1363,8 +1374,9 @@ class APMReportService:
                 t["col_top_pct"], t["col_top_quadrant"], t["col_top_users"]
             ]
 
+            hdr_row_top = top_table.rows[0]
             for idx, text in enumerate(headers_top):
-                cell = top_table.cell(0, idx)
+                cell = hdr_row_top.cells[idx]
                 cell.width = col_widths_top[idx]
                 _set_cell_background(cell, "334155")
                 _set_cell_padding(cell, top=80, bottom=80, left=80, right=80)
@@ -1387,8 +1399,9 @@ class APMReportService:
                     str(app.get("active_users_count") or app.get("active_users") or "-")
                 ]
 
+                row = top_table.rows[r_idx]
                 for c_idx, val in enumerate(row_vals):
-                    cell = top_table.cell(r_idx, c_idx)
+                    cell = row.cells[c_idx]
                     cell.width = col_widths_top[c_idx]
                     if r_idx % 2 == 1:
                         _set_cell_background(cell, "F8FAFC")
@@ -1441,8 +1454,9 @@ class APMReportService:
                 t["col_iface_protocol"], t["col_iface_pattern"], t["col_iface_data"], t["col_iface_status"]
             ]
 
+            hdr_row_if = if_table.rows[0]
             for idx, text in enumerate(headers_if):
-                cell = if_table.cell(0, idx)
+                cell = hdr_row_if.cells[idx]
                 cell.width = col_widths_if[idx]
                 _set_cell_background(cell, "1E293B")
                 _set_cell_padding(cell, top=80, bottom=80, left=80, right=80)
@@ -1463,8 +1477,9 @@ class APMReportService:
                     iface.get("status") or "Live"
                 ]
 
+                row = if_table.rows[r_idx]
                 for c_idx, val in enumerate(row_vals):
-                    cell = if_table.cell(r_idx, c_idx)
+                    cell = row.cells[c_idx]
                     cell.width = col_widths_if[c_idx]
                     if r_idx % 2 == 1:
                         _set_cell_background(cell, "F8FAFC")
@@ -1526,8 +1541,9 @@ class APMReportService:
                 t["col_decomm_savings"], t["col_decomm_status"]
             ]
 
+            hdr_row_dec = dec_table.rows[0]
             for idx, text in enumerate(headers_dec):
-                cell = dec_table.cell(0, idx)
+                cell = hdr_row_dec.cells[idx]
                 cell.width = col_widths_dec[idx]
                 _set_cell_background(cell, "334155")
                 _set_cell_padding(cell, top=80, bottom=80, left=80, right=80)
@@ -1548,8 +1564,9 @@ class APMReportService:
                     app.get("decommission_status") or app.get("lifecycle_status") or "Phase Out"
                 ]
 
+                row = dec_table.rows[r_idx]
                 for c_idx, val in enumerate(row_vals):
-                    cell = dec_table.cell(r_idx, c_idx)
+                    cell = row.cells[c_idx]
                     cell.width = col_widths_dec[c_idx]
                     if r_idx % 2 == 1:
                         _set_cell_background(cell, "F8FAFC")
@@ -1610,8 +1627,9 @@ class APMReportService:
             t["col_appx_lifecycle"], t["col_appx_techrisk"]
         ]
 
+        hdr_row_mast = mast_table.rows[0]
         for idx, text in enumerate(headers_m):
-            cell = mast_table.cell(0, idx)
+            cell = hdr_row_mast.cells[idx]
             cell.width = col_widths_m[idx]
             _set_cell_background(cell, "0F172A")
             _set_cell_padding(cell, top=70, bottom=70, left=70, right=70)
@@ -1637,8 +1655,9 @@ class APMReportService:
                 app.get("tech_risk_level") or "Low"
             ]
 
+            row = mast_table.rows[r_idx]
             for c_idx, val in enumerate(row_vals):
-                cell = mast_table.cell(r_idx, c_idx)
+                cell = row.cells[c_idx]
                 cell.width = col_widths_m[c_idx]
                 if r_idx % 2 == 1:
                     _set_cell_background(cell, "F8FAFC")

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import PlainTextResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 import os
 from datetime import datetime, timezone, timedelta
@@ -34,6 +35,7 @@ from app.api.resilience import router as resilience_router
 from app.api.gap_analysis import router as gap_analysis_router
 from app.api.api_keys import router as api_keys_router
 from app.api.audit import router as audit_router
+from app.api.surveys import router as surveys_router
 
 from sqlalchemy import text
 
@@ -283,6 +285,8 @@ try:
         seed_easybank_layer_elements_and_views(db, "sample-easybank-ea")
         from app.services.seed_easybank_tech_risk_data import seed_easybank_tech_risk_portfolio
         seed_easybank_tech_risk_portfolio(db, "sample-easybank-ea")
+        from app.services.seed_easybank_process_automation_tco import seed_easybank_process_automation_and_tco
+        seed_easybank_process_automation_and_tco(db, "sample-easybank-ea")
 finally:
     db.close()
 
@@ -300,6 +304,9 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept", "Origin", "X-Requested-With"],
 )
+
+# GZip Compression Middleware (compresses JSON & textual responses >= 1000 bytes)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Content Security Policy (CSP) & HSTS Preload (OWASP Secure Headers & RFC 6797)
 DEFAULT_CSP_DIRECTIVES = [
@@ -415,6 +422,7 @@ app.include_router(resilience_router, prefix=settings.API_V1_STR)
 app.include_router(gap_analysis_router, prefix=settings.API_V1_STR)
 app.include_router(api_keys_router, prefix=settings.API_V1_STR)
 app.include_router(audit_router, prefix=settings.API_V1_STR)
+app.include_router(surveys_router, prefix=settings.API_V1_STR)
 app.include_router(auth_router)
 
 
