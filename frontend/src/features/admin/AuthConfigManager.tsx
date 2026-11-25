@@ -232,20 +232,11 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
         description: t.authConfig.defArchGroup
       },
       {
-        id: 'map-analyst-role',
+        id: 'map-clevel-role',
         claim_type: 'realm_role',
-        claim_name: 'analyst',
+        claim_name: 'c_level',
         expected_value: '',
-        target_role: 'analyst',
-        target_model_id: null,
-        description: t.authConfig.defAnalystRole
-      },
-      {
-        id: 'map-exec-role',
-        claim_type: 'realm_role',
-        claim_name: 'executive',
-        expected_value: '',
-        target_role: 'executive',
+        target_role: 'c_level',
         target_model_id: null,
         description: t.authConfig.defExecRole
       }
@@ -274,10 +265,16 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
         return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-rose-100 text-rose-800 border border-rose-200">Admin</span>;
       case 'architect':
         return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">Architect</span>;
-      case 'analyst':
-        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-sky-100 text-sky-800 border border-sky-200">Analyst</span>;
-      case 'executive':
-        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200">Executive</span>;
+      case 'c_level':
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-purple-100 text-purple-800 border border-purple-200">C-Level & Board</span>;
+      case 'app_owner':
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-amber-100 text-amber-800 border border-amber-200">App Owner</span>;
+      case 'process_owner':
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-teal-100 text-teal-800 border border-teal-200">Process Owner</span>;
+      case 'business_user':
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-800 border border-slate-300">Business</span>;
+      case 'viewer':
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-cyan-100 text-cyan-800 border border-cyan-200">Viewer</span>;
       default:
         return <span className="px-2 py-0.5 text-[10px] font-bold rounded-full bg-slate-100 text-slate-700">{role}</span>;
     }
@@ -1142,8 +1139,11 @@ export const AuthConfigManager: React.FC<AuthConfigManagerProps> = ({ models, re
                   >
                     <option value="admin">{t.authConfig.roleAdmin}</option>
                     <option value="architect">{t.authConfig.roleArchitect}</option>
-                    <option value="analyst">{t.authConfig.roleAnalyst}</option>
-                    <option value="executive">{t.authConfig.roleExecutive}</option>
+                    <option value="c_level">{t.authConfig.roleCLevel}</option>
+                    <option value="app_owner">{t.authConfig.roleAppOwner}</option>
+                    <option value="process_owner">{t.authConfig.roleProcessOwner}</option>
+                    <option value="business_user">{t.authConfig.roleBusinessUser}</option>
+                    <option value="viewer">{t.authConfig.roleViewer}</option>
                   </select>
                 </div>
 

@@ -84,6 +84,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const login = async (username: string, password: string, totp_code?: string) => {
+    // Clear previous user's persisted subtabs to ensure landing on homepage
+    localStorage.removeItem('easyea_active_hub');
+    localStorage.removeItem('easyea_business_tab');
+    localStorage.removeItem('easyea_architecture_tab');
+    localStorage.removeItem('easyea_governance_tab');
+    localStorage.removeItem('easyea_admin_tab');
+    localStorage.removeItem('easyea_apm_active_tab');
+
     const data = await api.login({ username, password, totp_code });
     if (data.mfa_required) {
       return data;
@@ -97,6 +105,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const completeMfaLogin = (data: { token: string; user: AuthUser }) => {
+    localStorage.removeItem('easyea_active_hub');
+    localStorage.removeItem('easyea_business_tab');
+    localStorage.removeItem('easyea_architecture_tab');
+    localStorage.removeItem('easyea_governance_tab');
+    localStorage.removeItem('easyea_admin_tab');
+    localStorage.removeItem('easyea_apm_active_tab');
+
     setToken(data.token);
     setUser(data.user);
     sessionStorage.setItem(TOKEN_KEY, data.token);
@@ -123,6 +138,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionStorage.removeItem(USER_KEY);
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
+    localStorage.removeItem('easyea_active_hub');
+    localStorage.removeItem('easyea_business_tab');
+    localStorage.removeItem('easyea_architecture_tab');
+    localStorage.removeItem('easyea_governance_tab');
+    localStorage.removeItem('easyea_admin_tab');
+    localStorage.removeItem('easyea_apm_active_tab');
     setToken(null);
     setUser(null);
     setAuthError(null);

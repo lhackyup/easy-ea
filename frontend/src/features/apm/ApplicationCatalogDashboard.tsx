@@ -90,6 +90,13 @@ export const ApplicationCatalogDashboard: React.FC<ApplicationCatalogDashboardPr
 
   // Currency formatter
   const formatEUR = (amount: number | string | undefined | null) => {
+    if (amount === null || amount === undefined) {
+      return (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-500">
+          {t.surveys.financialsRedactedBadge}
+        </span>
+      );
+    }
     const num = Number(amount) || 0;
     return new Intl.NumberFormat(isIt ? 'it-IT' : 'en-US', {
       style: 'currency',
@@ -628,7 +635,13 @@ export const ApplicationCatalogDashboard: React.FC<ApplicationCatalogDashboardPr
             </div>
           </div>
           <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-2xl font-black text-slate-900">{formatEUR(totalAnnualCost)}</span>
+            {businessApps.some((a) => a.annual_cost === null) ? (
+              <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-lg">
+                {t.surveys.financialsRedactedBadge}
+              </span>
+            ) : (
+              <span className="text-2xl font-black text-slate-900">{formatEUR(totalAnnualCost)}</span>
+            )}
           </div>
         </div>
 

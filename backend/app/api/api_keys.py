@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 
 from app.core.database import get_db
 from app.models.archimate import User
-from app.api.deps import get_current_user, require_admin
+from app.api.deps import get_current_user, require_admin, require_admin_or_viewer
 from app.services.api_key_service import (
     generate_api_key,
     list_api_keys,
@@ -25,20 +25,15 @@ class ApiKeyCreate(BaseModel):
 @router.post("", status_code=201)
 def create_api_key_endpoint(
     payload: ApiKeyCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
     Genera una nuova API Key per chiamate B2B o per agenti AI (es. MCP Server).
+    Riservato agli amministratori di sistema.
     Restituisce il token in chiaro solo in questa risposta.
     """
-    target_user_id = current_user.id
-    if payload.user_id:
-        # Se viene specificato un user_id diverso, serve essere admin
-        is_admin = any(a.role == "admin" for a in current_user.role_assignments)
-        if not is_admin and payload.user_id != current_user.id:
-            raise HTTPException(status_code=403, detail="Solo un amministratore può generare chiavi per altri utenti.")
-        target_user_id = payload.user_id
+    target_user_id = payload.user_id if payload.user_id else current_user.id
 
     api_key_obj, raw_key = generate_api_key(
         db=db,
@@ -76,29 +71,25 @@ def create_api_key_endpoint(
 
 @router.get("")
 def list_api_keys_endpoint(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin_or_viewer),
     db: Session = Depends(get_db)
 ):
     """
-    Elenca le API Keys attive generate dall'utente corrente (o tutte se admin).
+    Elenca le API Keys attive. Riservato ad Admin e Viewer.
     """
-    is_admin = any(a.role == "admin" for a in current_user.role_assignments)
-    filter_user_id = None if is_admin else current_user.id
-    return list_api_keys(db, user_id=filter_user_id)
+    return list_api_keys(db, user_id=None)
 
 
 @router.delete("/{key_id}")
 def revoke_api_key_endpoint(
     key_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_admin),
     db: Session = Depends(get_db)
 ):
     """
-    Revoca immediatamente una API Key esistente.
+    Revoca immediatamente una API Key esistente. Riservato agli amministratori.
     """
-    is_admin = any(a.role == "admin" for a in current_user.role_assignments)
-    filter_user_id = None if is_admin else current_user.id
-    revoked = revoke_api_key(db, key_id, user_id=filter_user_id)
+    revoked = revoke_api_key(db, key_id, user_id=None)
     if not revoked:
         log_security_event(
             db=db,

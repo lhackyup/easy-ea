@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 
@@ -51,6 +52,40 @@ def get_users(
 ):
     """Returns the list of all users and their role assignments."""
     return list_users(db)
+
+@router.get("/users/search")
+def search_users(
+    q: Optional[str] = Query(None, description="Search query string (min 1 char)"),
+    limit: int = Query(50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Search active users for autocomplete selection across full_name, username, and email.
+    Accessible to all authenticated users needing to assign ownership, delegate or select users.
+    """
+    query = db.query(User).filter(User.is_active == True)
+    if q and q.strip():
+        term = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                User.full_name.ilike(term),
+                User.username.ilike(term),
+                User.email.ilike(term)
+            )
+        )
+    users = query.order_by(User.full_name.asc(), User.username.asc()).limit(limit).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "full_name": u.full_name or u.username,
+            "auth_provider": u.auth_provider or "local",
+            "roles": [a.role for a in u.role_assignments]
+        }
+        for u in users
+    ]
 
 @router.post("/users")
 def add_user(

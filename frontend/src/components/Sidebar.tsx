@@ -4,6 +4,7 @@ import {
   BusinessSubTab,
   ArchitectureSubTab,
   AdminSubTab,
+  GovernanceSubTab,
   PackageWithViews,
   ActivePackageViewSelection
 } from '../types';
@@ -42,8 +43,13 @@ import {
   ScrollText,
   TrendingUp,
   Clock,
-  Network
+  Network,
+  CheckSquare,
+  Vote,
+  ClipboardCheck,
+  Users
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 
 interface SidebarProps {
   activeHub: MainHub;
@@ -53,6 +59,8 @@ interface SidebarProps {
   onSelectApmTab?: (tab: 'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle') => void;
   architectureTab: ArchitectureSubTab;
   onSelectArchitectureTab: (tab: ArchitectureSubTab) => void;
+  governanceTab?: GovernanceSubTab;
+  onSelectGovernanceTab?: (tab: GovernanceSubTab) => void;
   adminTab: AdminSubTab;
   onSelectAdminTab: (tab: AdminSubTab) => void;
   onOpenUpload: () => void;
@@ -71,6 +79,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelectApmTab,
   architectureTab,
   onSelectArchitectureTab,
+  governanceTab = 'my_surveys',
+  onSelectGovernanceTab,
   adminTab,
   onSelectAdminTab,
   onOpenUpload,
@@ -125,12 +135,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
-  const businessItems = [
-    {
+  const { user } = useAuth();
+  const userRoles = new Set((user?.assignments || []).map((a) => a.role));
+  const isCLevelOrAdmin = userRoles.has('admin') || userRoles.has('c_level');
+  const isArchitectOrAdmin = userRoles.has('admin') || userRoles.has('architect') || userRoles.has('lead_architect');
+  const isAppOwner = userRoles.has('app_owner') || userRoles.has('process_owner') || userRoles.has('admin');
+
+  const businessItems: Array<{ id: BusinessSubTab; label: string; icon: any }> = [];
+
+  if (isCLevelOrAdmin || (!userRoles.has('business_user') && userRoles.size > 0) || !user) {
+    businessItems.push({
       id: 'overview' as BusinessSubTab,
       label: t.subtabs.executiveOverview,
       icon: Sparkles
-    },
+    });
+  }
+
+  businessItems.push(
     {
       id: 'processes' as BusinessSubTab,
       label: t.subtabs.processLineage,
@@ -146,7 +167,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: t.subtabs.applicationPortfolio,
       icon: Layers
     }
-  ];
+  );
+
+  const governanceItems: Array<{ id: GovernanceSubTab; label: string; icon: any }> = [];
+
+  if (isAppOwner || isArchitectOrAdmin || !user) {
+    governanceItems.push({
+      id: 'my_surveys' as GovernanceSubTab,
+      label: t.governance.mySurveysTab,
+      icon: CheckSquare
+    });
+  }
+
+  if (isArchitectOrAdmin || !user) {
+    governanceItems.push({
+      id: 'campaigns' as GovernanceSubTab,
+      label: t.governance.campaignsTab,
+      icon: Vote
+    });
+  }
+
+  governanceItems.push({
+    id: 'ownership' as GovernanceSubTab,
+    label: t.governance.ownershipTab,
+    icon: Users
+  });
 
   const architectureItems = [
     {
@@ -557,7 +602,60 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* ======================================================== */}
-        {/* ACTIVE HUB 3: ADMINISTRATION HUB ONLY                    */}
+        {/* ACTIVE HUB: GOVERNANCE & SURVEYS HUB                     */}
+        {/* ======================================================== */}
+        {activeHub === 'governance' && (
+          <div>
+            {!isCollapsed ? (
+              <div className="flex items-center space-x-2 px-2 pb-3 mb-2 border-b border-slate-100">
+                <div className="p-1.5 rounded-lg bg-amber-100 text-amber-700">
+                  <ClipboardCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-black text-amber-900 uppercase tracking-wider block leading-tight">
+                    {t.common.governanceHub}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Crowdsourcing & Stewardship
+                  </span>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-center pb-3 mb-2 border-b border-slate-100" title={t.common.governanceHub}>
+                <div className="p-1.5 rounded-xl bg-amber-100 text-amber-700">
+                  <ClipboardCheck className="w-4 h-4" />
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1">
+              {governanceItems.map((item) => {
+                const Icon = item.icon;
+                const isActive = governanceTab === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => onSelectGovernanceTab && onSelectGovernanceTab(item.id)}
+                    title={isCollapsed ? item.label : undefined}
+                    className={`w-full flex items-center rounded-xl text-xs font-bold transition-all duration-150 ${
+                      isCollapsed ? 'justify-center p-2.5' : 'px-3 py-2 space-x-2.5 text-left'
+                    } ${
+                      isActive
+                        ? 'bg-amber-600 text-white shadow-sm shadow-amber-600/25 ring-1 ring-amber-500/20'
+                        : 'text-slate-600 hover:text-amber-600 hover:bg-amber-50/70'
+                    }`}
+                  >
+                    <Icon className={`shrink-0 ${isCollapsed ? 'w-4 h-4' : 'w-4 h-4'} ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                    {!isCollapsed && <span className="truncate">{item.label}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ======================================================== */}
+        {/* ACTIVE HUB 4: ADMINISTRATION HUB ONLY                    */}
         {/* ======================================================== */}
         {activeHub === 'admin' && (
           <div>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { APMPortfolio, ApplicationInfo } from '../../types';
 import { api } from '../../lib/api';
+import { UserAutocomplete } from '../../components/common/UserAutocomplete';
 import {
   DollarSign,
   TrendingUp,
@@ -29,6 +30,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import { TechRiskRadar } from './TechRiskRadar';
 import { TCOBreakdownDashboard } from './TCOBreakdownDashboard';
 import { LifecycleRoadmapDashboard } from './LifecycleRoadmapDashboard';
@@ -53,6 +55,10 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
   onTabChange
 }) => {
   const { t, language, interpolate } = useLanguage();
+  const { user } = useAuth();
+  const userRoles = new Set((user?.assignments || []).map((a) => a.role));
+  const canViewFinancials = userRoles.has('admin') || userRoles.has('c_level') || !user;
+
   const [data, setData] = useState<APMPortfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [isBannerDismissed, setIsBannerDismissed] = useState(false);
@@ -201,6 +207,17 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
 
     const isEn = language === 'en';
 
+    const financialFields = new Set([
+      'annual_cost',
+      'cost_software_licenses',
+      'cost_cloud_infrastructure',
+      'cost_vendor_maintenance',
+      'cost_internal_labor',
+      'cost_per_user',
+      'capex_ratio',
+      'cost_center'
+    ]);
+
     const columnsToExport = [
       { field: 'name', label: isEn ? 'Application Name' : 'Nome Applicazione' },
       { field: 'app_code', label: isEn ? 'Application Code' : 'Codice Applicazione' },
@@ -234,7 +251,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
       { field: 'data_classification', label: isEn ? 'Data Classification' : 'Classificazione Dati' },
       { field: 'personal_data', label: isEn ? 'GDPR Personal Data' : 'Trattamento Dati Personali (GDPR)' },
       { field: 'notes', label: isEn ? 'Notes' : 'Note' }
-    ];
+    ].filter((col) => canViewFinancials || !financialFields.has(col.field));
 
     const getCellValue = (row: any, col: { field: string }) => {
       const val = row[col.field];
@@ -315,8 +332,8 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
       const tFit = Number(app.technical_fit) || 3;
       const cost = Number(app.annual_cost) || 0;
 
-      const costRatio = Math.sqrt(Math.max(0, cost - minCost) / costSpread);
-      const radius = 20 + costRatio * 32;
+      const costRatio = canViewFinancials ? Math.sqrt(Math.max(0, cost - minCost) / costSpread) : 0;
+      const radius = canViewFinancials ? 20 + costRatio * 32 : 24;
 
       const minX = 8;
       const maxX = 92;
@@ -398,22 +415,24 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
           </p>
         </div>
         {/* Global Actions */}
-        <div className="flex items-center space-x-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleExportDocx}
-            disabled={isExportingDocx || !data}
-            className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
-            title={t.apm.btnExportDocx}
-          >
-            {isExportingDocx ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
-            ) : (
-              <FileText className="w-3.5 h-3.5 text-indigo-600" />
-            )}
-            <span>{isExportingDocx ? t.apm.btnExportingDocx : t.apm.btnExportDocx}</span>
-          </button>
-        </div>
+        {canViewFinancials && (
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleExportDocx}
+              disabled={isExportingDocx || !data}
+              className="px-3.5 py-2 text-xs font-bold rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-indigo-600 shadow-sm transition flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+              title={t.apm.btnExportDocx}
+            >
+              {isExportingDocx ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-600" />
+              ) : (
+                <FileText className="w-3.5 h-3.5 text-indigo-600" />
+              )}
+              <span>{isExportingDocx ? t.apm.btnExportingDocx : t.apm.btnExportDocx}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Informative Banner when APM package is not active on this workspace */}
@@ -509,17 +528,19 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
           </span>
         </button>
 
-        <button
-          onClick={() => setActiveApmTab('tco')}
-          className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative shrink-0 ${
-            activeApmTab === 'tco'
-              ? 'bg-indigo-600 text-white shadow-sm'
-              : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
-          }`}
-        >
-          <Coins className="w-4 h-4 text-emerald-500" />
-          <span>{t.apm.tabTcoBreakdown}</span>
-        </button>
+        {canViewFinancials && (
+          <button
+            onClick={() => setActiveApmTab('tco')}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-extrabold transition relative shrink-0 ${
+              activeApmTab === 'tco'
+                ? 'bg-indigo-600 text-white shadow-sm'
+                : 'text-slate-600 hover:text-indigo-600 hover:bg-slate-100'
+            }`}
+          >
+            <Coins className="w-4 h-4 text-emerald-500" />
+            <span>{t.apm.tabTcoBreakdown}</span>
+          </button>
+        )}
 
         <button
           onClick={() => setActiveApmTab('lifecycle')}
@@ -571,19 +592,27 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
         {/* Total Cost & Scope Summary Bar */}
         <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-3.5">
-            <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600 border border-emerald-100">
-              <DollarSign className="w-6 h-6" />
+            <div className={`p-3 rounded-xl border ${canViewFinancials ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+              {canViewFinancials ? <DollarSign className="w-6 h-6" /> : <Layers className="w-6 h-6" />}
             </div>
             <div>
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.apm.totalAnnualCost}</span>
-              <div className="text-2xl font-black text-slate-900">{formatEUR(totalBusinessCost)}</div>
-              <p className="text-[11px] text-slate-500">{t.apm.costDesc}</p>
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {canViewFinancials ? t.apm.totalAnnualCost : t.apm.totalApplicationsScope}
+              </span>
+              <div className="text-2xl font-black text-slate-900">
+                {canViewFinancials ? formatEUR(totalBusinessCost) : interpolate(t.apm.businessAppsRegistered, { count: businessApps.length })}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                {canViewFinancials ? t.apm.costDesc : t.apm.appsRegisteredDesc}
+              </p>
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-3 text-xs">
-            <div className="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-slate-600">
-              {interpolate(t.apm.businessAppsRegistered, { count: businessApps.length })}
-            </div>
+            {canViewFinancials && (
+              <div className="bg-slate-50 border border-slate-200 px-3.5 py-2 rounded-xl text-slate-600">
+                {interpolate(t.apm.businessAppsRegistered, { count: businessApps.length })}
+              </div>
+            )}
             {selectedQuadrant && (
               <button
                 onClick={() => setSelectedQuadrant(null)}
@@ -610,7 +639,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
             </div>
             <div className="mt-2 text-2xl font-black text-emerald-950">{timeSummary?.counts.Invest || 0} app</div>
-            <div className="text-xs font-bold text-emerald-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Invest || 0)}</div>
+            {canViewFinancials && (
+              <div className="text-xs font-bold text-emerald-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Invest || 0)}</div>
+            )}
             <p className="text-[11px] text-emerald-800/80 mt-1">{t.apm.investDesc}</p>
           </div>
 
@@ -626,7 +657,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
             </div>
             <div className="mt-2 text-2xl font-black text-blue-950">{timeSummary?.counts.Tolerate || 0} app</div>
-            <div className="text-xs font-bold text-blue-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Tolerate || 0)}</div>
+            {canViewFinancials && (
+              <div className="text-xs font-bold text-blue-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Tolerate || 0)}</div>
+            )}
             <p className="text-[11px] text-blue-800/80 mt-1">{t.apm.tolerateDesc}</p>
           </div>
 
@@ -642,7 +675,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
             </div>
             <div className="mt-2 text-2xl font-black text-amber-950">{timeSummary?.counts.Migrate || 0} app</div>
-            <div className="text-xs font-bold text-amber-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Migrate || 0)}</div>
+            {canViewFinancials && (
+              <div className="text-xs font-bold text-amber-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Migrate || 0)}</div>
+            )}
             <p className="text-[11px] text-amber-800/80 mt-1">{t.apm.migrateDesc}</p>
           </div>
 
@@ -658,7 +693,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
               <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
             </div>
             <div className="mt-2 text-2xl font-black text-rose-950">{timeSummary?.counts.Eliminate || 0} app</div>
-            <div className="text-xs font-bold text-rose-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Eliminate || 0)}</div>
+            {canViewFinancials && (
+              <div className="text-xs font-bold text-rose-700 font-mono mt-0.5">{formatEUR(timeSummary?.costs.Eliminate || 0)}</div>
+            )}
             <p className="text-[11px] text-rose-800/80 mt-1">{t.apm.eliminateDesc}</p>
           </div>
         </div>
@@ -905,10 +942,12 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                       )}
 
                       <div className="mt-1 space-y-1 text-[11px] border-t border-slate-800/80 pt-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-400">{t.apm.tooltipAnnualTco}</span>
-                          <span className="font-mono font-bold text-amber-300">{formatEUR(b.cost)}</span>
-                        </div>
+                        {canViewFinancials && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-slate-400">{t.apm.tooltipAnnualTco}</span>
+                            <span className="font-mono font-bold text-amber-300">{formatEUR(b.cost)}</span>
+                          </div>
+                        )}
                         <div className="flex items-center justify-between">
                           <span className="text-slate-400">{t.apm.tooltipBusinessFit}</span>
                           <span className="font-bold text-slate-200">{b.bFit} / 4</span>
@@ -974,7 +1013,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                         key={app.id}
                         onClick={() => handleEditClick(app)}
                         className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Tolerate]` : ''}`}
+                        title={`[${app.app_code || 'AP0000'}] ${app.name}${canViewFinancials ? ` • TCO: ${formatEUR(app.annual_cost)}` : ''}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Tolerate]` : ''}`}
                       >
                         <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
                         <span>{app.short_name || app.name}</span>
@@ -990,7 +1029,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                             <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
                           </span>
                         )}
-                        <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        {canViewFinancials && (
+                          <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        )}
                       </button>
                     );
                   })}
@@ -1020,7 +1061,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                         key={app.id}
                         onClick={() => handleEditClick(app)}
                         className="px-2.5 py-1 text-xs font-bold rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs border border-emerald-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Invest]` : ''}`}
+                        title={`[${app.app_code || 'AP0000'}] ${app.name}${canViewFinancials ? ` • TCO: ${formatEUR(app.annual_cost)}` : ''}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Invest]` : ''}`}
                       >
                         <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
                         <span>{app.short_name || app.name}</span>
@@ -1036,7 +1077,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                             <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
                           </span>
                         )}
-                        <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        {canViewFinancials && (
+                          <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        )}
                       </button>
                     );
                   })}
@@ -1066,7 +1109,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                         key={app.id}
                         onClick={() => handleEditClick(app)}
                         className="px-2.5 py-1 text-xs font-bold rounded-lg bg-rose-600 hover:bg-rose-700 text-white shadow-xs border border-rose-700 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Eliminate]` : ''}`}
+                        title={`[${app.app_code || 'AP0000'}] ${app.name}${canViewFinancials ? ` • TCO: ${formatEUR(app.annual_cost)}` : ''}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Eliminate]` : ''}`}
                       >
                         <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
                         <span>{app.short_name || app.name}</span>
@@ -1082,7 +1125,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                             <Zap className="w-3 h-3 fill-amber-300 text-amber-300" />
                           </span>
                         )}
-                        <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        {canViewFinancials && (
+                          <span className="text-[10px] opacity-80 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        )}
                       </button>
                     );
                   })}
@@ -1112,7 +1157,7 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                         key={app.id}
                         onClick={() => handleEditClick(app)}
                         className="px-2.5 py-1 text-xs font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-xs border border-amber-600 flex items-center gap-1.5 cursor-pointer transition transform hover:scale-105"
-                        title={`[${app.app_code || 'AP0000'}] ${app.name} • TCO: ${formatEUR(app.annual_cost)}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Migrate]` : ''}`}
+                        title={`[${app.app_code || 'AP0000'}] ${app.name}${canViewFinancials ? ` • TCO: ${formatEUR(app.annual_cost)}` : ''}${isOverride ? ` • [${t.apm.overrideStrategic}: ${calcQ} -> Migrate]` : ''}`}
                       >
                         <span className="font-mono text-[10px] opacity-80">[{app.app_code || 'AP0000'}]</span>
                         <span>{app.short_name || app.name}</span>
@@ -1128,7 +1173,9 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                             <Zap className="w-3 h-3 fill-slate-950 text-slate-950" />
                           </span>
                         )}
-                        <span className="text-[10px] opacity-90 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        {canViewFinancials && (
+                          <span className="text-[10px] opacity-90 font-mono">({formatCompactEUR(app.annual_cost)})</span>
+                        )}
                       </button>
                     );
                   })}
@@ -1278,7 +1325,14 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                     <span className="text-slate-900">B:{app.business_fit}</span> / <span className="text-slate-500">T:{app.technical_fit}</span>
                   </td>
                   <td className="py-3.5 px-4 font-bold text-slate-900">
-                    {formatEUR(app.annual_cost)}
+                    {canViewFinancials && app.annual_cost !== null && app.annual_cost !== undefined ? (
+                      formatEUR(app.annual_cost)
+                    ) : (
+                      <span className="text-slate-400 text-xs italic font-normal flex items-center gap-1">
+                        <span>🔒</span>
+                        <span>{t.apm.confidentialCLevel}</span>
+                      </span>
+                    )}
                   </td>
                   <td className="py-3.5 px-4 font-medium">
                     <span className="text-slate-700 flex items-center gap-1">
@@ -1573,22 +1627,24 @@ export const APMDashboard: React.FC<APMDashboardProps> = ({
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       {t.apm.labelBusinessOwner}
                     </label>
-                    <input
-                      type="text"
+                    <UserAutocomplete
+                      mode="string"
                       value={editForm.business_owner || ''}
-                      onChange={(e) => setEditForm({ ...editForm, business_owner: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                      onChange={(u, str) => setEditForm({ ...editForm, business_owner: u ? (u.full_name ? `${u.full_name} (${u.email})` : u.email) : (str || '') })}
+                      minChars={3}
+                      allowCustomValue={true}
                     />
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-700 mb-1">
                       {t.apm.labelTechnicalOwner}
                     </label>
-                    <input
-                      type="text"
+                    <UserAutocomplete
+                      mode="string"
                       value={editForm.technical_owner || ''}
-                      onChange={(e) => setEditForm({ ...editForm, technical_owner: e.target.value })}
-                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-indigo-500"
+                      onChange={(u, str) => setEditForm({ ...editForm, technical_owner: u ? (u.full_name ? `${u.full_name} (${u.email})` : u.email) : (str || '') })}
+                      minChars={3}
+                      allowCustomValue={true}
                     />
                   </div>
                   <div>

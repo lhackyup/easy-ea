@@ -5,6 +5,39 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 
 ---
 
+## [1.4.0] - 2026-11-25
+
+### Added
+- **Modulo Surveys & Crowdsourcing Architetturale**:
+  - Campagne di rilevazione distribuita per la manutenzione partecipata del repository di Enterprise Architecture: creazione campagne, gestione del ciclo di vita (`draft`, `active`, `closed`), scadenze e workflow di approvazione (`review_required` o `direct_apply`).
+  - **Matrice di Assegnazione Ownership Bidirezionale**: vista unificata per la mappatura e la delega di responsabilità su Application Assets (Application Owner) e Processi di Business (Process Owner).
+  - **Portale Owner Unificato (`OwnerDashboard`)**: cruscotto dedicato a responsabili applicativi e di processo con riepilogo a schede dei propri asset in gestione, avanzamento percentuale di completezza dati, e questionari attivi da compilare.
+  - **Wizard Guidato a 5 Step per Applicazioni**: aggiornamento guidato di anagrafica e note funzionali, valutazione Business & Technical Fit con calcolo quadrante Gartner TIME, Hosting & Lifecycle (SLA, classificazione dati, criticità DORA), TCO & costi con mascheramento/redaction per ruoli non autorizzati, e calcolo diff interattivo pre-approvazione.
+  - **Wizard Guidato a 5 Step per Processi di Business (BPMN)**: censimento metriche di performance operativa (tempo medio di ciclo in minuti, volume mensile transazioni, rework / error rate %), livello di automazione BPMN (Full Automated STP, Semi-Automated, AI-Assisted, Manual), SLA e RTO di processo, e governance regolamentare (DORA Core ICT Service, GDPR High Risk, AML).
+  - **Merge Automatico nel Modello ArchiMate**: alla revisione e approvazione da parte dell'Enterprise Architect, i dati validati vengono fusi deterministicamente nelle proprietà (`ArchimateElement.properties`) e nella documentazione del repository.
+- **Suite Analitica Avanzata per Processi di Business & BPMN**:
+  - Cruscotti analitici integrati: *Process Lineage* (catena di valore e dipendenze applicative), *Process Automation* (tasso STP vs AI-assisted vs manuale), *Process TCO* (allocazione costi IT sui processi aziendali), *Process Outage Simulator* (analisi blast radius e simulazione impatto disservizio ICT sul business), *Process Risks & DORA Audit*, e *Process Decommissioning*.
+- **Motore di Ricerca Utenti & Autocomplete Universale (`UserAutocomplete`)**:
+  - Endpoint backend indicizzato `GET /api/rbac/users/search?q=...` con ricerca full-text case-insensitive su nome, username ed email.
+  - Componente frontend reattivo con soglia minima a 3 caratteri, debounce a 250ms, avatar con iniziali, badge dei ruoli e selezione rapida.
+  - Posizionamento dinamico e intelligente (`placement="auto"`) che calcola lo spazio verticale disponibile ed esegue il dropup verso l'alto quando il campo è vicino al margine inferiore del viewport o della modale, prevenendo la sovrapposizione con le barre comandi.
+
+### Changed
+- **Razionalizzazione Matrice RBAC (Tassonomia Ortogonale a 7 Ruoli)**:
+  - Definizione pulita di 7 ruoli di governance: `admin`, `architect`, `c_level`, `app_owner`, `process_owner`, `business_user`, `viewer`.
+  - Unificazione dei ruoli direzionali nel ruolo canonico **`c_level`** (*"C-Level & Board: CIO, CFO, CEO, CISO"*), eliminando le ridondanze storiche (`executive`).
+  - Rimozione del ruolo ambiguo `analyst` (con migrazione automatica degli analisti verso `architect` o `business_user`).
+  - Migrazione automatica delle assegnazioni nel database e deduplicazione delle tuple utente/ruolo in `seed_default_rbac`.
+- **Internazionalizzazione (i18n) Bilingue Completa**:
+  - Estensione simmetrica al 100% dei dizionari IT ed EN per tutti i flussi di survey, matrice di ownership, audit BPMN, ruoli RBAC e componenti autocomplete.
+
+### Security & Compliance
+- **Audit Sicurezza e Conformità**:
+  - Suite di test di sicurezza e RBAC estesa a 32 test automatici (`pytest`), inclusa verifica su isolamento multi-tenant, revoca token, audit trail, cifratura segreti, CSP e HSTS.
+  - Zero vulnerabilità critiche o non bloccate nell'ecosistema Python.
+
+---
+
 ## [1.3.0] - 2026-11-21
 
 ### Added

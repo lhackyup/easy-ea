@@ -120,7 +120,8 @@ def require_library_permission(
     db: Session,
     user: User,
     action: str,
-    target_model_id: Optional[str]
+    target_model_id: Optional[str],
+    element_id: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Enforces library-scoped RBAC permission for the specified action and target_model_id.
@@ -130,7 +131,8 @@ def require_library_permission(
         db,
         user_id=user.id,
         action=action,
-        target_model_id=target_model_id
+        target_model_id=target_model_id,
+        element_id=element_id
     )
     if not res.get("allowed"):
         raise HTTPException(

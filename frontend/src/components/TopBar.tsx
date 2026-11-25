@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
+import packageJson from '../../package.json';
 import { ModelWorkspace, MainHub, MfaStatus, MfaSetupResponse } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
@@ -19,7 +20,8 @@ import {
   X,
   KeyRound,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface TopBarProps {
@@ -157,7 +159,7 @@ export const TopBar: React.FC<TopBarProps> = ({
 
     // Global admin and viewer (demo) have access to all Hubs
     if (isAdmin || isViewer) {
-      return ['business', 'architecture', 'admin'];
+      return ['business', 'architecture', 'governance', 'admin'];
     }
 
     // Filter assignments valid for the current library (or global)
@@ -168,8 +170,18 @@ export const TopBar: React.FC<TopBarProps> = ({
 
     const hubs: MainHub[] = ['business']; // Business Hub is accessible to all assigned roles
 
-    if (roles.has('architect')) {
+    if (roles.has('architect') || roles.has('lead_architect')) {
       hubs.push('architecture');
+    }
+
+    if (
+      roles.has('app_owner') ||
+      roles.has('process_owner') ||
+      roles.has('architect') ||
+      roles.has('lead_architect') ||
+      roles.has('c_level')
+    ) {
+      hubs.push('governance');
     }
 
     return hubs;
@@ -182,16 +194,35 @@ export const TopBar: React.FC<TopBarProps> = ({
     }
   }, [allowedHubs, activeHub, onSelectHub]);
 
+  const getRoleDisplayName = (role?: string) => {
+    switch (role) {
+      case 'admin':
+        return t.rbac.roleAdminName;
+      case 'viewer':
+        return t.rbac.roleViewerName || '👁️ Demo (Sola Lettura)';
+      case 'lead_architect':
+        return t.rbac.roleLeadArchitectName || t.rbac.roleArchitectName;
+      case 'architect':
+        return t.rbac.roleArchitectName;
+      case 'c_level':
+        return t.rbac.roleCLevelName || '👑 C-Level & Board';
+      case 'app_owner':
+        return t.rbac.roleAppOwnerName || '📦 Application Owner';
+      case 'process_owner':
+        return t.rbac.roleProcessOwnerName || '⚙️ Process Owner';
+      case 'business_user':
+        return t.rbac.roleBusinessUserName || '👥 Business User';
+      default:
+        return t.rbac.roleUserName;
+    }
+  };
+
   const primaryRole = isAdmin
     ? t.rbac.roleAdminName
     : isViewer
     ? (t.rbac.roleViewerName || '👁️ Demo (Sola Lettura)')
     : user?.assignments?.[0]?.role
-    ? user.assignments[0].role === 'architect'
-      ? t.rbac.roleArchitectName
-      : user.assignments[0].role === 'analyst'
-      ? t.rbac.roleAnalystName
-      : t.rbac.roleExecutiveName
+    ? getRoleDisplayName(user.assignments[0].role)
     : t.rbac.roleUserName;
 
   return (
@@ -216,7 +247,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <div className="flex items-center space-x-1.5">
             <span className="text-base font-black text-slate-900 tracking-tight">EasyEA</span>
             <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 bg-indigo-50 text-indigo-700 rounded-md border border-indigo-200 hidden sm:inline-block">
-              v1.0.0
+              v{packageJson.version || '1.3.0'}
             </span>
           </div>
         </div>
@@ -252,6 +283,20 @@ export const TopBar: React.FC<TopBarProps> = ({
             >
               <Building2 className="w-3.5 h-3.5" />
               <span>{t.common.architectureBadge}</span>
+            </button>
+          )}
+
+          {allowedHubs.includes('governance') && (
+            <button
+              onClick={() => onSelectHub('governance')}
+              className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all duration-150 ${
+                activeHub === 'governance'
+                  ? 'bg-amber-600 text-white shadow-xs shadow-amber-600/30 ring-1 ring-amber-500/20'
+                  : 'text-slate-600 hover:text-amber-600 hover:bg-white/60'
+              }`}
+            >
+              <ClipboardCheck className="w-3.5 h-3.5" />
+              <span>{t.common.governanceBadge}</span>
             </button>
           )}
 
@@ -395,7 +440,7 @@ export const TopBar: React.FC<TopBarProps> = ({
                           key={a.id}
                           className="text-[10px] font-medium text-slate-700 bg-slate-50 border border-slate-200/80 px-2 py-1 rounded-lg flex items-center justify-between"
                         >
-                          <span className="capitalize font-bold">{a.role}</span>
+                          <span className="font-bold">{getRoleDisplayName(a.role)}</span>
                           <span className="text-[9px] font-mono text-slate-500 truncate max-w-[120px]">
                             {a.role === 'admin' || !a.model_id ? t.rbac.scopeGlobalBadge : a.library_name || a.library_code || a.model_id}
                           </span>

@@ -474,7 +474,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                 </div>
 
                 {/* Savings Pill if overlapping */}
-                {node.potential_savings > 0 && (
+                {node.potential_savings !== null && node.potential_savings !== undefined && node.potential_savings > 0 && (
                   <span className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-600 text-white shadow-sm">
                     <DollarSign className="w-3 h-3" />
                     <span>{formatEUR(node.potential_savings)}{t.functionalAnalysis.perYear}</span>
@@ -723,13 +723,22 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-emerald-700">
-            {formatEUR(data.total_potential_savings)}
-          </div>
+          {data.total_potential_savings !== null && data.total_potential_savings !== undefined ? (
+            <div className="mt-3 text-2xl font-black text-emerald-700">
+              {formatEUR(data.total_potential_savings)}
+            </div>
+          ) : (
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
+              <span>🔒</span>
+              <span>{t.functionalAnalysis.confidentialCLevel}</span>
+            </div>
+          )}
           <p className="text-[11px] text-slate-500 mt-1">
-            {interpolate(t.functionalAnalysis.redundancyDetail, {
-              redundant: data.overlapping_leaf_functions_count
-            })}
+            {data.total_potential_savings !== null && data.total_potential_savings !== undefined
+              ? interpolate(t.functionalAnalysis.redundancyDetail, {
+                  redundant: data.overlapping_leaf_functions_count
+                })
+              : t.functionalAnalysis.savingsRestricted}
           </p>
         </div>
       </div>
@@ -1134,7 +1143,7 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
 
                     {/* Savings */}
                     <td className="py-3.5 px-4 text-right font-black">
-                      {leaf.potential_savings > 0 ? (
+                      {leaf.potential_savings !== null && leaf.potential_savings !== undefined && leaf.potential_savings > 0 ? (
                         <span className="text-emerald-700">{formatEUR(leaf.potential_savings)}</span>
                       ) : (
                         <span className="text-slate-300">-</span>
@@ -1181,9 +1190,11 @@ export const FunctionalAnalysisView: React.FC<FunctionalAnalysisViewProps> = ({ 
                       <h4 className="text-sm font-bold text-slate-900">{cluster.leaf_name}</h4>
                       <p className="text-[11px] text-slate-500 mt-0.5">{cluster.path}</p>
                     </div>
-                    <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
-                      +{formatEUR(cluster.potential_savings)}{t.functionalAnalysis.perYear}
-                    </span>
+                    {cluster.potential_savings !== null && cluster.potential_savings !== undefined && cluster.potential_savings > 0 && (
+                      <span className="px-2.5 py-1 rounded-xl text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        +{formatEUR(cluster.potential_savings)}{t.functionalAnalysis.perYear}
+                      </span>
+                    )}
                   </div>
 
                   {/* Recommendation block */}

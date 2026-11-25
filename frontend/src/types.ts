@@ -1,6 +1,8 @@
-export type MainHub = 'business' | 'architecture' | 'admin';
+export type MainHub = 'business' | 'architecture' | 'governance' | 'admin';
 
 export type BusinessSubTab = 'overview' | 'package_view' | 'insights' | 'apm' | 'tech_risk' | 'tco' | 'functional' | 'overlap' | 'processes';
+
+export type GovernanceSubTab = 'my_surveys' | 'campaigns' | 'ownership';
 
 export interface ActivePackageViewSelection {
   packageId: string;
@@ -8,6 +10,52 @@ export interface ActivePackageViewSelection {
 }
 export type ArchitectureSubTab = 'repository' | 'schemas' | 'relations' | 'adrs' | 'saved-views' | 'import' | 'business-views' | 'package_view';
 export type AdminSubTab = 'models' | 'metamodel' | 'packages' | 'roles' | 'auth_config' | 'api_keys' | 'audit_logs' | 'system';
+
+export interface AppOwnerInfo {
+  id: string;
+  user_id: string;
+  username?: string | null;
+  full_name?: string | null;
+  email?: string | null;
+  ownership_type: string;
+  notes?: string | null;
+  created_at?: string | null;
+}
+
+export interface ApplicationOwnershipRow {
+  id: string;
+  name: string;
+  type: string;
+  layer?: string;
+  category?: 'application' | 'process' | string;
+  owners: AppOwnerInfo[];
+  has_owner: boolean;
+  legacy_business_owner?: string | null;
+  legacy_technical_owner?: string | null;
+  legacy_process_owner?: string | null;
+  legacy_process_manager?: string | null;
+}
+
+export interface OwnershipMatrixResponse {
+  total_applications: number;
+  assigned_applications?: number;
+  unassigned_applications?: number;
+  coverage_applications?: number;
+
+  total_processes?: number;
+  assigned_processes?: number;
+  unassigned_processes?: number;
+  coverage_processes?: number;
+
+  total_elements?: number;
+  assigned_count: number;
+  unassigned_count: number;
+  coverage_percentage: number;
+
+  applications: ApplicationOwnershipRow[];
+  processes?: ApplicationOwnershipRow[];
+  elements?: ApplicationOwnershipRow[];
+}
 
 export interface MetamodelAttribute {
   name: string;
@@ -955,6 +1003,99 @@ export interface ArchitecturalRisksReport {
   }>;
 }
 
+export interface ProcessTCOItem {
+  id: string;
+  name: string;
+  type: string;
+  criticality: string;
+  is_critical: boolean;
+  gross_cost: number;
+  allocated_cost: number;
+  cost_percentage: number;
+  supporting_apps_count: number;
+  supporting_applications: Array<{
+    id: string;
+    name: string;
+    annual_cost: number;
+    allocated_cost: number;
+    shared_across_processes_count: number;
+    time_quadrant: string;
+    lifecycle_status: string;
+    criticality: string;
+  }>;
+  efficiency_warning?: string | null;
+}
+
+export interface ProcessTCOReport {
+  model_id: string;
+  summary: {
+    total_allocated_cost: number;
+    total_gross_cost: number;
+    top_spend_process?: {
+      id: string;
+      name: string;
+      allocated_cost: number;
+      cost_percentage: number;
+    } | null;
+    average_process_cost: number;
+    processes_with_cost_count: number;
+    total_processes_count: number;
+    efficiency_warnings_count: number;
+    cost_by_criticality: Record<string, number>;
+  };
+  processes: ProcessTCOItem[];
+}
+
+export interface ProcessTaskStepItem {
+  id: string;
+  name: string;
+  bpmn_tag: string;
+  stereotype_label: string;
+  category: 'AUTOMATED' | 'AI_ASSISTED' | 'SEMI_AUTOMATED' | 'MANUAL';
+  cycle_time_minutes: number;
+  monthly_volume: number;
+}
+
+export interface ProcessAutomationItem {
+  id: string;
+  name: string;
+  type: string;
+  is_critical: boolean;
+  total_tasks: number;
+  automated_tasks: number;
+  ai_tasks: number;
+  user_tasks: number;
+  manual_tasks: number;
+  automation_rate_pct: number;
+  digital_maturity_score: number;
+  maturity_tier: string;
+  is_stp: boolean;
+  is_rpa_candidate: boolean;
+  handoff_bottlenecks_count: number;
+  supporting_apps_count: number;
+  steps: ProcessTaskStepItem[];
+}
+
+export interface ProcessAutomationReport {
+  model_id: string;
+  summary: {
+    global_automation_rate: number;
+    global_digital_maturity: number;
+    total_tasks_evaluated: number;
+    stp_processes_count: number;
+    rpa_ai_candidates_count: number;
+    manual_dominant_processes_count: number;
+    task_distribution: {
+      automated: number;
+      ai_assisted: number;
+      user_tasks: number;
+      manual: number;
+    };
+  };
+  top_rpa_candidates: ProcessAutomationItem[];
+  processes: ProcessAutomationItem[];
+}
+
 export interface PlateauRoadmap {
   has_explicit_plateaus: boolean;
   plateaus?: Array<{
@@ -1079,7 +1220,7 @@ export interface DiagramViewDetail {
 }
 
 // RBAC Types
-export type RoleType = 'admin' | 'architect' | 'analyst' | 'executive' | 'viewer';
+export type RoleType = 'admin' | 'architect' | 'lead_architect' | 'c_level' | 'app_owner' | 'process_owner' | 'business_user' | 'viewer';
 
 export interface UserRoleAssignmentItem {
   id: string;
@@ -1097,6 +1238,15 @@ export interface UserItem {
   is_active: boolean;
   created_at?: string;
   role_assignments: UserRoleAssignmentItem[];
+}
+
+export interface UserSummaryItem {
+  id: string;
+  username: string;
+  email: string;
+  full_name: string;
+  auth_provider?: string;
+  roles?: string[];
 }
 
 export interface RolePermission {
@@ -1743,6 +1893,102 @@ export interface AuditSummary {
   recent_24h_logins: number;
   top_actions: Array<{ action: string; count: number }>;
 }
+
+export interface SurveyCampaignItem {
+  id: string;
+  model_id: string;
+  title: string;
+  description?: string;
+  status: 'draft' | 'active' | 'closed';
+  mode: 'approval_required' | 'direct_apply';
+  target_owner_type?: 'all' | 'app_owner' | 'process_owner' | string;
+  deadline?: string | null;
+  sections: string[];
+  created_at: string;
+  created_by?: string | null;
+  metrics: {
+    total: number;
+    pending: number;
+    submitted: number;
+    approved: number;
+    rejected: number;
+    completion_rate: number;
+  };
+}
+
+export interface SurveyScopeDetail {
+  scope_id: string;
+  campaign_id: string;
+  campaign_title: string;
+  campaign_mode: 'approval_required' | 'direct_apply';
+  deadline?: string | null;
+  sections: string[];
+  custom_questions?: Array<{ id: string; label: string; type: string }>;
+  element_id: string;
+  element_type?: string;
+  element_category?: 'application' | 'process' | string;
+  application_name: string;
+  status: 'pending' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
+  review_feedback?: string | null;
+  response: {
+    initial_values: Record<string, any>;
+    answers: Record<string, any>;
+    diff_summary: Record<string, { old: any; new: any }>;
+    notes?: string;
+  };
+}
+
+export interface UserSurveyTask {
+  scope_id: string;
+  campaign_id: string;
+  campaign_title: string;
+  campaign_mode: 'approval_required' | 'direct_apply';
+  deadline?: string | null;
+  element_id: string;
+  application_name: string;
+  status: 'pending' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
+  submitted_at?: string | null;
+  reviewed_at?: string | null;
+  review_feedback?: string | null;
+  sections: string[];
+}
+
+export interface UserOwnedApplication {
+  id: string;
+  name: string;
+  model_id: string;
+  ownership_type?: string;
+  business_fit: number;
+  technical_fit: number;
+  time_quadrant: string;
+  lifecycle_status: string;
+  hosting_type: string;
+  annual_cost: number | null;
+  sla_level: string;
+  vendor?: string | null;
+  completeness: number;
+  pending_surveys_count: number;
+}
+
+export interface UserOwnedProcess {
+  id: string;
+  name: string;
+  model_id: string;
+  type: string;
+  layer?: string;
+  ownership_type?: string;
+  documentation?: string;
+  process_criticality: string;
+  bpmn_automation_level: string;
+  bpmn_cycle_time_minutes: number;
+  bpmn_execution_volume_month: number;
+  bpmn_error_rework_rate_pct?: number;
+  sla_target?: string;
+  regulatory_compliance?: string;
+  completeness: number;
+  pending_surveys_count: number;
+}
+
 
 
 

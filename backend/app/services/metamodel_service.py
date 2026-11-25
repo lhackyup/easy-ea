@@ -2654,10 +2654,128 @@ def seed_default_attribute_packages(db: Session):
             existing_v.target_types = v_data.get("target_types", [])
             existing_v.config = v_data["config"]
 
+    # 6e. Business Process & BPMN 2.0 Automation System Package (pkg-bpmn)
+    bpmn_pkg = db.query(AttributePackage).filter(AttributePackage.id == "pkg-bpmn").first()
+    if not bpmn_pkg:
+        bpmn_pkg = AttributePackage(
+            id="pkg-bpmn",
+            code="bpmn",
+            name="Business Process & BPMN 2.0 Automation",
+            version="1.0.0",
+            author="EasyEA Process & Automation Lab",
+            license="Open Standard (BPMN 2.0 / ArchiMate 3.x Specialization)",
+            description="BPMN 2.0 execution and automation package extending ArchiMate Business Processes with specialized task stereotypes (UserTask, ServiceTask, ScriptTask, ManualTask, BusinessRuleTask, AIAgentTask) and operational maturity attributes.",
+            icon_color="cyan",
+            package_type="attribute_only",
+            standard_version="BPMN 2.0 / ArchiMate 3.2",
+            is_default_active=True,
+            is_system=True
+        )
+        db.add(bpmn_pkg)
+        db.flush()
+    else:
+        bpmn_pkg.code = "bpmn"
+        bpmn_pkg.name = "Business Process & BPMN 2.0 Automation"
+        bpmn_pkg.version = "1.0.0"
+        bpmn_pkg.author = "EasyEA Process & Automation Lab"
+        bpmn_pkg.license = "Open Standard (BPMN 2.0 / ArchiMate 3.x Specialization)"
+        bpmn_pkg.description = "BPMN 2.0 execution and automation package extending ArchiMate Business Processes with specialized task stereotypes (UserTask, ServiceTask, ScriptTask, ManualTask, BusinessRuleTask, AIAgentTask) and operational maturity attributes."
+        bpmn_pkg.icon_color = "cyan"
+        bpmn_pkg.package_type = "attribute_only"
+        bpmn_pkg.standard_version = "BPMN 2.0 / ArchiMate 3.2"
+        bpmn_pkg.is_default_active = True
+        bpmn_pkg.is_system = True
+
+    bpmn_items = [
+        {
+            "id": "item-bpmn-automation-level",
+            "name": "bpmn_automation_level",
+            "label": "Automation Level",
+            "description": "Execution automation maturity: Full Automated, Semi-Automated, Manual, or AI-Assisted.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "select",
+            "options": ["Full Automated", "Semi-Automated", "Manual", "AI-Assisted"],
+            "default_value": "Semi-Automated",
+            "is_required": False,
+            "section": "Process Automation & Execution",
+            "sort_order": 1
+        },
+        {
+            "id": "item-bpmn-cycle-time",
+            "name": "bpmn_cycle_time_minutes",
+            "label": "Avg Cycle Time (Minutes)",
+            "description": "Average duration in minutes to complete this process step.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "number",
+            "options": [],
+            "default_value": "15.0",
+            "is_required": False,
+            "section": "Process Automation & Execution",
+            "sort_order": 2
+        },
+        {
+            "id": "item-bpmn-monthly-volume",
+            "name": "bpmn_execution_volume_month",
+            "label": "Monthly Execution Volume",
+            "description": "Estimated or measured number of transactions/executions per month.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "number",
+            "options": [],
+            "default_value": "1000",
+            "is_required": False,
+            "section": "Process Automation & Execution",
+            "sort_order": 3
+        },
+        {
+            "id": "item-bpmn-rework-rate",
+            "name": "bpmn_error_rework_rate_pct",
+            "label": "Error / Rework Rate (%)",
+            "description": "Percentage of executions requiring human correction, rollback, or rework.",
+            "element_type": "BusinessProcess",
+            "layer": "Business",
+            "data_type": "number",
+            "options": [],
+            "default_value": "2.0",
+            "is_required": False,
+            "section": "Process Automation & Execution",
+            "sort_order": 4
+        }
+    ]
+
+    for item in bpmn_items:
+        existing_item = db.query(AttributePackageItem).filter(AttributePackageItem.id == item["id"]).first()
+        if not existing_item:
+            db.add(AttributePackageItem(
+                id=item["id"],
+                package_id="pkg-bpmn",
+                name=item["name"],
+                label=item["label"],
+                description=item["description"],
+                element_type=item["element_type"],
+                layer=item["layer"],
+                data_type=item["data_type"],
+                options=item["options"],
+                default_value=item["default_value"],
+                is_required=item["is_required"],
+                section=item["section"],
+                sort_order=item["sort_order"]
+            ))
+        else:
+            existing_item.label = item["label"]
+            existing_item.description = item["description"]
+            existing_item.data_type = item["data_type"]
+            existing_item.options = item["options"]
+            existing_item.default_value = item["default_value"]
+            existing_item.section = item["section"]
+            existing_item.sort_order = item["sort_order"]
+
     # 7. Delete any orphaned package items and packages not belonging to registered packages or frameworks
     legacy_pkgs = db.query(AttributePackage).filter(
         AttributePackage.package_type != "framework",
-        ~AttributePackage.id.in_(["pkg-apm", "pkg-adr", "pkg-resilience", "pkg-gap-analysis"])
+        ~AttributePackage.id.in_(["pkg-apm", "pkg-adr", "pkg-resilience", "pkg-gap-analysis", "pkg-bpmn"])
     ).all()
     legacy_ids = [p.id for p in legacy_pkgs if not p.id.startswith("pkg-user-")]
     if legacy_ids:
@@ -3272,6 +3390,85 @@ def seed_default_stereotypes(db: Session):
             "icon_color": "indigo",
             "is_system": True,
             "package_id": "pkg-gap-analysis",
+            "links": []
+        },
+        # BPMN 2.0 Task Stereotypes (Specialization of ArchiMate BusinessProcess)
+        {
+            "id": "stereo-bpmn-user-task",
+            "base_type": "BusinessProcess",
+            "name": "User Task",
+            "label": "«UserTask»",
+            "description": "Task semi-automatico eseguito da un operatore umano con supporto di un applicativo software.",
+            "icon_color": "blue",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "users",
+            "is_system": True,
+            "package_id": "pkg-bpmn",
+            "links": []
+        },
+        {
+            "id": "stereo-bpmn-service-task",
+            "base_type": "BusinessProcess",
+            "name": "Service Task",
+            "label": "«ServiceTask»",
+            "description": "Task 100% automatizzato eseguito direttamente da un servizio applicativo, API, microservizio o job backend.",
+            "icon_color": "indigo",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "cpu",
+            "is_system": True,
+            "package_id": "pkg-bpmn",
+            "links": []
+        },
+        {
+            "id": "stereo-bpmn-script-task",
+            "base_type": "BusinessProcess",
+            "name": "Script Task",
+            "label": "«ScriptTask»",
+            "description": "Task automatizzato eseguito direttamente dal motore di processo o workflow tramite script o trasformazione dati.",
+            "icon_color": "cyan",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "terminal",
+            "is_system": True,
+            "package_id": "pkg-bpmn",
+            "links": []
+        },
+        {
+            "id": "stereo-bpmn-manual-task",
+            "base_type": "BusinessProcess",
+            "name": "Manual Task",
+            "label": "«ManualTask»",
+            "description": "Task interamente fisico, cartaceo o manuale svolto senza alcun ausilio software o applicativo.",
+            "icon_color": "amber",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "hand",
+            "is_system": True,
+            "package_id": "pkg-bpmn",
+            "links": []
+        },
+        {
+            "id": "stereo-bpmn-rule-task",
+            "base_type": "BusinessProcess",
+            "name": "Business Rule Task",
+            "label": "«BusinessRuleTask»",
+            "description": "Decisione o calcolo decisionale automatizzato eseguito tramite Decision Table, DMN o Rule Engine.",
+            "icon_color": "purple",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "sliders",
+            "is_system": True,
+            "package_id": "pkg-bpmn",
+            "links": []
+        },
+        {
+            "id": "stereo-bpmn-ai-task",
+            "base_type": "BusinessProcess",
+            "name": "AI Agent Task",
+            "label": "«AIAgentTask»",
+            "description": "Task cognitivo assistito o autonomo affidato a un agente AI generativo, LLM o modello predittivo.",
+            "icon_color": "emerald",
+            "stencil_shape": "modern_card",
+            "stencil_icon": "zap",
+            "is_system": True,
+            "package_id": "pkg-bpmn",
             "links": []
         }
     ]

@@ -54,6 +54,7 @@ class ArchimateElement(Base):
     stereotype = relationship("ElementStereotype", back_populates="elements")
     package = relationship("AttributePackage", back_populates="reference_elements")
     adr_links = relationship("ADRLinkedElement", back_populates="element", cascade="all, delete-orphan")
+    ownerships = relationship("ApplicationOwnership", back_populates="element", cascade="all, delete-orphan")
 
 
 class ArchimateRelationship(Base):
@@ -262,6 +263,7 @@ class User(Base):
     role_assignments = relationship("UserRoleAssignment", back_populates="user", cascade="all, delete-orphan")
     api_keys = relationship("ApiKey", back_populates="user", cascade="all, delete-orphan")
     revoked_tokens = relationship("RevokedToken", back_populates="user", cascade="all, delete-orphan")
+    ownerships = relationship("ApplicationOwnership", back_populates="user", cascade="all, delete-orphan")
 
 
 class RevokedToken(Base):
@@ -532,6 +534,11 @@ class ADRLinkedElement(Base):
 
     adr = relationship("ArchitectureDecisionRecord", back_populates="linked_elements")
     element = relationship("ArchimateElement", back_populates="adr_links")
+
+
+# Import and export survey models for Base.metadata registration and package-wide exports
+from app.models.surveys import ApplicationOwnership, SurveyCampaign, SurveyScope, SurveyResponse
+
 
 
 

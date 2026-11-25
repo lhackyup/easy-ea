@@ -158,8 +158,10 @@ REPORT_I18N = {
 }
 
 
-def _format_eur(val: float, lang: str = "it") -> str:
+def _format_eur(val: Optional[float], lang: str = "it") -> str:
     """Formats numeric euro values consistently."""
+    if val is None:
+        return "Riservato C-Level" if lang == "it" else "C-Level Confidential"
     if val <= 0:
         return "€ 0" if lang == "it" else "€0"
     if lang == "it":

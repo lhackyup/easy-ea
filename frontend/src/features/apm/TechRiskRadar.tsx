@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { TechRiskAnalysisData, AppTechRiskInfo, TechnologyItemInfo, DoraComplianceAlert } from '../../types';
 import { api } from '../../lib/api';
 import {
@@ -24,6 +24,7 @@ import {
   Check
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface TechRiskRadarProps {
   modelId: string;
@@ -31,6 +32,10 @@ interface TechRiskRadarProps {
 
 export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
   const { t, language, interpolate } = useLanguage();
+  const { user } = useAuth();
+  const userRoles = useMemo(() => new Set((user?.assignments || []).map((a) => a.role)), [user]);
+  const canViewFinancials = Boolean(userRoles.has('admin') || userRoles.has('c_level') || !user);
+
   const [data, setData] = useState<TechRiskAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,12 +93,14 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
     }
   };
 
-  const formatEUR = (val: number) =>
-    new Intl.NumberFormat(language === 'en' ? 'en-US' : 'it-IT', {
+  const formatEUR = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return `🔒 ${t.apm.confidentialCLevel}`;
+    return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'it-IT', {
       style: 'currency',
       currency: 'EUR',
       maximumFractionDigits: 0
     }).format(val);
+  };
 
   if (loading) {
     return (
@@ -266,7 +273,13 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                     </div>
                     <div className="mt-2 pt-2 border-t border-rose-100 flex items-center justify-between text-[11px] text-slate-500">
                       <span>{t.apm.techRiskOwner} {alert.business_owner}</span>
-                      <span className="font-semibold text-slate-700">{t.apm.techRiskTco} {formatEUR(alert.annual_cost)}</span>
+                      <span className="font-semibold text-slate-700">
+                        {alert.annual_cost !== null && alert.annual_cost !== undefined ? (
+                          `${t.apm.techRiskTco} ${formatEUR(alert.annual_cost)}`
+                        ) : (
+                          <span className="text-slate-400 font-normal">🔒 {t.apm.confidentialCLevel}</span>
+                        )}
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -655,7 +668,11 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                       </span>
                     </td>
                     <td className="py-3 px-4 font-bold text-slate-900">
-                      {formatEUR(tech.total_impacted_annual_cost || 0)}
+                      {tech.total_impacted_annual_cost !== null && tech.total_impacted_annual_cost !== undefined ? (
+                        formatEUR(tech.total_impacted_annual_cost)
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400">🔒 {t.apm.confidentialCLevel}</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <button
@@ -793,7 +810,11 @@ export const TechRiskRadar: React.FC<TechRiskRadarProps> = ({ modelId }) => {
                       {app.next_eol_date || 'N/A'}
                     </td>
                     <td className="py-3.5 px-4 font-bold text-slate-900">
-                      {formatEUR(app.annual_cost)}
+                      {app.annual_cost !== null && app.annual_cost !== undefined ? (
+                        formatEUR(app.annual_cost)
+                      ) : (
+                        <span className="text-xs font-semibold text-slate-400">🔒 {t.apm.confidentialCLevel}</span>
+                      )}
                     </td>
                   </tr>
                 ))}

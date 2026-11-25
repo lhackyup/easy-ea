@@ -10,6 +10,8 @@ import {
   BusinessProcessItem,
   ImpactSimulationResult,
   ArchitecturalRisksReport,
+  ProcessTCOReport,
+  ProcessAutomationReport,
   PlateauRoadmap,
   DerivedRelationshipItem,
   ArchimateElementItem,
@@ -31,6 +33,13 @@ import {
   GapAnalysisResult,
   GapMetrics,
   ApiKeyItem,
+  UserSummaryItem,
+  SurveyCampaignItem,
+  SurveyScopeDetail,
+  UserSurveyTask,
+  UserOwnedApplication,
+  UserOwnedProcess,
+  OwnershipMatrixResponse,
   ApiKeyCreatedResponse,
   MfaStatus,
   MfaSetupResponse,
@@ -43,7 +52,14 @@ const API_BASE = '/api';
 
 export const getAuthHeaders = (): Record<string, string> => {
   const token = sessionStorage.getItem('easyea_auth_token') || localStorage.getItem('easyea_auth_token');
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  const lang = localStorage.getItem('easyea_lang') || 'it';
+  const headers: Record<string, string> = {
+    'Accept-Language': lang,
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
 };
 
 const withAuthToken = (url: string): string => {
@@ -271,8 +287,10 @@ export const api = {
   },
 
   // Processes & Lineage
-  getProcessCatalog: async (modelId: string): Promise<{ total_processes: number; processes: BusinessProcessItem[] }> => {
-    const res = await fetch(`${API_BASE}/processes/catalog/${modelId}`, { headers: { ...getAuthHeaders() } });
+  getProcessCatalog: async (modelId: string, lang?: string): Promise<{ total_processes: number; processes: BusinessProcessItem[] }> => {
+    const url = new URL(`${window.location.origin}${API_BASE}/processes/catalog/${modelId}`);
+    if (lang) url.searchParams.append('lang', lang);
+    const res = await fetch(url.toString(), { headers: { ...getAuthHeaders() } });
     if (!res.ok) throw new Error('Failed to fetch process catalog');
     return res.json();
   },
@@ -291,9 +309,27 @@ export const api = {
     return res.json();
   },
 
-  getArchitecturalRisks: async (modelId: string): Promise<ArchitecturalRisksReport> => {
-    const res = await fetch(`${API_BASE}/processes/risks/${modelId}`, { headers: { ...getAuthHeaders() } });
+  getArchitecturalRisks: async (modelId: string, lang?: string): Promise<ArchitecturalRisksReport> => {
+    const url = new URL(`${window.location.origin}${API_BASE}/processes/risks/${modelId}`);
+    if (lang) url.searchParams.append('lang', lang);
+    const res = await fetch(url.toString(), { headers: { ...getAuthHeaders() } });
     if (!res.ok) throw new Error('Failed to fetch architectural risks');
+    return res.json();
+  },
+
+  getProcessTCO: async (modelId: string, lang?: string): Promise<ProcessTCOReport> => {
+    const url = new URL(`${window.location.origin}${API_BASE}/processes/tco/${modelId}`);
+    if (lang) url.searchParams.append('lang', lang);
+    const res = await fetch(url.toString(), { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch process TCO analysis');
+    return res.json();
+  },
+
+  getProcessAutomation: async (modelId: string, lang?: string): Promise<ProcessAutomationReport> => {
+    const url = new URL(`${window.location.origin}${API_BASE}/processes/automation/${modelId}`);
+    if (lang) url.searchParams.append('lang', lang);
+    const res = await fetch(url.toString(), { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to fetch process automation analysis');
     return res.json();
   },
 
@@ -1156,6 +1192,15 @@ export const api = {
     return res.json();
   },
 
+  searchUsers: async (q?: string, limit: number = 50): Promise<UserSummaryItem[]> => {
+    const params = new URLSearchParams();
+    if (q) params.append('q', q);
+    params.append('limit', String(limit));
+    const res = await fetch(`${API_BASE}/rbac/users/search?${params.toString()}`, { headers: { ...getAuthHeaders() } });
+    if (!res.ok) throw new Error('Failed to search users');
+    return res.json();
+  },
+
   createUser: async (data: { email: string; full_name: string; username?: string; password?: string }): Promise<any> => {
     const res = await fetch(`${API_BASE}/rbac/users`, {
       method: 'POST',
@@ -2006,6 +2051,157 @@ export const api = {
       const err = await res.json().catch(() => ({ detail: 'Impossibile recuperare il riepilogo audit' }));
       throw new Error(err.detail || 'Errore durante il recupero delle metriche audit');
     }
+    return res.json();
+  },
+
+  // Surveys & Crowdsourcing
+  listSurveyCampaigns: async (modelId: string): Promise<SurveyCampaignItem[]> => {
+    const res = await fetch(`${API_BASE}/surveys/campaigns/${modelId}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch survey campaigns');
+    return res.json();
+  },
+
+  createSurveyCampaign: async (data: {
+    model_id: string;
+    title: string;
+    description?: string;
+    mode?: string;
+    target_owner_type?: string;
+    deadline?: string;
+    sections?: string[];
+    target_element_ids?: string[];
+  }): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/campaigns`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to create campaign' }));
+      throw new Error(err.detail || 'Failed to create campaign');
+    }
+    return res.json();
+  },
+
+  getSurveyCampaignDetail: async (campaignId: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/campaigns/detail/${campaignId}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch campaign detail');
+    return res.json();
+  },
+
+  getMySurveys: async (modelId?: string): Promise<UserSurveyTask[]> => {
+    const url = modelId ? `${API_BASE}/surveys/my-surveys?model_id=${encodeURIComponent(modelId)}` : `${API_BASE}/surveys/my-surveys`;
+    const res = await fetch(url, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch assigned surveys');
+    return res.json();
+  },
+
+  getMyApplications: async (modelId?: string): Promise<UserOwnedApplication[]> => {
+    const url = modelId ? `${API_BASE}/surveys/my-applications?model_id=${encodeURIComponent(modelId)}` : `${API_BASE}/surveys/my-applications`;
+    const res = await fetch(url, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch owned applications');
+    return res.json();
+  },
+
+  getMyProcesses: async (modelId?: string): Promise<UserOwnedProcess[]> => {
+    const url = modelId ? `${API_BASE}/surveys/my-processes?model_id=${encodeURIComponent(modelId)}` : `${API_BASE}/surveys/my-processes`;
+    const res = await fetch(url, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch owned processes');
+    return res.json();
+  },
+
+  getSurveyScope: async (scopeId: string): Promise<SurveyScopeDetail> => {
+    const res = await fetch(`${API_BASE}/surveys/scope/${scopeId}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch survey scope details');
+    return res.json();
+  },
+
+  submitSurveyScope: async (scopeId: string, answers: Record<string, any>, notes?: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/scope/${scopeId}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ answers, notes }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to submit survey' }));
+      throw new Error(err.detail || 'Failed to submit survey');
+    }
+    return res.json();
+  },
+
+  approveSurveyScope: async (scopeId: string, feedback?: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/scope/${scopeId}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ feedback }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to approve survey' }));
+      throw new Error(err.detail || 'Failed to approve survey');
+    }
+    return res.json();
+  },
+
+  rejectSurveyScope: async (scopeId: string, feedback?: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/scope/${scopeId}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify({ feedback }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to reject survey' }));
+      throw new Error(err.detail || 'Failed to reject survey');
+    }
+    return res.json();
+  },
+
+  getOwnershipMatrix: async (modelId: string): Promise<OwnershipMatrixResponse> => {
+    const res = await fetch(`${API_BASE}/surveys/ownership-matrix/${encodeURIComponent(modelId)}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch ownership matrix');
+    return res.json();
+  },
+
+  getApplicationOwners: async (elementId: string): Promise<any[]> => {
+    const res = await fetch(`${API_BASE}/surveys/ownerships/${elementId}`, {
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to fetch application owners');
+    return res.json();
+  },
+
+  assignApplicationOwner: async (elementId: string, data: { user_id: string; ownership_type?: string; notes?: string }): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/ownerships/${elementId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: 'Failed to assign owner' }));
+      throw new Error(err.detail || 'Failed to assign owner');
+    }
+    return res.json();
+  },
+
+  removeApplicationOwner: async (elementId: string, userId: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/surveys/ownerships/${elementId}/${userId}`, {
+      method: 'DELETE',
+      headers: { ...getAuthHeaders() }
+    });
+    if (!res.ok) throw new Error('Failed to remove owner');
     return res.json();
   },
 };

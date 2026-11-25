@@ -95,10 +95,21 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-emerald-700">
-            {formatEUR(data.potential_savings_opportunity)}
-          </div>
-          <p className="text-[11px] text-slate-500 mt-1">{t.overlap.savingsDetail}</p>
+          {data.potential_savings_opportunity !== null && data.potential_savings_opportunity !== undefined ? (
+            <div className="mt-3 text-2xl font-black text-emerald-700">
+              {formatEUR(data.potential_savings_opportunity)}
+            </div>
+          ) : (
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
+              <span>🔒</span>
+              <span>{t.overlap.confidentialCLevel}</span>
+            </div>
+          )}
+          <p className="text-[11px] text-slate-500 mt-1">
+            {data.potential_savings_opportunity !== null && data.potential_savings_opportunity !== undefined
+              ? t.overlap.savingsDetail
+              : t.overlap.savingsRestricted}
+          </p>
         </div>
 
         {/* Rationalization Clusters */}
@@ -143,7 +154,9 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
                   {cluster.applications.map((app) => (
                     <div key={app.app_id} className="text-[11px] bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-slate-700 shadow-sm flex items-center space-x-1">
                       <span className="font-bold text-slate-900">{app.app_name}</span>
-                      <span className="text-slate-500 font-mono">({formatEUR(app.annual_cost)})</span>
+                      {app.annual_cost !== null && app.annual_cost !== undefined && (
+                        <span className="text-slate-500 font-mono">({formatEUR(app.annual_cost)})</span>
+                      )}
                       <span className={`ml-1 text-[9px] px-1 rounded font-bold ${
                         app.time_quadrant === 'Invest' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                       }`}>
@@ -153,7 +166,7 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
                   ))}
                 </div>
 
-                {cluster.potential_savings > 0 && (
+                {cluster.potential_savings !== null && cluster.potential_savings !== undefined && cluster.potential_savings > 0 && (
                   <div className="text-xs font-bold text-emerald-700 flex items-center space-x-1">
                     <ArrowRight className="w-3.5 h-3.5" />
                     <span>{t.overlap.savingsConsolidating} <strong>{formatEUR(cluster.potential_savings)}{t.overlap.perYear}</strong></span>
@@ -211,9 +224,11 @@ export const OverlapMatrix: React.FC<OverlapMatrixProps> = ({ modelId }) => {
                     <div className="truncate max-w-[120px] font-bold text-slate-900" title={app.name}>
                       {app.name}
                     </div>
-                    <div className="text-[10px] font-mono text-slate-500 font-normal">
-                      {formatEUR(app.annual_cost)}
-                    </div>
+                    {app.annual_cost !== null && app.annual_cost !== undefined && (
+                      <div className="text-[10px] font-mono text-slate-500 font-normal">
+                        {formatEUR(app.annual_cost)}
+                      </div>
+                    )}
                   </th>
                 ))}
               </tr>

@@ -942,7 +942,9 @@ def download_drawio_palette(
 
 
 @router.get("/drawio/config")
-def get_drawio_config():
+def get_drawio_config(
+    current_user: User = Depends(get_current_user)
+):
     """Returns the configured Draw.io Web URL (local by default or cloud)."""
     return {
         "local_url": settings.DRAWIO_WEB_URL,

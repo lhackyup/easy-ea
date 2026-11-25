@@ -23,6 +23,7 @@ import {
   Zap
 } from 'lucide-react';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 
 interface LifecycleRoadmapDashboardProps {
   modelId: string;
@@ -37,6 +38,9 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
 }) => {
   const { t, language, interpolate } = useLanguage();
   const isEn = language === 'en';
+  const { user } = useAuth();
+  const userRoles = useMemo(() => new Set((user?.assignments || []).map((a) => a.role)), [user]);
+  const canViewFinancials = Boolean(userRoles.has('admin') || userRoles.has('c_level') || !user);
 
   const [data, setData] = useState<LifecycleAnalysisData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -63,10 +67,13 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
     loadData();
   }, [modelId]);
 
-  const formatEUR = (val: number) =>
-    new Intl.NumberFormat(isEn ? 'en-US' : 'it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+  const formatEUR = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return `🔒 ${t.apm.confidentialCLevel}`;
+    return new Intl.NumberFormat(isEn ? 'en-US' : 'it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+  };
 
-  const formatCompactEUR = (val: number) => {
+  const formatCompactEUR = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return `🔒 ${t.apm.confidentialCLevel}`;
     if (val >= 1000000) return `€${(val / 1000000).toFixed(1)}M`;
     if (val >= 1000) return `€${(val / 1000).toFixed(0)}k`;
     return `€${val}`;
@@ -149,7 +156,7 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
       isEn ? 'TIME Quadrant' : 'Quadrante TIME',
       isEn ? 'Go-Live Date' : 'Data Go-Live',
       isEn ? 'Planned Retirement Date' : 'Data Dismissione Prevista',
-      isEn ? 'Annual TCO (€)' : 'TCO Annuo (€)',
+      ...(canViewFinancials ? [isEn ? 'Annual TCO (€)' : 'TCO Annuo (€)'] : []),
       isEn ? 'Shutdown Readiness' : 'Prontezza Spegnimento',
       isEn ? 'Active Dependency Count' : 'Conteggio Dipendenze Attive',
       isEn ? 'Business Owner' : 'Business Owner',
@@ -165,7 +172,7 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
       a.time_quadrant,
       a.live_date || '',
       a.retirement_date || (isEn ? 'Indefinite' : 'Indeterminato'),
-      a.annual_cost || 0,
+      ...(canViewFinancials ? [a.annual_cost || 0] : []),
       a.is_ready_for_decommission ? (isEn ? 'Ready for Shutdown' : 'Pronta allo Spegnimento') : (isEn ? 'Blocked' : 'Bloccata'),
       a.active_dependencies_count || 0,
       `"${(a.business_owner || '').replace(/"/g, '""')}"`,
@@ -386,35 +393,55 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
           <div className="bg-sky-50 border border-sky-200 rounded-xl p-2.5 text-center">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-sky-700">Plan</span>
             <div className="text-lg font-black text-sky-950 mt-0.5">{summary.counts_by_status.Plan || 0}</div>
-            <span className="text-[10px] text-sky-600 font-mono">{formatCompactEUR(summary.costs_by_status.Plan || 0)}</span>
+            <span className="text-[10px] text-sky-600 font-mono">
+              {summary.costs_by_status.Plan !== null && summary.costs_by_status.Plan !== undefined
+                ? formatCompactEUR(summary.costs_by_status.Plan)
+                : `🔒 ${t.apm.confidentialCLevel}`}
+            </span>
           </div>
 
           {/* Phase In */}
           <div className="bg-purple-50 border border-purple-200 rounded-xl p-2.5 text-center">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-purple-700">Phase In</span>
             <div className="text-lg font-black text-purple-950 mt-0.5">{summary.counts_by_status['Phase In'] || 0}</div>
-            <span className="text-[10px] text-purple-600 font-mono">{formatCompactEUR(summary.costs_by_status['Phase In'] || 0)}</span>
+            <span className="text-[10px] text-purple-600 font-mono">
+              {summary.costs_by_status['Phase In'] !== null && summary.costs_by_status['Phase In'] !== undefined
+                ? formatCompactEUR(summary.costs_by_status['Phase In'])
+                : `🔒 ${t.apm.confidentialCLevel}`}
+            </span>
           </div>
 
           {/* Live */}
           <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 text-center">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-emerald-700">Live</span>
             <div className="text-lg font-black text-emerald-950 mt-0.5">{summary.counts_by_status.Live || 0}</div>
-            <span className="text-[10px] text-emerald-600 font-mono">{formatCompactEUR(summary.costs_by_status.Live || 0)}</span>
+            <span className="text-[10px] text-emerald-600 font-mono">
+              {summary.costs_by_status.Live !== null && summary.costs_by_status.Live !== undefined
+                ? formatCompactEUR(summary.costs_by_status.Live)
+                : `🔒 ${t.apm.confidentialCLevel}`}
+            </span>
           </div>
 
           {/* Phase Out */}
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-2.5 text-center">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-amber-800">Phase Out</span>
             <div className="text-lg font-black text-amber-950 mt-0.5">{summary.counts_by_status['Phase Out'] || 0}</div>
-            <span className="text-[10px] text-amber-700 font-mono">{formatCompactEUR(summary.costs_by_status['Phase Out'] || 0)}</span>
+            <span className="text-[10px] text-amber-700 font-mono">
+              {summary.costs_by_status['Phase Out'] !== null && summary.costs_by_status['Phase Out'] !== undefined
+                ? formatCompactEUR(summary.costs_by_status['Phase Out'])
+                : `🔒 ${t.apm.confidentialCLevel}`}
+            </span>
           </div>
 
           {/* Retired */}
           <div className="bg-slate-100 border border-slate-300 rounded-xl p-2.5 text-center">
             <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-700">Retired</span>
             <div className="text-lg font-black text-slate-900 mt-0.5">{summary.counts_by_status.Retired || 0}</div>
-            <span className="text-[10px] text-slate-500 font-mono">{formatCompactEUR(summary.costs_by_status.Retired || 0)}</span>
+            <span className="text-[10px] text-slate-500 font-mono">
+              {summary.costs_by_status.Retired !== null && summary.costs_by_status.Retired !== undefined
+                ? formatCompactEUR(summary.costs_by_status.Retired)
+                : `🔒 ${t.apm.confidentialCLevel}`}
+            </span>
           </div>
         </div>
       </div>
@@ -548,7 +575,7 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
                           {app.lifecycle_status}
                         </span>
                         <span className="text-[10px] text-slate-500 font-mono font-medium">
-                          {formatCompactEUR(app.annual_cost || 0)}
+                          {formatCompactEUR(app.annual_cost)}
                         </span>
                         {app.is_sunset && (
                           <span
@@ -599,7 +626,7 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
                           left: `${leftPct}%`,
                           width: `${widthPct}%`
                         }}
-                        title={`${app.name} (${app.lifecycle_status})\nGo-Live: ${app.live_date || 'N/A'}\nSunset: ${app.retirement_date || (isEn ? 'Indefinite' : 'Indeterminato')}\nTCO: ${formatEUR(app.annual_cost || 0)}`}
+                        title={`${app.name} (${app.lifecycle_status})\nGo-Live: ${app.live_date || 'N/A'}\nSunset: ${app.retirement_date || (isEn ? 'Indefinite' : 'Indeterminato')}${canViewFinancials && app.annual_cost !== null && app.annual_cost !== undefined ? `\nTCO: ${formatEUR(app.annual_cost)}` : ''}`}
                       >
                         <span className="truncate select-none">
                           {app.short_name || app.name}
@@ -708,7 +735,7 @@ export const LifecycleRoadmapDashboard: React.FC<LifecycleRoadmapDashboardProps>
 
                       {/* Recoverable TCO */}
                       <td className="py-3.5 px-4 font-mono font-bold text-emerald-700">
-                        {formatEUR(app.annual_cost || 0)}
+                        {formatEUR(app.annual_cost)}
                       </td>
 
                       {/* Readiness */}

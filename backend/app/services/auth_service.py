@@ -75,22 +75,13 @@ DEFAULT_ROLE_MAPPINGS = [
         "description": "IdP Group '/easyea-architects' -> Enterprise Architect"
     },
     {
-        "id": "map-analyst-role",
+        "id": "map-clevel-role",
         "claim_type": "realm_role",
-        "claim_name": "analyst",
+        "claim_name": "c_level",
         "expected_value": "",
-        "target_role": "analyst",
+        "target_role": "c_level",
         "target_model_id": None,
-        "description": "IdP Realm Role 'analyst' -> Business Analyst"
-    },
-    {
-        "id": "map-exec-role",
-        "claim_type": "realm_role",
-        "claim_name": "executive",
-        "expected_value": "",
-        "target_role": "executive",
-        "target_model_id": None,
-        "description": "IdP Realm Role 'executive' -> Executive Stakeholder"
+        "description": "IdP Realm Role 'c_level' -> C-Level & Board"
     }
 ]
 
@@ -773,7 +764,7 @@ def is_user_subject_to_mfa_policy(user: User, mfa_policy: str) -> bool:
 
     if policy == "write_roles":
         # 'admin', 'architect', 'analyst' have modification rights
-        write_roles = {"admin", "architect", "analyst"}
+        write_roles = {"admin", "architect"}
         return bool(user_roles.intersection(write_roles))
 
     return False

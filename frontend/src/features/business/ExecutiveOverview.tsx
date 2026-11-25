@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { APMPortfolio, OverlapMatrixData, PlateauRoadmap, ArchitecturalRisksReport, TechRiskAnalysisData } from '../../types';
 import { api } from '../../lib/api';
 import { useLanguage } from '../../context/LanguageContext';
+import { useAuth } from '../../context/AuthContext';
 import {
   TrendingUp,
   DollarSign,
@@ -22,6 +23,10 @@ interface ExecutiveOverviewProps {
 
 export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, onNavigateTab }) => {
   const { t, interpolate } = useLanguage();
+  const { user } = useAuth();
+  const userRoles = new Set((user?.assignments || []).map((a) => a.role));
+  const canViewFinancials = userRoles.has('admin') || userRoles.has('c_level') || !user;
+
   const [apm, setApm] = useState<APMPortfolio | null>(null);
   const [overlap, setOverlap] = useState<OverlapMatrixData | null>(null);
   const [plateaus, setPlateaus] = useState<PlateauRoadmap | null>(null);
@@ -67,8 +72,10 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
 
   if (!apm || !overlap) return null;
 
-  const formatEUR = (val: number) =>
-    new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+  const formatEUR = (val: number | null | undefined) => {
+    if (val === null || val === undefined) return `🔒 ${t.executive.confidentialCLevel}`;
+    return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(val);
+  };
 
   const investPercent = apm.total_applications > 0 ? (apm.time_distribution.Invest / apm.total_applications) * 100 : 0;
   const portfolioHealth = Math.round(Math.max(10, Math.min(100, (investPercent * 0.6) + ((100 - overlap.redundancy_score_percentage) * 0.4))));
@@ -96,8 +103,10 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Cost / TCO */}
         <div
-          onClick={() => onNavigateTab('tco')}
-          className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm cursor-pointer hover:border-indigo-400 hover:shadow-md transition"
+          onClick={() => canViewFinancials && onNavigateTab('tco')}
+          className={`bg-white border border-slate-200 rounded-2xl p-5 shadow-sm transition ${
+            canViewFinancials ? 'cursor-pointer hover:border-indigo-400 hover:shadow-md' : ''
+          }`}
         >
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{t.executive.totalItCost}</span>
@@ -105,10 +114,21 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
               <DollarSign className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-slate-900">{formatEUR(apm.total_annual_cost)}</div>
+          {canViewFinancials && apm.total_annual_cost !== null && apm.total_annual_cost !== undefined ? (
+            <div className="mt-3 text-2xl font-black text-slate-900">{formatEUR(apm.total_annual_cost)}</div>
+          ) : (
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
+              <span>🔒</span>
+              <span>{t.executive.confidentialCLevel}</span>
+            </div>
+          )}
           <p className="text-[11px] text-slate-500 mt-1 flex items-center justify-between">
-            <span>{interpolate(t.executive.annualCostOnApps, { count: apm.total_applications })}</span>
-            <ArrowUpRight className="w-3.5 h-3.5 text-indigo-600" />
+            <span>
+              {canViewFinancials
+                ? interpolate(t.executive.annualCostOnApps, { count: apm.total_applications })
+                : t.executive.confidentialDesc}
+            </span>
+            {canViewFinancials && <ArrowUpRight className="w-3.5 h-3.5 text-indigo-600" />}
           </p>
         </div>
 
@@ -140,7 +160,14 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
               <GitMerge className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-amber-700">{formatEUR(overlap.potential_savings_opportunity)}</div>
+          {canViewFinancials && overlap.potential_savings_opportunity !== null && overlap.potential_savings_opportunity !== undefined ? (
+            <div className="mt-3 text-2xl font-black text-amber-700">{formatEUR(overlap.potential_savings_opportunity)}</div>
+          ) : (
+            <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-600 text-xs font-bold border border-slate-200">
+              <span>🔒</span>
+              <span>{t.executive.confidentialCLevel}</span>
+            </div>
+          )}
           <p className="text-[11px] text-amber-800/80 mt-1 flex items-center gap-1 font-semibold">
             <span>{interpolate(t.executive.fromRedundancyClusters, { count: overlap.redundant_capabilities_count })}</span>
             <ArrowUpRight className="w-3.5 h-3.5" />
@@ -158,9 +185,15 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
               <TrendingUp className="w-5 h-5" />
             </div>
           </div>
-          <div className="mt-3 text-2xl font-black text-blue-700">
-            {formatEUR(apm.time_cost_distribution.Invest)}
-          </div>
+          {canViewFinancials && apm.time_cost_distribution?.Invest !== null && apm.time_cost_distribution?.Invest !== undefined ? (
+            <div className="mt-3 text-2xl font-black text-blue-700">
+              {formatEUR(apm.time_cost_distribution.Invest)}
+            </div>
+          ) : (
+            <div className="mt-3 text-2xl font-black text-blue-700">
+              {apm.time_distribution.Invest} app
+            </div>
+          )}
           <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
             <span>{interpolate(t.executive.keyAppsGrowing, { count: apm.time_distribution.Invest })}</span>
             <ArrowUpRight className="w-3.5 h-3.5 text-indigo-600" />
@@ -261,12 +294,24 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
                   <span>INVEST</span>
                 </span>
-                <span className="text-slate-900">{formatEUR(apm.time_cost_distribution.Invest)} ({Math.round((apm.time_cost_distribution.Invest / (apm.total_annual_cost || 1)) * 100)}%)</span>
+                <span className="text-slate-900">
+                  {canViewFinancials && apm.time_cost_distribution?.Invest !== null && apm.time_cost_distribution?.Invest !== undefined ? (
+                    `${formatEUR(apm.time_cost_distribution.Invest)} (${Math.round((apm.time_cost_distribution.Invest / (apm.total_annual_cost || 1)) * 100)}%)`
+                  ) : (
+                    `${apm.time_distribution.Invest} app (${Math.round((apm.time_distribution.Invest / (apm.total_applications || 1)) * 100)}%)`
+                  )}
+                </span>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-emerald-500 rounded-full"
-                  style={{ width: `${(apm.time_cost_distribution.Invest / (apm.total_annual_cost || 1)) * 100}%` }}
+                  style={{
+                    width: `${
+                      canViewFinancials && apm.time_cost_distribution?.Invest !== null && apm.time_cost_distribution?.Invest !== undefined && apm.total_annual_cost
+                        ? (apm.time_cost_distribution.Invest / apm.total_annual_cost) * 100
+                        : (apm.time_distribution.Invest / (apm.total_applications || 1)) * 100
+                    }%`
+                  }}
                 />
               </div>
             </div>
@@ -278,12 +323,24 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500" />
                   <span>MIGRATE</span>
                 </span>
-                <span className="text-slate-900">{formatEUR(apm.time_cost_distribution.Migrate)} ({Math.round((apm.time_cost_distribution.Migrate / (apm.total_annual_cost || 1)) * 100)}%)</span>
+                <span className="text-slate-900">
+                  {canViewFinancials && apm.time_cost_distribution?.Migrate !== null && apm.time_cost_distribution?.Migrate !== undefined ? (
+                    `${formatEUR(apm.time_cost_distribution.Migrate)} (${Math.round((apm.time_cost_distribution.Migrate / (apm.total_annual_cost || 1)) * 100)}%)`
+                  ) : (
+                    `${apm.time_distribution.Migrate} app (${Math.round((apm.time_distribution.Migrate / (apm.total_applications || 1)) * 100)}%)`
+                  )}
+                </span>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-amber-500 rounded-full"
-                  style={{ width: `${(apm.time_cost_distribution.Migrate / (apm.total_annual_cost || 1)) * 100}%` }}
+                  style={{
+                    width: `${
+                      canViewFinancials && apm.time_cost_distribution?.Migrate !== null && apm.time_cost_distribution?.Migrate !== undefined && apm.total_annual_cost
+                        ? (apm.time_cost_distribution.Migrate / apm.total_annual_cost) * 100
+                        : (apm.time_distribution.Migrate / (apm.total_applications || 1)) * 100
+                    }%`
+                  }}
                 />
               </div>
             </div>
@@ -295,12 +352,24 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
                   <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
                   <span>TOLERATE</span>
                 </span>
-                <span className="text-slate-900">{formatEUR(apm.time_cost_distribution.Tolerate)} ({Math.round((apm.time_cost_distribution.Tolerate / (apm.total_annual_cost || 1)) * 100)}%)</span>
+                <span className="text-slate-900">
+                  {canViewFinancials && apm.time_cost_distribution?.Tolerate !== null && apm.time_cost_distribution?.Tolerate !== undefined ? (
+                    `${formatEUR(apm.time_cost_distribution.Tolerate)} (${Math.round((apm.time_cost_distribution.Tolerate / (apm.total_annual_cost || 1)) * 100)}%)`
+                  ) : (
+                    `${apm.time_distribution.Tolerate} app (${Math.round((apm.time_distribution.Tolerate / (apm.total_applications || 1)) * 100)}%)`
+                  )}
+                </span>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${(apm.time_cost_distribution.Tolerate / (apm.total_annual_cost || 1)) * 100}%` }}
+                  style={{
+                    width: `${
+                      canViewFinancials && apm.time_cost_distribution?.Tolerate !== null && apm.time_cost_distribution?.Tolerate !== undefined && apm.total_annual_cost
+                        ? (apm.time_cost_distribution.Tolerate / apm.total_annual_cost) * 100
+                        : (apm.time_distribution.Tolerate / (apm.total_applications || 1)) * 100
+                    }%`
+                  }}
                 />
               </div>
             </div>
@@ -312,12 +381,24 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
                   <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
                   <span>ELIMINATE</span>
                 </span>
-                <span className="text-slate-900">{formatEUR(apm.time_cost_distribution.Eliminate)} ({Math.round((apm.time_cost_distribution.Eliminate / (apm.total_annual_cost || 1)) * 100)}%)</span>
+                <span className="text-slate-900">
+                  {canViewFinancials && apm.time_cost_distribution?.Eliminate !== null && apm.time_cost_distribution?.Eliminate !== undefined ? (
+                    `${formatEUR(apm.time_cost_distribution.Eliminate)} (${Math.round((apm.time_cost_distribution.Eliminate / (apm.total_annual_cost || 1)) * 100)}%)`
+                  ) : (
+                    `${apm.time_distribution.Eliminate} app (${Math.round((apm.time_distribution.Eliminate / (apm.total_applications || 1)) * 100)}%)`
+                  )}
+                </span>
               </div>
               <div className="w-full h-3 bg-slate-100 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-rose-500 rounded-full"
-                  style={{ width: `${(apm.time_cost_distribution.Eliminate / (apm.total_annual_cost || 1)) * 100}%` }}
+                  style={{
+                    width: `${
+                      canViewFinancials && apm.time_cost_distribution?.Eliminate !== null && apm.time_cost_distribution?.Eliminate !== undefined && apm.total_annual_cost
+                        ? (apm.time_cost_distribution.Eliminate / apm.total_annual_cost) * 100
+                        : (apm.time_distribution.Eliminate / (apm.total_applications || 1)) * 100
+                    }%`
+                  }}
                 />
               </div>
             </div>
@@ -340,7 +421,11 @@ export const ExecutiveOverview: React.FC<ExecutiveOverviewProps> = ({ modelId, o
                   </span>
                   <span className="font-bold text-slate-900">{v.vendor || t.executive.internalVendor}</span>
                 </div>
-                <span className="font-mono font-bold text-slate-900">{formatEUR(v.cost)}</span>
+                {canViewFinancials && v.cost !== null && v.cost !== undefined ? (
+                  <span className="font-mono font-bold text-slate-900">{formatEUR(v.cost)}</span>
+                ) : (
+                  <span className="text-slate-400 font-normal text-[11px] italic">🔒 {t.executive.confidentialCLevel}</span>
+                )}
               </div>
             ))}
           </div>

@@ -9,6 +9,7 @@ from app.api.deps import get_current_user, require_library_permission
 from app.services.apm_service import APMService
 from app.services.tech_risk_service import TechRiskService
 from app.services.apm_report_service import APMReportService
+from app.services.rbac_service import can_user_view_financials, check_user_permission
 
 router = APIRouter(prefix="/apm", tags=["Application Portfolio Management"])
 
@@ -59,8 +60,35 @@ def get_apm_portfolio(
     - Total TCO / annual cost
     - Criticality & Lifecycle status breakdowns
     - List of all applications with business metrics
+    Financial fields are redacted for users without C-Level/Admin access,
+    except for applications directly owned by an Application Owner.
     """
-    return APMService.get_portfolio_summary(db, model_id)
+    require_library_permission(db, current_user, "read_repository", model_id)
+    summary = APMService.get_portfolio_summary(db, model_id)
+    can_global_fin = can_user_view_financials(db, current_user)
+
+    if not can_global_fin:
+        summary["total_annual_cost"] = None
+        if "time_cost_distribution" in summary:
+            summary["time_cost_distribution"] = {k: None for k in summary["time_cost_distribution"]}
+        if "top_vendors_by_cost" in summary:
+            summary["top_vendors_by_cost"] = [{"vendor": item["vendor"], "cost": None} for item in summary["top_vendors_by_cost"]]
+        summary["_financials_redacted"] = True
+
+        for app in summary.get("applications", []):
+            can_app_fin = can_user_view_financials(db, current_user, element_id=app.get("id"))
+            if not can_app_fin:
+                app["cost"] = None
+                app["annual_cost"] = None
+                app["cost_software_licenses"] = None
+                app["cost_cloud_infrastructure"] = None
+                app["cost_vendor_maintenance"] = None
+                app["cost_internal_labor"] = None
+                app["cost_per_user"] = None
+                app["capex_ratio"] = None
+                app["_financials_redacted"] = True
+
+    return summary
 
 @router.get("/tco-breakdown/{model_id}")
 def get_tco_breakdown(
@@ -69,14 +97,15 @@ def get_tco_breakdown(
     current_user: User = Depends(get_current_user)
 ):
     """
-    Returns full analytic TCO financial metrics:
-    - 4-bucket breakdown (Software licenses, Cloud infra, Vendor AMS, Internal FTEs)
-    - CAPEX vs OPEX breakdown
-    - Cost per active user metrics
-    - Cost allocation by Cost Center
-    - Cost allocation by TIME Quadrant (waste vs strategic)
-    - Cost vs Value (Business Fit) quadrants
+    Returns full analytic TCO financial metrics.
+    Restricted to C-Level and Admin roles.
     """
+    require_library_permission(db, current_user, "read_repository", model_id)
+    if not can_user_view_financials(db, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="L'accesso al TCO Breakdown finanziario è riservato esclusivamente ai ruoli C-Level e Amministratore."
+        )
     return APMService.get_tco_breakdown(db, model_id)
 
 @router.get("/lifecycle/{model_id}")
@@ -93,7 +122,39 @@ def get_lifecycle_analysis(
     - Decommissioning readiness and architectural blockers (active serving/flow relations)
     - Chronological multi-year timeline dataset
     """
-    return APMService.get_lifecycle_analysis(db, model_id)
+    require_library_permission(db, current_user, "read_repository", model_id)
+    res = APMService.get_lifecycle_analysis(db, model_id)
+    if not can_user_view_financials(db, current_user):
+        if "summary" in res:
+            res["summary"]["total_takeout_savings"] = None
+            res["summary"]["takeout_savings"] = None
+            if "costs_by_status" in res["summary"]:
+                res["summary"]["costs_by_status"] = {k: None for k in res["summary"]["costs_by_status"]}
+            res["summary"]["_financials_redacted"] = True
+
+        for app in res.get("applications", []):
+            can_app_fin = can_user_view_financials(db, current_user, element_id=app.get("id"))
+            if not can_app_fin:
+                app["annual_cost"] = None
+                app["cost"] = None
+                app["_financials_redacted"] = True
+
+        for milestone_list in res.get("milestones", {}).values():
+            if isinstance(milestone_list, list):
+                for app in milestone_list:
+                    can_app_fin = can_user_view_financials(db, current_user, element_id=app.get("id"))
+                    if not can_app_fin:
+                        app["annual_cost"] = None
+                        app["cost"] = None
+                        app["_financials_redacted"] = True
+
+        for app in res.get("timeline_dataset", []):
+            can_app_fin = can_user_view_financials(db, current_user, element_id=app.get("id"))
+            if not can_app_fin:
+                app["annual_cost"] = None
+                app["cost"] = None
+                app["_financials_redacted"] = True
+    return res
 
 @router.put("/applications/{element_id}")
 def update_application_apm(
@@ -106,15 +167,35 @@ def update_application_apm(
     el = db.query(ArchimateElement).filter(ArchimateElement.id == element_id).first()
     if not el:
         raise HTTPException(status_code=404, detail="Application element not found")
-    require_library_permission(db, current_user, "edit_apm_attributes", el.model_id)
+    
+    perm = check_user_permission(
+        db,
+        user_id=current_user.id,
+        action="edit_apm_attributes",
+        target_model_id=el.model_id,
+        element_id=el.id
+    )
+    if not perm.get("allowed"):
+        raise HTTPException(
+            status_code=403,
+            detail=perm.get("reason", "Permission denied for this application.")
+        )
+
     update_data = {k: v for k, v in payload.model_dump().items() if v is not None}
+    
+    # If user cannot view/edit financials for this app, prevent altering cost fields
+    if not can_user_view_financials(db, current_user, element_id=el.id):
+        for f in ["annual_cost", "cost_software_licenses", "cost_cloud_infrastructure", "cost_vendor_maintenance", "cost_internal_labor", "capex_ratio"]:
+            update_data.pop(f, None)
+
     apm = APMService.update_app_attributes(db, element_id, update_data)
+    can_fin = can_user_view_financials(db, current_user, element_id=el.id)
     return {
         "element_id": apm.element_id,
         "business_fit": apm.business_fit,
         "technical_fit": apm.technical_fit,
         "time_quadrant": apm.time_quadrant,
-        "annual_cost": apm.annual_cost,
+        "annual_cost": apm.annual_cost if can_fin else None,
         "business_criticality": apm.business_criticality,
         "lifecycle_status": apm.lifecycle_status,
         "business_owner": apm.business_owner,
@@ -138,7 +219,35 @@ def get_tech_risk_analysis(
     - Blast Radius per technology component
     - Detailed list of applications with connected technology stack
     """
-    return TechRiskService.analyze_tech_risk(db, model_id)
+    require_library_permission(db, current_user, "read_repository", model_id)
+    data = TechRiskService.analyze_tech_risk(db, model_id)
+
+    can_view_all_fin = can_user_view_financials(db, current_user)
+    if not can_view_all_fin:
+        for alert in data.get("dora_compliance_alerts", []):
+            can_app_fin = can_user_view_financials(db, current_user, element_id=alert.get("application_id"))
+            if not can_app_fin:
+                alert["annual_cost"] = None
+                alert["_financials_redacted"] = True
+
+        for app in data.get("applications", []):
+            can_app_fin = can_user_view_financials(db, current_user, element_id=app.get("id"))
+            if not can_app_fin:
+                app["annual_cost"] = None
+                app["_financials_redacted"] = True
+
+        for tech in data.get("technology_blast_radius", []):
+            tech["total_impacted_annual_cost"] = None
+            tech["_financials_redacted"] = True
+            for iapp in tech.get("impacted_applications", []):
+                can_app_fin = can_user_view_financials(db, current_user, element_id=iapp.get("id"))
+                if not can_app_fin:
+                    iapp["annual_cost"] = None
+                    iapp["_financials_redacted"] = True
+
+        data["_financials_redacted"] = True
+
+    return data
 
 @router.put("/technologies/{element_id}")
 def update_technology_lifecycle(
@@ -251,7 +360,12 @@ def export_apm_docx_report(
     - Lifecycle roadmap & decommissioning plan
     - Full Master Inventory Table (Landscape)
     """
-    require_library_permission(db, current_user, "view_models", model_id)
+    require_library_permission(db, current_user, "read_repository", model_id)
+    if not can_user_view_financials(db, current_user):
+        raise HTTPException(
+            status_code=403,
+            detail="Il download del documento strategico APM con TCO e dettagli finanziari è riservato ai ruoli C-Level e Amministratore."
+        )
     model = db.query(ModelWorkspace).filter(ModelWorkspace.id == model_id).first()
     model_name = model.name if model else model_id
 

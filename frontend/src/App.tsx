@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ModelWorkspace,
   MainHub,
   BusinessSubTab,
   ArchitectureSubTab,
+  GovernanceSubTab,
   AdminSubTab,
   SavedFilterView,
   PackageWithViews,
@@ -20,6 +21,9 @@ import { TechRiskRadar } from './features/apm/TechRiskRadar';
 import { OverlapMatrix } from './features/overlap/OverlapMatrix';
 import { FunctionalAnalysisView } from './features/functional/FunctionalAnalysisView';
 import { ProcessNavigator } from './features/processes/ProcessNavigator';
+import { OwnerDashboard } from './features/surveys/OwnerDashboard';
+import { CampaignManagementView } from './features/surveys/CampaignManagementView';
+import { ApplicationOwnershipMatrixView } from './features/surveys/ApplicationOwnershipMatrixView';
 import { ArchitectRepository } from './features/architect/ArchitectRepository';
 import { RelationsMatrix } from './features/architect/RelationsMatrix';
 import { ADRManager } from './features/architect/ADRManager';
@@ -37,7 +41,7 @@ import { useAuth } from './context/AuthContext';
 
 export function App() {
   const { t } = useLanguage();
-  const { isAuthenticated, loading: authLoading } = useAuth();
+  const { isAuthenticated, loading: authLoading, user } = useAuth();
   const [models, setModels] = useState<ModelWorkspace[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>(() => {
     return localStorage.getItem('easyea_selected_model_id') || '';
@@ -52,10 +56,10 @@ export function App() {
     }
   };
   
-  // 3 Hubs State with UX persistence
+  // 4 Hubs State with UX persistence
   const [activeHub, setActiveHubState] = useState<MainHub>(() => {
     const saved = localStorage.getItem('easyea_active_hub');
-    const valid: MainHub[] = ['business', 'architecture', 'admin'];
+    const valid: MainHub[] = ['business', 'architecture', 'governance', 'admin'];
     return (saved && valid.includes(saved as MainHub)) ? (saved as MainHub) : 'business';
   });
   const setActiveHub = (hub: MainHub) => {
@@ -65,12 +69,22 @@ export function App() {
 
   const [businessTab, setBusinessTabState] = useState<BusinessSubTab>(() => {
     const saved = localStorage.getItem('easyea_business_tab');
-    const valid: BusinessSubTab[] = ['overview', 'apm', 'functional', 'processes', 'package_view', 'insights'];
+    const valid: BusinessSubTab[] = ['overview', 'apm', 'functional', 'processes', 'package_view', 'insights', 'overlap', 'tech_risk', 'tco'];
     return (saved && valid.includes(saved as BusinessSubTab)) ? (saved as BusinessSubTab) : 'overview';
   });
   const setBusinessTab = (tab: BusinessSubTab) => {
     setBusinessTabState(tab);
     localStorage.setItem('easyea_business_tab', tab);
+  };
+
+  const [governanceTab, setGovernanceTabState] = useState<GovernanceSubTab>(() => {
+    const saved = localStorage.getItem('easyea_governance_tab');
+    const valid: GovernanceSubTab[] = ['my_surveys', 'campaigns', 'ownership'];
+    return (saved && valid.includes(saved as GovernanceSubTab)) ? (saved as GovernanceSubTab) : 'my_surveys';
+  });
+  const setGovernanceTab = (tab: GovernanceSubTab) => {
+    setGovernanceTabState(tab);
+    localStorage.setItem('easyea_governance_tab', tab);
   };
 
   const [apmTab, setApmTabState] = useState<'catalog' | 'interfaces' | 'portfolio' | 'tech_risk' | 'tco' | 'lifecycle'>(() => {
@@ -102,6 +116,86 @@ export function App() {
     setAdminTabState(tab);
     localStorage.setItem('easyea_admin_tab', tab);
   };
+
+  // Role-based capabilities and default landing pages
+  const userRoles = useMemo(() => new Set((user?.assignments || []).map((a) => a.role)), [user]);
+  const isAdmin = userRoles.has('admin');
+  const isCLevelOrAdmin = isAdmin || userRoles.has('c_level');
+  const isArchitectOrAdmin = isAdmin || userRoles.has('architect') || userRoles.has('lead_architect');
+  const isAppOwner = userRoles.has('app_owner') || userRoles.has('process_owner') || isAdmin;
+  const isBusinessUserOnly = userRoles.has('business_user') && !isCLevelOrAdmin && !isArchitectOrAdmin && !isAppOwner;
+
+  const getDefaultHomeForUser = (currentUser: typeof user): { hub: MainHub; bTab: BusinessSubTab; gTab: GovernanceSubTab; apm: 'catalog' } => {
+    if (!currentUser) {
+      return { hub: 'business', bTab: 'overview', gTab: 'my_surveys', apm: 'catalog' };
+    }
+    const roles = new Set((currentUser.assignments || []).map((a) => a.role));
+    if ((roles.has('app_owner') || roles.has('process_owner')) && !roles.has('admin') && !roles.has('architect') && !roles.has('lead_architect')) {
+      return { hub: 'governance', bTab: 'overview', gTab: 'my_surveys', apm: 'catalog' };
+    }
+    if (roles.has('business_user') && !roles.has('admin') && !roles.has('c_level') && !roles.has('architect') && !roles.has('lead_architect')) {
+      return { hub: 'business', bTab: 'processes', gTab: 'my_surveys', apm: 'catalog' };
+    }
+    return { hub: 'business', bTab: 'overview', gTab: 'campaigns', apm: 'catalog' };
+  };
+
+  // Always reset navigation to role homepage when a different user logs in or re-authenticates
+  const lastUserIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (user) {
+      if (lastUserIdRef.current !== user.id) {
+        lastUserIdRef.current = user.id;
+        const home = getDefaultHomeForUser(user);
+        setActiveHub(home.hub);
+        setBusinessTab(home.bTab);
+        setGovernanceTab(home.gTab);
+        setApmTab(home.apm);
+        setArchitectureTab('repository');
+        setAdminTab('models');
+      }
+    } else {
+      lastUserIdRef.current = null;
+    }
+  }, [user?.id]);
+
+  // Strict role-based enforcement on active hub and tabs
+  let effectiveHub: MainHub = activeHub;
+  if (effectiveHub === 'admin' && !isAdmin) {
+    effectiveHub = 'business';
+  }
+  if (effectiveHub === 'governance') {
+    const hasGovAccess = isAdmin || isAppOwner || isArchitectOrAdmin || userRoles.has('c_level') || userRoles.has('viewer');
+    if (!hasGovAccess) {
+      effectiveHub = 'business';
+    }
+  }
+
+  let effectiveBusinessTab: BusinessSubTab = businessTab;
+  if (effectiveBusinessTab === 'overview' && isBusinessUserOnly) {
+    effectiveBusinessTab = 'processes';
+  }
+
+  let effectiveGovernanceTab: GovernanceSubTab = governanceTab;
+  if (effectiveGovernanceTab === 'campaigns' && !isArchitectOrAdmin && !isAdmin) {
+    effectiveGovernanceTab = isAppOwner ? 'my_surveys' : 'ownership';
+  } else if (effectiveGovernanceTab === 'my_surveys' && !isAppOwner && !isAdmin && !isArchitectOrAdmin) {
+    effectiveGovernanceTab = 'ownership';
+  }
+
+  useEffect(() => {
+    if (user) {
+      if (effectiveHub !== activeHub) {
+        setActiveHub(effectiveHub);
+      }
+      if (effectiveBusinessTab !== businessTab) {
+        setBusinessTab(effectiveBusinessTab);
+      }
+      if (effectiveGovernanceTab !== governanceTab) {
+        setGovernanceTab(effectiveGovernanceTab);
+      }
+    }
+  }, [user, effectiveHub, activeHub, effectiveBusinessTab, businessTab, effectiveGovernanceTab, governanceTab]);
   const [selectedSavedView, setSelectedSavedView] = useState<any | null>(null);
   const [selectedAdrId, setSelectedAdrId] = useState<string | null>(null);
 
@@ -110,7 +204,7 @@ export function App() {
   const [activePackageView, setActivePackageView] = useState<ActivePackageViewSelection | null>(null);
 
   const loadPackageViews = async (modelId: string) => {
-    if (!modelId) {
+    if (!modelId || !isAuthenticated) {
       setPackagesWithViews([]);
       return;
     }
@@ -124,10 +218,10 @@ export function App() {
   };
 
   useEffect(() => {
-    if (selectedModelId) {
+    if (selectedModelId && isAuthenticated) {
       loadPackageViews(selectedModelId);
     }
-  }, [selectedModelId]);
+  }, [selectedModelId, isAuthenticated, user?.id]);
 
   const handleSelectPackageView = (packageId: string, viewId: string, hub?: 'business' | 'architecture') => {
     const targetHub = hub || (activeHub === 'architecture' ? 'architecture' : 'business');
@@ -174,13 +268,13 @@ export function App() {
       if (list.length > 0) {
         const storedModelId = localStorage.getItem('easyea_selected_model_id');
         const candidateId = selectId || storedModelId || selectedModelId;
-        if (candidateId && list.some((m) => m.id === candidateId)) {
-          handleSelectModel(candidateId);
-        } else {
-          handleSelectModel(list[0].id);
-        }
+        const validCandidate = candidateId && list.some((m) => m.id === candidateId);
+        const targetModelId = validCandidate ? candidateId! : list[0].id;
+        handleSelectModel(targetModelId);
+        loadPackageViews(targetModelId);
       } else {
         handleSelectModel('');
+        setPackagesWithViews([]);
       }
     } catch (err) {
       console.error(err);
@@ -193,7 +287,7 @@ export function App() {
     if (isAuthenticated) {
       loadModels();
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user?.id]);
 
   const handleSeedSample = async () => {
     setIsSeeding(true);
@@ -243,7 +337,7 @@ export function App() {
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-indigo-500 selection:text-white">
       {/* 1. Sleek TopBar: Context & User Profile with Hub Switcher */}
       <TopBar
-        activeHub={activeHub}
+        activeHub={effectiveHub}
         onSelectHub={(hub) => setActiveHub(hub)}
         models={models}
         selectedModelId={selectedModelId}
@@ -259,8 +353,8 @@ export function App() {
         {/* Collapsible Left Sidebar */}
         <div className={`${isMobileSidebarOpen ? 'block fixed inset-y-0 left-0 z-50 pt-14 md:pt-0' : 'hidden'} md:flex md:static`}>
           <Sidebar
-            activeHub={activeHub}
-            businessTab={businessTab}
+            activeHub={effectiveHub}
+            businessTab={effectiveBusinessTab}
             onSelectBusinessTab={(tab) => {
               setBusinessTab(tab);
               setIsMobileSidebarOpen(false);
@@ -270,6 +364,11 @@ export function App() {
             architectureTab={architectureTab}
             onSelectArchitectureTab={(tab) => {
               setArchitectureTab(tab);
+              setIsMobileSidebarOpen(false);
+            }}
+            governanceTab={effectiveGovernanceTab}
+            onSelectGovernanceTab={(tab) => {
+              setGovernanceTab(tab);
               setIsMobileSidebarOpen(false);
             }}
             adminTab={adminTab}
@@ -303,9 +402,9 @@ export function App() {
             {selectedModelId ? (
               <>
                 {/* 1. BUSINESS HUB */}
-                {activeHub === 'business' && (
+                {effectiveHub === 'business' && (
                   <>
-                    {businessTab === 'overview' && (
+                    {effectiveBusinessTab === 'overview' && (
                       <ExecutiveOverview
                         modelId={selectedModelId}
                         onNavigateTab={(tab) => {
@@ -321,7 +420,7 @@ export function App() {
                         }}
                       />
                     )}
-                    {(businessTab === 'package_view' || businessTab === 'insights') && (
+                    {(effectiveBusinessTab === 'package_view' || effectiveBusinessTab === 'insights') && (
                       isAdrView ? (
                         <ADRManager
                           modelId={selectedModelId}
@@ -341,7 +440,7 @@ export function App() {
                         />
                       )
                     )}
-                    {businessTab === 'apm' && (
+                    {effectiveBusinessTab === 'apm' && (
                       <APMDashboard
                         modelId={selectedModelId}
                         isApmPackageActive={packagesWithViews.some((p) => p.id === 'pkg-apm' || p.code === 'APM')}
@@ -353,7 +452,7 @@ export function App() {
                         onTabChange={setApmTab}
                       />
                     )}
-                    {businessTab === 'tech_risk' && (
+                    {effectiveBusinessTab === 'tech_risk' && (
                       <APMDashboard
                         modelId={selectedModelId}
                         isApmPackageActive={packagesWithViews.some((p) => p.id === 'pkg-apm' || p.code === 'APM')}
@@ -365,7 +464,7 @@ export function App() {
                         onTabChange={setApmTab}
                       />
                     )}
-                    {businessTab === 'tco' && (
+                    {effectiveBusinessTab === 'tco' && (
                       <APMDashboard
                         modelId={selectedModelId}
                         isApmPackageActive={packagesWithViews.some((p) => p.id === 'pkg-apm' || p.code === 'APM')}
@@ -377,14 +476,14 @@ export function App() {
                         onTabChange={setApmTab}
                       />
                     )}
-                    {businessTab === 'functional' && <FunctionalAnalysisView modelId={selectedModelId} />}
-                    {businessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
-                    {businessTab === 'processes' && <ProcessNavigator modelId={selectedModelId} />}
+                    {effectiveBusinessTab === 'functional' && <FunctionalAnalysisView modelId={selectedModelId} />}
+                    {effectiveBusinessTab === 'overlap' && <OverlapMatrix modelId={selectedModelId} />}
+                    {effectiveBusinessTab === 'processes' && <ProcessNavigator modelId={selectedModelId} />}
                   </>
                 )}
 
                 {/* 2. ARCHITECTURE HUB */}
-                {activeHub === 'architecture' && (
+                {effectiveHub === 'architecture' && (
                   <>
                     {architectureTab === 'repository' && (
                       <ArchitectRepository
@@ -441,8 +540,23 @@ export function App() {
                   </>
                 )}
 
-                {/* 3. ADMINISTRATION HUB */}
-                {activeHub === 'admin' && (
+                {/* 3. GOVERNANCE & SURVEYS HUB */}
+                {effectiveHub === 'governance' && (
+                  <>
+                    {effectiveGovernanceTab === 'my_surveys' && (
+                      <OwnerDashboard selectedModelId={selectedModelId} />
+                    )}
+                    {effectiveGovernanceTab === 'campaigns' && (
+                      <CampaignManagementView selectedModelId={selectedModelId} />
+                    )}
+                    {effectiveGovernanceTab === 'ownership' && (
+                      <ApplicationOwnershipMatrixView selectedModelId={selectedModelId} />
+                    )}
+                  </>
+                )}
+
+                {/* 4. ADMINISTRATION HUB */}
+                {effectiveHub === 'admin' && (
                   <AdminHub
                     models={models}
                     selectedModelId={selectedModelId}
