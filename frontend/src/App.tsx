@@ -120,6 +120,7 @@ export function App() {
   // Role-based capabilities and default landing pages
   const userRoles = useMemo(() => new Set((user?.assignments || []).map((a) => a.role)), [user]);
   const isAdmin = userRoles.has('admin');
+  const isViewer = userRoles.has('viewer');
   const isCLevelOrAdmin = isAdmin || userRoles.has('c_level');
   const isArchitectOrAdmin = isAdmin || userRoles.has('architect') || userRoles.has('lead_architect');
   const isAppOwner = userRoles.has('app_owner') || userRoles.has('process_owner') || isAdmin;
@@ -161,7 +162,7 @@ export function App() {
 
   // Strict role-based enforcement on active hub and tabs
   let effectiveHub: MainHub = activeHub;
-  if (effectiveHub === 'admin' && !isAdmin) {
+  if (effectiveHub === 'admin' && !isAdmin && !isViewer) {
     effectiveHub = 'business';
   }
   if (effectiveHub === 'governance') {
