@@ -5,6 +5,15 @@ Il formato è basato su [Keep a Changelog](https://keepachangelog.com/it/1.0.0/)
 
 ---
 
+## [1.4.1] - 2026-11-26
+
+### Fixed
+- **Navigazione & Accesso Demo nell'Administration Hub**:
+  - Risolto un bug di routing frontend che impediva agli utenti con ruolo demo (`viewer`) di accedere all'**Administration Hub**, reindirizzandoli automaticamente al Business Hub.
+  - Allineata la guardia di sicurezza in `App.tsx` con i permessi di consultazione globale dichiarati in `TopBar.tsx` e la modalità di sola lettura nativa presente nei cruscotti amministrativi (`AdminHub`, `MetamodelManager`, `AttributePackagesManager`, `RolesManager`, `AuthConfigManager`, `ApiKeysManager`).
+
+---
+
 ## [1.4.0] - 2026-11-25
 
 ### Added
